@@ -1,0 +1,509 @@
+<title>Jev 前置分流判断流程</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* 版式：单栏工程文档，流程图占满栏宽，正文限制行长；颜色只用来区分"谁在判断"和"去哪个分支" */
+:root{
+  --bg:#F3F5F7; --surface:#FFFFFF; --ink:#16202B; --muted:#5A6774;
+  --line:#D6DDE3; --line-strong:#9AA7B3;
+  --accent:#1D4FC4; --on-accent:#FFFFFF; --accent-soft:#E6ECFB;
+  --c-nlu:#157A55; --c-agent:#0A7686; --c-slow:#A85B08; --c-chat:#84479A;
+  --font-body:"IBM Plex Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  --font-mono:"IBM Plex Mono","SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F151B; --surface:#182129; --ink:#E5EBF0; --muted:#95A3B0;
+    --line:#2B3843; --line-strong:#5C6C7A;
+    --accent:#7FA2FF; --on-accent:#0B1322; --accent-soft:#1C2A47;
+    --c-nlu:#4FC694; --c-agent:#49C2D2; --c-slow:#EFA64E; --c-chat:#C88EDB;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F151B; --surface:#182129; --ink:#E5EBF0; --muted:#95A3B0;
+  --line:#2B3843; --line-strong:#5C6C7A;
+  --accent:#7FA2FF; --on-accent:#0B1322; --accent-soft:#1C2A47;
+  --c-nlu:#4FC694; --c-agent:#49C2D2; --c-slow:#EFA64E; --c-chat:#C88EDB;
+  color-scheme:dark;
+}
+
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.75}
+.page{max-width:980px;margin-inline:auto;padding-inline:20px;padding-block:40px 64px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3,p,ol,ul,figure{margin:0}
+h1{font-size:30px;line-height:1.3;font-weight:600;letter-spacing:.01em;text-wrap:balance}
+h2{font-size:20px;line-height:1.4;font-weight:600;text-wrap:balance}
+h3{font-size:15px;font-weight:600}
+p{max-width:44em}
+code{font-family:var(--font-mono);font-size:.9em;background:var(--accent-soft);padding:1px 5px;border-radius:4px;white-space:nowrap}
+
+header{display:flex;flex-direction:column;gap:12px}
+.eyebrow{font-size:13px;color:var(--muted);letter-spacing:.06em}
+.lede{font-size:16px;color:var(--ink)}
+.meta{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+section{display:flex;flex-direction:column;gap:16px;min-width:0}
+section > h2{padding-top:20px;border-top:1px solid var(--line)}
+.note{font-size:13.5px;color:var(--muted)}
+
+/* 表格 */
+.scroll{overflow-x:auto;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px;line-height:1.6}
+th,td{text-align:left;vertical-align:top;padding:9px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-size:12.5px;font-weight:500;color:var(--muted);letter-spacing:.04em;white-space:nowrap;background:var(--bg)}
+td.key{font-weight:600;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ex{color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:7px;font-weight:600;white-space:nowrap}
+.tag::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--c);flex:none}
+
+/* 流程图 */
+.diagram{overflow-x:auto;min-width:0;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:12px}
+#flow{display:block;width:100%;min-width:820px;height:auto;font-family:var(--font-body)}
+#flow .t{font-size:13.5px;font-weight:600;fill:var(--ink)}
+#flow .s{font-size:11.5px;fill:var(--muted)}
+#flow .m{font-family:var(--font-mono);font-size:11px;fill:var(--accent)}
+#flow .edge path{fill:none;stroke:var(--edge,var(--line-strong));stroke-width:1.5}
+#flow .edge polygon{fill:var(--edge,var(--line-strong))}
+#flow .edge.fallback path{stroke-dasharray:5 4}
+#flow .n-code > rect{fill:var(--surface);stroke:var(--line-strong);stroke-width:1.5}
+#flow .n-in > rect{fill:var(--bg);stroke:var(--line-strong);stroke-width:1.5}
+#flow .n-llm > rect{fill:var(--surface);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:6 4}
+#flow .n-jev > rect{fill:var(--accent);stroke:var(--accent);stroke-width:1.5}
+#flow .n-jev > .t{fill:var(--on-accent)}
+#flow .n-jev > .s{fill:var(--on-accent);opacity:.82}
+#flow .n-jev .chip rect{fill:var(--surface);stroke:none}
+#flow .n-term > rect{fill:color-mix(in srgb,var(--c) 13%,var(--surface));stroke:var(--c);stroke-width:1.5}
+#flow [data-k]{transition:opacity .2s ease}
+#flow.focus [data-k]:not(.on){opacity:.18}
+#flow.focus .edge.on{--edge:var(--accent)}
+#flow.focus .edge.on path{stroke-width:2.25}
+@media (prefers-reduced-motion: reduce){#flow [data-k]{transition:none}}
+
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:8px}
+.sw{width:22px;height:13px;border-radius:3px;border:1.5px solid var(--line-strong);background:var(--surface);flex:none}
+.sw.jev{background:var(--accent);border-color:var(--accent)}
+.sw.llm{border-style:dashed;border-color:var(--ink)}
+.sw.fb{height:0;border-width:1.5px 0 0 0;border-style:dashed;border-radius:0;background:none}
+
+/* 示例走查 */
+.walk{display:flex;flex-direction:column;gap:12px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips button{font:inherit;font-size:13.5px;line-height:1.5;padding:5px 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);cursor:pointer;text-align:left}
+.chips button:hover{border-color:var(--accent)}
+.chips button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.trace{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 16px;border-radius:0 6px 6px 0;font-size:14px;min-height:3.5em}
+.trace .ctx{color:var(--muted);font-size:13px}
+.trace ol{padding-left:1.4em;display:flex;flex-direction:column;gap:2px}
+
+ol.steps{padding-left:1.5em;display:flex;flex-direction:column;gap:8px;max-width:48em}
+ol.steps strong{font-weight:600}
+ul.plain{padding-left:1.3em;display:flex;flex-direction:column;gap:6px;max-width:48em}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.two > div{min-width:0;display:flex;flex-direction:column;gap:8px}
+.warn{border:1.5px solid var(--c-slow);border-radius:8px;background:var(--surface);padding:12px 16px;max-width:none;font-size:14.5px}
+</style>
+
+<div class="page">
+
+<header>
+  <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
+  <h1>Jev 前置分流判断流程</h1>
+  <p class="lede">Jev 一次请求给每句话打一个标签，共 28 个：NLU 侧输出 16 个 domain，Agent 侧输出 12 个 label。标签决定这句话去哪个分支。闲聊追问、改写拆分、置信度兜底由代码按固定顺序处理。</p>
+  <div class="meta">第 3 版 · 2026-10-10 · Jev 尚未实测，所有阈值待标定</div>
+</header>
+
+<section>
+  <h2>输出什么</h2>
+  <p>“语义”sheet 的 query 输出预期 domain，一律用首字母小写的写法。“大模型agent”sheet 的 query 输出 label。条数是 C518-1 测试集里的行数。</p>
+
+  <h3>NLU 直达：16 个 domain</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>domain</th><th>管什么</th><th>例句</th><th class="num">条数</th></tr></thead>
+      <tbody>
+        <tr><td class="key"><code>carControl</code></td><td>车身硬件、HUD、驾驶与驱动模式、能量与充电、行车记录仪、部分行车安全功能、各类提示音</td><td class="ex">右后座椅通风调成1；hud高度调高50%</td><td class="num">3,012</td></tr>
+        <tr><td class="key"><code>windowControl</code></td><td>打开、关闭、切换、最大化应用、页面、窗口；切换音源</td><td class="ex">打开空调页面；关闭文件管理</td><td class="num">524</td></tr>
+        <tr><td class="key"><code>systemControl</code></td><td>各类音量、屏幕亮度与亮灭、屏幕清洁、音响音效、网络连接、语音设置、声纹录入</td><td class="ex">导航声音设为小；打开wifi</td><td class="num">289</td></tr>
+        <tr><td class="key"><code>music</code></td><td>按歌名、歌手、专辑、风格、应用点播音乐</td><td class="ex">放一首稻香</td><td class="num">173</td></tr>
+        <tr><td class="key"><code>naviControl</code></td><td>导航过程和地图的控制与查询，家和公司地址设置</td><td class="ex">家到公司堵不堵；打开全览模式</td><td class="num">159</td></tr>
+        <tr><td class="key"><code>mediaControl</code></td><td>播放控制和收藏管理：快进快退、循环、倍速、清晰度、收藏、播放列表</td><td class="ex">加入收藏；我要快退</td><td class="num">91</td></tr>
+        <tr><td class="key"><code>autoPilot</code></td><td>巡航、车道保持、领航、泊车、全景影像、前碰撞预警</td><td class="ex">打开智能泊车</td><td class="num">64</td></tr>
+        <tr><td class="key"><code>generalControl</code></td><td>通用短指令：上一个、下一个、切歌、第几个、好的、不要、退出、再见</td><td class="ex">上一集；退下吧</td><td class="num">48</td></tr>
+        <tr><td class="key"><code>relaxCapsule</code></td><td>小憩、露营、宠物、观影厅、冥想等场景模式</td><td class="ex">打开主驾小憩模式</td><td class="num">37</td></tr>
+        <tr><td class="key"><code>carInfo</code></td><td>查询状态数值：胎压、空调温度和风量、空气质量、保养、存储空间</td><td class="ex">胎压正常吗</td><td class="num">36</td></tr>
+        <tr><td class="key"><code>video</code></td><td>按片名、主演、类型、集数点播视频</td><td class="ex">播放狂飙</td><td class="num">31</td></tr>
+        <tr><td class="key"><code>navi</code></td><td>发起去某个目的地的导航，查找或修改目的地</td><td class="ex">导航回集结点</td><td class="num">19</td></tr>
+        <tr><td class="key"><code>scheduleReminder</code></td><td>到时间提醒用户做某事，一次或每周重复；查询、删除日程</td><td class="ex">5月30日提醒我开会</td><td class="num">16</td></tr>
+        <tr><td class="key"><code>phone</code></td><td>拨打、接听、挂断、查找号码、通讯录</td><td class="ex">拨打张三的办公室电话</td><td class="num">15</td></tr>
+        <tr><td class="key"><code>unicast</code></td><td>点播小说、有声书、电台节目</td><td class="ex">我想听周建龙本尊的小说</td><td class="num">7</td></tr>
+        <tr><td class="key"><code>memoryRecord</code></td><td>删除或遗忘已记住的偏好</td><td class="ex">请帮我删除我的车控偏好</td><td class="num">2</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>大模型 agent：12 个 label</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>label</th><th>去向</th><th>管什么</th><th>例句</th><th class="num">条数</th></tr></thead>
+      <tbody>
+        <tr><td class="key">用车agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>本车功能是什么、怎么用、为什么失灵、该怎么设置</td><td class="ex">座椅加热没反应是哪里出了问题</td><td class="num">3,014</td></tr>
+        <tr><td class="key">音乐agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>按氛围找歌、找相似的歌、凭歌词或影视剧找歌</td><td class="ex">我曾经跨过山和大海是哪首歌</td><td class="num">660</td></tr>
+        <tr><td class="key">复杂导航agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>靠描述找地点、多地点路线、旅游行程、去某个城市景点要多久</td><td class="ex">我想安排一个南京周边四天三夜的旅行</td><td class="num">651</td></tr>
+        <tr><td class="key">记忆agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>让系统记住个人信息、偏好、常去的地点</td><td class="ex">帮我记住我常听的音乐风格是爵士</td><td class="num">578</td></tr>
+        <tr><td class="key">影视agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>影视推荐和查找，问画面里的人或物</td><td class="ex">推荐几部长辈会喜欢的电视剧</td><td class="num">557</td></tr>
+        <tr><td class="key">任务大师</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>周期性任务：每天每周重复，或每当某个事件、状态出现就触发的长期规则</td><td class="ex">当我上车时自动播报公主请上车</td><td class="num">551</td></tr>
+        <tr><td class="key">条件任务</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>一次性任务：到时间或快到目的地时，车机直接执行一个动作</td><td class="ex">晚上八点打开氛围灯</td><td class="num">520</td></tr>
+        <tr><td class="key">新闻agent</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>新闻热点、某个领域的资讯、某件事的进展和解读</td><td class="ex">今天有什么热点新闻</td><td class="num">385</td></tr>
+        <tr><td class="key">车控agent模糊意图</td><td><span class="tag" style="--c:var(--c-agent)">Agent 直达</span></td><td>只说感受或环境，没有说出指令</td><td class="ex">热得浑身不自在</td><td class="num">197</td></tr>
+        <tr><td class="key">中枢简单任务</td><td><span class="tag" style="--c:var(--c-nlu)">拆分后逐条 NLU 直达</span></td><td>连着说了多条互相独立的直接指令</td><td class="ex">空调温度调低1度并打开雨刮</td><td class="num">109</td></tr>
+        <tr><td class="key">中枢复杂多任务</td><td><span class="tag" style="--c:var(--c-slow)">慢思考编排</span></td><td>多个任务，其中有需要推断、查询或互相依赖的步骤</td><td class="ex">把空调调到二十六度然后导航去我常去的那家商场</td><td class="num">186</td></tr>
+        <tr><td class="key">闲聊</td><td><span class="tag" style="--c:var(--c-chat)">闲聊</span></td><td>开放的问答和聊天，以及其他标签都不适用的内容</td><td class="ex">中秋节是哪天</td><td class="num">1,792</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>快慢思考由标签决定：16 个 domain 和 9 个 agent label 是直达，中枢简单任务拆分后直达，只有中枢复杂多任务进慢思考编排。</p>
+</section>
+
+<section>
+  <h2>判断流程</h2>
+  <figure class="walk">
+    <div class="diagram">
+      <svg id="flow" viewBox="0 0 990 852" role="img" aria-label="query 先查标准说法精确匹配表，命中直接输出 domain；未命中由 Jev 一次请求回答三个问题。代码先判断是不是闲聊会话里的追问，是则输出闲聊；否则判断要不要改写或拆分；最后按标签分发到 NLU 直达、Agent 直达、慢思考编排、闲聊四个分支。NLU 落域失败时升级到慢思考。">
+        <!-- 连线 -->
+        <g class="edge" data-k="e-in-wl"><path d="M480 60V86"/><polygon points="475,84 485,84 480,92"/></g>
+        <g class="edge" data-k="e-wl-nlu"><path d="M340 118H28V736H50"/><polygon points="48,731 48,741 56,736"/><text class="s" x="184" y="110" text-anchor="middle">命中，直接出 domain</text></g>
+        <g class="edge" data-k="e-wl-jev"><path d="M480 144V174"/><polygon points="475,172 485,172 480,180"/><text class="s" x="490" y="164">未命中</text></g>
+        <g class="edge" data-k="e-jev-d0"><path d="M480 292V322"/><polygon points="475,320 485,320 480,328"/></g>
+        <g class="edge" data-k="e-d0-chat"><path d="M660 358H962V736H940"/><polygon points="940,731 940,741 932,736"/><text class="s" x="811" y="350" text-anchor="middle">是，输出闲聊</text></g>
+        <g class="edge" data-k="e-d0-d1"><path d="M480 388V418"/><polygon points="475,416 485,416 480,424"/><text class="s" x="490" y="409">否</text></g>
+        <g class="edge" data-k="e-d1-llm"><path d="M660 454H714"/><polygon points="712,449 712,459 720,454"/><text class="s" x="689" y="445" text-anchor="middle">要</text></g>
+        <g class="edge" data-k="e-llm-jev2"><path d="M826 484V510"/><polygon points="821,508 831,508 826,516"/></g>
+        <g class="edge" data-k="e-jev2-disp"><path d="M826 576V594"/><polygon points="821,592 831,592 826,600"/></g>
+        <g class="edge" data-k="e-d1-disp"><path d="M480 484V594"/><polygon points="475,592 485,592 480,600"/><text class="s" x="490" y="548">不用，直接用 label 的结果</text></g>
+        <g class="edge" data-k="e-disp-nlu"><path d="M155 652V686"/><polygon points="150,684 160,684 155,692"/></g>
+        <g class="edge" data-k="e-disp-agent"><path d="M381 652V686"/><polygon points="376,684 386,684 381,692"/></g>
+        <g class="edge" data-k="e-disp-slow"><path d="M607 652V686"/><polygon points="602,684 612,684 607,692"/></g>
+        <g class="edge" data-k="e-disp-chat"><path d="M833 652V686"/><polygon points="828,684 838,684 833,692"/></g>
+        <g class="edge fallback" data-k="e-nlu-slow"><path d="M155 780V816H607V786"/><polygon points="602,788 612,788 607,780"/><text class="s" x="381" y="836" text-anchor="middle">落域失败或 NLU 置信度低，升级到慢思考</text></g>
+
+        <!-- 节点 -->
+        <g class="n-in" data-k="in">
+          <rect x="290" y="16" width="380" height="44" rx="22"/>
+          <text class="t" x="480" y="43" text-anchor="middle">query ＋ 上一轮的内容和标签 ＋ 播放状态</text>
+        </g>
+        <g class="n-code" data-k="wl">
+          <rect x="340" y="92" width="280" height="52" rx="8"/>
+          <text class="t" x="480" y="114" text-anchor="middle">标准说法精确匹配表</text>
+          <text class="s" x="480" y="133" text-anchor="middle">代码 · 不经过 Jev</text>
+        </g>
+        <g class="n-jev" data-k="jev">
+          <rect x="160" y="180" width="640" height="112" rx="10"/>
+          <text class="t" x="182" y="205">Jev · 一次请求，三个问题并行作答</text>
+          <g class="chip"><rect x="180" y="218" width="190" height="58" rx="6"/><text class="m" x="194" y="240">label · Choice</text><text class="t" x="194" y="262">28 个标签选一个</text></g>
+          <g class="chip"><rect x="385" y="218" width="190" height="58" rx="6"/><text class="m" x="399" y="240">is_multi · Noul</text><text class="t" x="399" y="262">是多条指令吗</text></g>
+          <g class="chip"><rect x="590" y="218" width="190" height="58" rx="6"/><text class="m" x="604" y="240">is_followup · Noul</text><text class="t" x="604" y="262">是上一轮的追问吗</text></g>
+        </g>
+        <g class="n-code" data-k="d0">
+          <rect x="300" y="328" width="360" height="60" rx="8"/>
+          <text class="t" x="480" y="353" text-anchor="middle">是闲聊会话里的追问吗？</text>
+          <text class="s" x="480" y="373" text-anchor="middle">上一轮标签是闲聊，且 is_followup 达到阈值</text>
+        </g>
+        <g class="n-code" data-k="d1">
+          <rect x="300" y="424" width="360" height="60" rx="8"/>
+          <text class="t" x="480" y="449" text-anchor="middle">要不要先改写 / 拆分？</text>
+          <text class="s" x="480" y="469" text-anchor="middle">label 为中枢简单任务，或是非闲聊会话里的追问</text>
+        </g>
+        <g class="n-llm" data-k="llm">
+          <rect x="720" y="424" width="212" height="60" rx="8"/>
+          <text class="t" x="826" y="449" text-anchor="middle">改写 ＋ 拆分</text>
+          <text class="s" x="826" y="469" text-anchor="middle">槽位继承优先，其余调大模型</text>
+        </g>
+        <g class="n-jev" data-k="jev2">
+          <rect x="720" y="516" width="212" height="60" rx="8"/>
+          <text class="t" x="826" y="541" text-anchor="middle">Jev · 逐条判标签</text>
+          <text class="s" x="826" y="561" text-anchor="middle">一次请求，每条指令一问</text>
+        </g>
+        <g class="n-code" data-k="disp">
+          <rect x="56" y="600" width="876" height="52" rx="8"/>
+          <text class="t" x="494" y="631" text-anchor="middle">按标签分发（代码）：置信度达标按标签走；不达标看分支概率，仍不明确走慢思考</text>
+        </g>
+        <g class="n-term" data-k="t-nlu" style="--c:var(--c-nlu)">
+          <rect x="56" y="692" width="198" height="88" rx="8"/>
+          <text class="t" x="155" y="720" text-anchor="middle">NLU 直达</text>
+          <text class="s" x="155" y="741" text-anchor="middle">16 个 domain</text>
+          <text class="s" x="155" y="760" text-anchor="middle">带着 domain 交给现有落域</text>
+        </g>
+        <g class="n-term" data-k="t-agent" style="--c:var(--c-agent)">
+          <rect x="282" y="692" width="198" height="88" rx="8"/>
+          <text class="t" x="381" y="720" text-anchor="middle">Agent 直达</text>
+          <text class="s" x="381" y="741" text-anchor="middle">9 个 agent label</text>
+          <text class="s" x="381" y="760" text-anchor="middle">对应 Agent 一次调用</text>
+        </g>
+        <g class="n-term" data-k="t-slow" style="--c:var(--c-slow)">
+          <rect x="508" y="692" width="198" height="88" rx="8"/>
+          <text class="t" x="607" y="720" text-anchor="middle">慢思考编排</text>
+          <text class="s" x="607" y="741" text-anchor="middle">label 为中枢复杂多任务</text>
+          <text class="s" x="607" y="760" text-anchor="middle">先规划，再多步调度</text>
+        </g>
+        <g class="n-term" data-k="t-chat" style="--c:var(--c-chat)">
+          <rect x="734" y="692" width="198" height="88" rx="8"/>
+          <text class="t" x="833" y="720" text-anchor="middle">闲聊</text>
+          <text class="s" x="833" y="741" text-anchor="middle">label 为闲聊，或闲聊追问</text>
+          <text class="s" x="833" y="760" text-anchor="middle">端到端语音，音频进出</text>
+        </g>
+      </svg>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw jev"></i>Jev 判断</span>
+      <span><i class="sw"></i>代码规则</span>
+      <span><i class="sw llm"></i>可能调用大模型</span>
+      <span><i class="sw fb"></i>兜底升级</span>
+    </div>
+    <figcaption class="note">多数 query 只经过一次 Jev 请求。只有多条指令和非闲聊的追问会多走右侧一段。点下面的例句，可以看它走过的路径；例句里的标签是按判据应得的结果，不是 Jev 的实测输出。</figcaption>
+
+    <div class="chips" id="chips" role="group" aria-label="示例语句"></div>
+    <div class="trace" id="trace" aria-live="polite"></div>
+  </figure>
+</section>
+
+<section>
+  <h2>Jev 的三个问题</h2>
+  <p>三个问题放在同一次请求里，共用同一份输入：<code>query</code>、<code>previous_turn</code>（上一轮的内容和标签）、<code>now_playing</code>（当前播放的媒体）。它们互相看不到对方的答案，组合逻辑写在代码里。</p>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>问题</th><th>类型</th><th>问什么</th><th>代码怎么用</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="key"><code>label</code></td>
+          <td>Choice<br>28 选 1</td>
+          <td>这句话应当归入哪个标签。每个选项写明包含什么、不包含什么，并附几条例句</td>
+          <td>取概率最高的标签。同一分支下各标签的概率相加，得到分支概率，用于置信度不达标时的兜底</td>
+        </tr>
+        <tr>
+          <td class="key"><code>is_followup</code></td>
+          <td>Noul<br>是的概率</td>
+          <td>这句话是不是对上一轮的追问或延续。只在有上一轮时才问</td>
+          <td>上一轮是闲聊且为是：输出闲聊。上一轮不是闲聊且为是：先改写再判标签</td>
+        </tr>
+        <tr>
+          <td class="key"><code>is_multi</code></td>
+          <td>Noul<br>是的概率</td>
+          <td>这句话里是不是有两条或更多可以分别执行的指令</td>
+          <td>用来校验。label 判成单条指令但 is_multi 很高时，按置信度不达标处理</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>代码里的决策顺序</h2>
+  <ol class="steps">
+    <li><strong>查精确匹配表。</strong>命中的标准说法直接输出 domain，不经过 Jev。“语义”sheet 的 4,481 条唯一说法可以直接入表。</li>
+    <li><strong>判断闲聊追问。</strong>上一轮标签是闲聊，且 <code>is_followup</code> 达到阈值，输出闲聊，不看 <code>label</code> 选了什么。</li>
+    <li><strong>判断改写和拆分。</strong><code>label</code> 是中枢简单任务，就拆成多条；是非闲聊会话里的追问，就补全成能独立理解的一句。高频追问先用槽位继承，解不了再调大模型。得到的每条指令再过一次 Jev。</li>
+    <li><strong>检查置信度。</strong>达标的按标签走。不达标的看分支概率：分支明确就按分支走，NLU 侧交给现有落域去判 domain；分支也不明确，走慢思考。</li>
+    <li><strong>分发。</strong>16 个 domain 去 NLU 直达，9 个 agent label 去对应 Agent，中枢复杂多任务去慢思考编排，闲聊去端到端语音接口。</li>
+    <li><strong>兜底。</strong>NLU 直达落域失败或置信度低，升级到慢思考。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>容易判错的边界</h2>
+  <div class="two">
+    <div>
+      <h3>domain 之间</h3>
+      <p class="note">这些界线是现有 NLU 体系的约定，不完全按语义走，判据里必须逐项列清。</p>
+      <div class="scroll">
+        <table style="min-width:0">
+          <thead><tr><th>这句</th><th>不是</th><th>而是</th></tr></thead>
+          <tbody>
+            <tr><td>打开空调页面</td><td><code>carControl</code></td><td><code>windowControl</code></td></tr>
+            <tr><td>hud亮度调亮1级</td><td><code>systemControl</code></td><td><code>carControl</code></td></tr>
+            <tr><td>关闭前碰撞预警</td><td><code>carControl</code></td><td><code>autoPilot</code></td></tr>
+            <tr><td>关闭开门预警</td><td><code>autoPilot</code></td><td><code>carControl</code></td></tr>
+            <tr><td>导航回家</td><td><code>naviControl</code></td><td><code>navi</code></td></tr>
+            <tr><td>减小导航声音</td><td><code>naviControl</code></td><td><code>systemControl</code></td></tr>
+            <tr><td>下一个</td><td><code>mediaControl</code></td><td><code>generalControl</code></td></tr>
+            <tr><td>我要听蓝牙音乐</td><td><code>music</code></td><td><code>windowControl</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div>
+      <h3>domain 和 agent label 之间</h3>
+      <p class="note">这些界线决定一句话走 NLU 还是走 Agent，判错的代价更大。</p>
+      <div class="scroll">
+        <table style="min-width:0">
+          <thead><tr><th>归 domain</th><th>归 agent label</th></tr></thead>
+          <tbody>
+            <tr><td><code>scheduleReminder</code><br>到时间只提醒用户</td><td>条件任务：一次性任务，车机直接执行<br>任务大师：周期性任务，反复触发</td></tr>
+            <tr><td><code>music</code><br>说得出歌名、歌手、专辑</td><td>音乐agent：按氛围、歌词、影视剧找歌</td></tr>
+            <tr><td><code>video</code><br>说得出片名、主演</td><td>影视agent：让系统推荐，凭剧情找片</td></tr>
+            <tr><td><code>navi</code> / <code>naviControl</code><br>去说得出名字的地点，问到家和公司多远</td><td>复杂导航agent：靠描述找地点，多地点行程</td></tr>
+            <tr><td><code>carControl</code><br>说出了具体指令</td><td>车控agent模糊意图：只说感受<br>用车agent：问怎么用、为什么坏</td></tr>
+            <tr><td><code>carInfo</code><br>胎压、空调温度、保养这几项数值</td><td>用车agent：其他功能是否开着、是否正常</td></tr>
+            <tr><td><code>systemControl</code> / <code>memoryRecord</code><br>录声纹；删除已记的偏好</td><td>记忆agent：记住一条新的个人信息</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>已确认的规则</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>规则</th><th>怎么落地</th></tr></thead>
+      <tbody>
+        <tr><td>语义 sheet 输出预期 domain，一律首字母小写</td><td>原表 23 种写法合并成 16 个 domain。“类别”列不再是标签</td></tr>
+        <tr><td>“全局”类别表示任何场景下都可以说</td><td>它是可说范围，不影响标签。评测集里保留为一个标记</td></tr>
+        <tr><td>闲聊会话里的追问一律跟随上一轮</td><td>代码实现，见决策顺序第 2 步</td></tr>
+        <tr><td>带时间或触发条件的请求分三类：提醒、一次性任务、周期性任务</td><td>见下表</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>带时间或触发条件的请求</h3>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>标签</th><th>判据</th><th>谁来理解</th><th>例句</th></tr></thead>
+      <tbody>
+        <tr><td class="key"><code>scheduleReminder</code></td><td>到时间提醒用户去做某事，系统不替用户执行动作</td><td>传统 NLU，速度快</td><td class="ex">下午3点提醒我开会</td></tr>
+        <tr><td class="key">条件任务</td><td>一次性任务：到时间或快到目的地时，车机直接执行，只执行这一次</td><td>大模型 Agent</td><td class="ex">晚上八点打开氛围灯</td></tr>
+        <tr><td class="key">任务大师</td><td>周期性任务：每天每周重复，或每当某个事件、状态出现就触发</td><td>大模型 Agent</td><td class="ex">每天八点主动播放电影；当我上车时自动播报公主请上车</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">测试集里任务大师共 551 条，只有 12 条带“每天、每周”，535 条是“每当某事发生就执行”的长期规则，这里都按周期性任务处理。条件任务 520 条里没有一条带周期词，和定义一致。</p>
+</section>
+
+<section>
+  <h2>现状和风险</h2>
+  <p class="warn">官方文档写明 Jev 主要用英文训练，中日韩文字能处理但准确率不如英文，并建议先用自己的数据测试。Jev 能不能用在这里，取决于评测结果。</p>
+  <div class="two">
+    <div>
+      <h3>已经有的</h3>
+      <ul class="plain">
+        <li>评测集 13,662 条，按句式模板分组后切成 dev 2,814、val 2,728、test 8,120。</li>
+        <li>28 个选项的判据初稿，例句只取自 dev。</li>
+        <li>评测脚本，输出准确率、混淆和阈值分析。流程已用模拟数据跑通。</li>
+        <li>参照线：只看字面的 n-gram 分类器在同一份数据上是 96.5%。Jev 至少要超过它。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>还没有的</h3>
+      <ul class="plain">
+        <li>Jev 的实测结果。需要密钥。</li>
+        <li>闲聊中途说一条新指令的样本。现有 574 条多轮样本全是闲聊追问，测不到能否跳出闲聊。</li>
+        <li>非闲聊追问的样本，例如调完空调后说“再高一点”。改写这条路径没有评测数据。</li>
+        <li>样本很少的 domain：<code>memoryRecord</code> 2 条、<code>unicast</code> 7 条、<code>phone</code> 15 条、<code>scheduleReminder</code> 16 条、<code>navi</code> 19 条。</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note">接入现状：快思考模型未接入，NLU 直达先用现有方式落域；慢思考编排未接入，先只出标签。</p>
+</section>
+
+<section>
+  <h2>待确认</h2>
+  <ul class="plain">
+    <li>“条件任务”下有 128 行只是提醒、没有车机动作，例如“五号上午九点提醒我打卡”。按定义应归 <code>scheduleReminder</code>，但其中约六成说法很口语，传统 NLU 未必接得住。需要决定：一律归 <code>scheduleReminder</code>，还是只有规范说法归它、口语化的留在条件任务。另有 85 行需要逐条判断。</li>
+    <li>任务大师里有 4 行疑似一次性任务，例如“15分钟后自动关闭视频”“等会下车提醒我拿包”，需要确认是否改成条件任务。</li>
+    <li>首轮闲聊和各 agent 的界线。原标注不一致：“有没有惊悚电影推荐”标闲聊，“推荐户外露营的电影”标影视agent。判据暂按“属于某个 agent 领域的优先归该 agent”写。</li>
+    <li>16 个 domain 的判据是从测试集归纳的，需要熟悉 NLU 的同事核对。</li>
+    <li>各阈值：label 的置信度门限，is_followup 和 is_multi 的概率阈值。在 val 上标定。</li>
+    <li>拆分后的多条指令是串行还是并行执行，其中一条失败时怎么播报。</li>
+  </ul>
+</section>
+
+</div>
+
+<script>
+(function(){
+  var HEAD = ['in','e-in-wl','wl','e-wl-jev','jev','e-jev-d0','d0'];
+  var NOCHAT = HEAD.concat(['e-d0-d1','d1']);
+  var DIRECT = NOCHAT.concat(['e-d1-disp','disp']);
+  var REWRITE = NOCHAT.concat(['e-d1-llm','llm','e-llm-jev2','jev2','e-jev2-disp','disp']);
+  var EX = [
+    { q:'打开空调页面',
+      path:['in','e-in-wl','wl','e-wl-nlu','t-nlu'],
+      steps:['标准说法，精确匹配表命中，不经过 Jev。','直接输出 windowControl。“打开空调”则是 carControl：打开页面和控制功能本身是两个 domain。'] },
+    { q:'把主驾那边的座椅通风开到一档',
+      path:DIRECT.concat(['e-disp-nlu','t-nlu']),
+      steps:['表里没有这种说法，进入 Jev。','label 应为 carControl，is_multi 为否。','带着 carControl 交给现有落域。'] },
+    { q:'那喝水呢', ctx:'上一轮：吃饭用法文怎么说（闲聊）',
+      path:HEAD.concat(['e-d0-chat','t-chat']),
+      steps:['上一轮标签是闲聊，is_followup 为是。','不看 label 选了什么，直接输出闲聊。'] },
+    { q:'再高一点', ctx:'上一轮：主驾空调调到 22 度（carControl）',
+      path:REWRITE.concat(['e-disp-nlu','t-nlu']),
+      steps:['is_followup 为是，但上一轮不是闲聊，需要改写。','槽位继承把它补全为“主驾空调温度再调高一点”，不调大模型。','补全后的指令再判一次标签，应为 carControl。','测试集里没有这类样本，这条路径还没有评测数据。'] },
+    { q:'空调温度调低1度并打开雨刮',
+      path:REWRITE.concat(['e-disp-nlu','t-nlu']),
+      steps:['label 应为中枢简单任务。','拆成“空调温度调低1度”和“打开雨刮”两条。','逐条判标签，两条都应为 carControl，依次执行。'] },
+    { q:'座椅加热没反应是哪里出了问题',
+      path:DIRECT.concat(['e-disp-agent','t-agent']),
+      steps:['label 应为用车agent：这是在问原因，不是让车执行动作。','不经过编排层，直接调用用车 Agent。'] },
+    { q:'五号上午九点提醒我打卡',
+      path:DIRECT.concat(['e-disp-nlu','t-nlu']),
+      steps:['到时间只提醒用户，不执行车机动作，label 应为 scheduleReminder，由传统 NLU 处理，速度快。','这句话在测试集里标的是条件任务，属于待确认的 128 行之一。'] },
+    { q:'晚上八点打开氛围灯',
+      path:DIRECT.concat(['e-disp-agent','t-agent']),
+      steps:['一次性任务，到时间由车机直接执行动作，label 应为条件任务。','直接调用条件任务 Agent，由大模型理解。'] },
+    { q:'把空调调到二十六度然后导航去我常去的那家商场',
+      path:DIRECT.concat(['e-disp-slow','t-slow']),
+      steps:['label 应为中枢复杂多任务：“我常去的那家商场”需要推断是哪里。','不拆分，带着对话历史交给慢思考编排。'] }
+  ];
+
+  var svg = document.getElementById('flow');
+  var chips = document.getElementById('chips');
+  var trace = document.getElementById('trace');
+  var parts = svg.querySelectorAll('[data-k]');
+  var buttons = [];
+
+  function el(tag, text, cls){
+    var n = document.createElement(tag);
+    if (text) n.textContent = text;
+    if (cls) n.className = cls;
+    return n;
+  }
+
+  function show(i){
+    var ex = i < 0 ? null : EX[i];
+    svg.classList.toggle('focus', !!ex);
+    for (var p = 0; p < parts.length; p++){
+      parts[p].classList.toggle('on', !!ex && ex.path.indexOf(parts[p].getAttribute('data-k')) !== -1);
+    }
+    for (var b = 0; b < buttons.length; b++){
+      buttons[b].setAttribute('aria-pressed', String(b - 1 === i));
+    }
+    trace.textContent = '';
+    if (!ex){
+      trace.appendChild(el('div', '当前显示完整流程。选一条例句，查看它经过哪些判断、落到哪个分支。'));
+      return;
+    }
+    if (ex.ctx) trace.appendChild(el('div', ex.ctx, 'ctx'));
+    var ol = el('ol');
+    ex.steps.forEach(function(s){ ol.appendChild(el('li', s)); });
+    trace.appendChild(ol);
+  }
+
+  function addButton(label, i){
+    var btn = el('button', label);
+    btn.type = 'button';
+    btn.id = 'ex-' + (i + 1);
+    btn.addEventListener('click', function(){ show(i); });
+    chips.appendChild(btn);
+    buttons.push(btn);
+  }
+
+  addButton('完整流程', -1);
+  EX.forEach(function(ex, i){
+    addButton(ex.q.length > 16 ? ex.q.slice(0, 15) + '…' : ex.q, i);
+  });
+  show(-1);
+})();
+</script>

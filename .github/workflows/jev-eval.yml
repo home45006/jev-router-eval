@@ -1,0 +1,117 @@
+name: jev-eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: "smoke = criteria 例句（无需 xlsx）；full = 用 data/*.xlsx 生成完整评测集"
+        type: choice
+        options: [smoke, full]
+        default: smoke
+      split:
+        description: "full 时使用的切分"
+        type: choice
+        options: [dev, val, test, all]
+        default: dev
+      per_label:
+        description: "每个标签最多取多少条，0 表示全部"
+        default: "20"
+      extra_args:
+        description: "附加参数，如 --no-examples 或 --shuffle-options 1"
+        default: ""
+      model:
+        default: jev-latest
+
+permissions:
+  contents: read
+
+jobs:
+  # 每次提交：不调用 Jev，只用模拟结果验证流程和 SDK 请求结构
+  pipeline-check:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install typesafe-sdk openpyxl
+      - name: criteria.json 与生成脚本一致
+        run: |
+          python make_criteria.py /tmp/criteria.json
+          diff <(python -m json.tool criteria.json) <(python -m json.tool /tmp/criteria.json)
+      - name: 冒烟集与 criteria 一致
+        run: |
+          cp fixtures/smoke_set.jsonl /tmp/smoke_before.jsonl
+          python make_smoke_set.py
+          diff fixtures/smoke_set.jsonl /tmp/smoke_before.jsonl
+      - name: 模拟模式跑通
+        run: python eval_jev.py --data fixtures/smoke_set.jsonl --split dev --mock --out runs/mock
+      - name: 请求结构被 SDK 接受
+        run: |
+          python - <<'PY'
+          import json, eval_jev
+          from typesafe_sdk import Choice, Noul
+          crit = json.load(open("criteria.json", encoding="utf-8"))
+          it = eval_jev.load_jsonl("fixtures/smoke_set.jsonl")[0]
+          for x in (it, dict(it, prev_query="上一句", prev_label="闲聊")):
+              qs = eval_jev.build_questions(crit, x, list(crit["label"]["options"]), True, Choice, Noul)
+              print({k: type(v).__name__ for k, v in qs.items()}, len(qs["label"].criteria))
+          PY
+
+  # 手动触发：真正调用 Jev（需要仓库 Secret TYPESAFE_API_KEY）
+  jev-eval:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+      DATASET: ${{ inputs.dataset }}
+      SPLIT: ${{ inputs.split }}
+      PER_LABEL: ${{ inputs.per_label }}
+      EXTRA_ARGS: ${{ inputs.extra_args }}
+      MODEL: ${{ inputs.model }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install typesafe-sdk openpyxl
+      - name: 检查密钥
+        run: |
+          if [ -z "$TYPESAFE_API_KEY" ]; then
+            echo "::error::缺少仓库 Secret TYPESAFE_API_KEY（Settings → Secrets and variables → Actions）"
+            exit 1
+          fi
+      - name: 准备评测集
+        run: |
+          if [ "$DATASET" = "full" ]; then
+            f=$(ls data/*.xlsx 2>/dev/null | head -1)
+            if [ -z "$f" ]; then echo "::error::data/ 下没有 xlsx，先把测试集放进去，或选 dataset=smoke"; exit 1; fi
+            python build_dataset.py "$f" --out .
+            echo "DATA=eval_set.jsonl" >> "$GITHUB_ENV"
+          else
+            echo "DATA=fixtures/smoke_set.jsonl" >> "$GITHUB_ENV"
+            echo "SPLIT=dev" >> "$GITHUB_ENV"
+          fi
+      - name: 连通性：先跑 1 条
+        run: |
+          head -1 "$DATA" > /tmp/ping.jsonl
+          python eval_jev.py --data /tmp/ping.jsonl --split all --model "$MODEL" --concurrency 1 --out runs/ping | tail -20
+          test -s runs/ping/predictions.jsonl || { echo "::error::Jev 一条都没有返回，见上方日志"; exit 1; }
+      - name: 评测
+        run: |
+          OUT="runs/${DATASET}-${SPLIT}-pl${PER_LABEL}"
+          echo "OUT=$OUT" >> "$GITHUB_ENV"
+          python eval_jev.py --data "$DATA" --split "$SPLIT" --per-label "$PER_LABEL" --model "$MODEL" $EXTRA_ARGS --out "$OUT"
+      - name: 写入运行摘要
+        if: always()
+        run: test -f "$OUT/report.md" && cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jev-eval-${{ github.run_number }}
+          path: runs/
