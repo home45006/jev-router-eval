@@ -2,7 +2,7 @@ name: jev-eval
 
 on:
   push:
-    branches: [main]
+    branches: [main, "eval/**"]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -31,7 +31,7 @@ permissions:
 jobs:
   # 每次提交：不调用 Jev，只用模拟结果验证流程和 SDK 请求结构
   pipeline-check:
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/heads/eval/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,9 +62,10 @@ jobs:
               print({k: type(v).__name__ for k, v in qs.items()}, len(qs["label"].criteria))
           PY
 
-  # 手动触发：真正调用 Jev（需要仓库 Secret TYPESAFE_API_KEY）
+  # 真正调用 Jev（需要仓库 Secret TYPESAFE_API_KEY）。
+  # 两种触发方式：Actions 页面手动 Run workflow；或推送到 eval/* 分支，参数取自 eval-request.env
   jev-eval:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/eval/')
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -80,6 +81,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install typesafe-sdk openpyxl
+      - name: 读取 eval-request.env（推送到 eval/* 分支时）
+        if: github.event_name == 'push'
+        run: |
+          set -a; . ./eval-request.env; set +a
+          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
       - name: 检查密钥
         run: |
           if [ -z "$TYPESAFE_API_KEY" ]; then

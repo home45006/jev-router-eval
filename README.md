@@ -14,6 +14,7 @@
 2. **Actions → jev-eval → Run workflow**：
    - `dataset=smoke`：用 `criteria.json` 里的 150 条例句，不需要 xlsx，先验证连通和请求结构。例句也在提示里，准确率会偏高；加 `extra_args=--no-examples` 看去掉例句后的表现。
    - `dataset=full`：先把测试集 xlsx 放进 `data/`，生成 13,662 条的完整评测集，按 `split`、`per_label` 抽样。
+   也可以不进页面：把 `eval-request.env` 里的参数改好，推送到任意 `eval/*` 分支，同样会触发。
 3. 结果在运行摘要里，`report.md`、`errors.csv`、`confusion.csv` 在 artifact 里。
 
 每次提交还会自动跑一遍不调用 Jev 的流程检查（模拟结果 + SDK 请求结构校验）。
