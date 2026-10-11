@@ -1,7 +1,8 @@
-"""生成两级分流的判据 criteria_v2.json。
+"""生成前置分流的判据 criteria_v2.json。
 
-第一级：is_fast、needs_rewrite 两个 Noul，每句都问。
-第二级：一个 Choice，在 4 个独立 Agent、Agent 大脑和“退回快思考”里选一个。闲聊由 Agent 大脑判断。
+第 14 版架构只有一级：is_fast、needs_rewrite 两个 Noul，每句都问；没交给快思考的句子全部交给 Agent 大脑。
+corrections：Jev 纠错题。每道题针对一类已知落错的句子，和第一级在同一次请求里作答，命中后按 route 指定的去向走。
+stage2：第 13 版的第二级（6 选 1），第 14 版不再使用，保留以便复现第 13 版的结果。
 
 用法：python make_criteria_v2.py criteria_v2.json
 例句只取自评测集的 dev 部分。
@@ -63,7 +64,37 @@ NEEDS_REWRITE = {
     },
 }
 
-# ---------------- 第二级 ----------------
+# ---------------- Jev 纠错题 ----------------
+# status：shadow 只记录命中、不改变去向；on 命中后按 route 走；off 已下线。
+# 例句取自 val 上判错的句子，所以这两道题在 val 上的回放结果偏乐观，只作演示。
+CORRECTIONS = {
+    "fix_mode_rule": {
+        "status": "shadow",
+        "route": "Agent大脑",
+        "hint": "任务大师",
+        "why": "“在某种模式或状态下自动做某事”的长期规则，第一级常误判为直接指令交给快思考",
+        "instructions": "`query` 是不是一条“在某种模式、状态或场景下，自动执行某个动作”的长期规则？",
+        "criteria": {
+            "true": "是。句子给出一个模式、状态或场景作为前提，要求车在这种情况下自动执行动作，而不是现在立刻执行一次。"
+                    "例：山地模式时空气悬架调到便携装载模式；在自动驾驶模式下播放舒缓的音乐；露营模式下屏幕亮度自动调到最低。",
+            "false": "不是。包括：现在就切换模式或执行动作（切换到山地模式、打开自动驾驶、空气悬架调到便携装载模式）；"
+                     "带具体时间的一次性动作（晚上八点打开氛围灯）；问某个模式是什么、怎么用（山地模式适合什么路况）。",
+        },
+    },
+    "fix_setting_toggle": {
+        "status": "shadow",
+        "route": "快思考",
+        "why": "打开、关闭冷门的系统设置项或页面，第一级常因名称陌生判为需要理解，交给了大脑",
+        "instructions": "`query` 是不是直接让车机打开、关闭或切换某个系统设置项、功能开关或页面？",
+        "criteria": {
+            "true": "是，即使设置项的名字很冷门或说得不完整。例：打开自适应；关闭隐私政策；打开微信绑定；关闭自动锁车；打开开发者选项。",
+            "false": "不是。包括：问某个设置项是什么、怎么设置、在哪里（自适应巡航是什么、隐私政策在哪里看）；"
+                     "带触发条件或执行时间的（下车时自动关闭车窗、十分钟后关闭空调）；只说感受没说动作（屏幕太晃眼了）。",
+        },
+    },
+}
+
+# ---------------- 第二级（第 13 版，已不用） ----------------
 O = {}
 def opt(name, what, not_for, examples):
     O[name] = {"what": what, "not_for": not_for, "examples": list(examples)}
@@ -94,13 +125,15 @@ opt("退回快思考",
     ["右后座椅通风调成1", "导航到天安门附近的北京天信亮酒店", "放一首稻香", "拨打张三的办公室电话", "5月30日提醒我开会", "关掉香氛关闭后备箱"])
 
 doc = {
-    "version": "v2.2 2026-10-11 第一级按 dev 错误修订：风格年代点播、通用短指令、导航设置归快思考；定时动作、像指令的提问、含复杂步骤的多指令不归快思考",
+    "version": "v2.3 2026-10-11 第 14 版架构：第一级之后只有快思考和 Agent 大脑两个去向；新增 Jev 纠错题（corrections），先以 shadow 状态回放",
     "notes": [
-        "第一级每句都问；第二级只问第一级没有交给快思考的句子。评测时第二级对所有样本都问一遍，以便单独统计。",
-        "第二级的选项 key 就是输出的标签。联网搜索Agent 现在只出标签，接口未接入。",
-        "examples 只取自评测集的 dev 部分。",
+        "第一级每句都问；is_fast 达到阈值交给快思考，否则交给 Agent 大脑。",
+        "corrections 和第一级在同一次请求里作答。status=on 的题命中时按 route 走，hint 是附给大脑的能力提示；shadow 只记录。",
+        "stage2 是第 13 版的第二级，第 14 版不再使用。",
+        "第一级的 examples 只取自评测集的 dev 部分；纠错题的例句取自判错的句子，见各题说明。",
     ],
     "stage1": {"is_fast": IS_FAST, "needs_rewrite": NEEDS_REWRITE},
+    "corrections": CORRECTIONS,
     "stage2": {
         "instructions": {
             "question": "车内用户对语音助手说了 `query` 这句话，它不归快思考模型直接处理。应当交给谁？",
@@ -113,4 +146,4 @@ doc = {
 
 if __name__ == "__main__":
     json.dump(doc, open(sys.argv[1], "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    print(len(O), "stage-2 options;", sum(len(json.dumps(v, ensure_ascii=False)) for v in O.values()), "chars in options")
+    print(len(CORRECTIONS), "corrections;", len(O), "legacy stage-2 options;", sum(len(json.dumps(v, ensure_ascii=False)) for v in O.values()), "chars in options")

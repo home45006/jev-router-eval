@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""两级分流评测：Jev 第一级判是否交给快思考，第二级在 4 个独立 Agent、Agent 大脑里选（闲聊归大脑）。
+"""前置分流评测。
 
-每条样本发两次请求：
-    第一级  is_fast、needs_rewrite（Noul）
-    第二级  label（Choice，6 个选项，含“退回快思考”）
-线上第二级只问第一级没交给快思考的句子；评测时对所有样本都问，便于单独统计第二级，再离线按阈值组合出端到端结果。
+第 14 版（默认，只发第一级请求）：
+    第一级  is_fast、needs_rewrite 和 criteria 里的 Jev 纠错题（都是 Noul，一次请求）
+    去向    纠错题命中按它的 route 走；否则 is_fast 达到阈值交给快思考，没达到交给 Agent 大脑
+    报告    第一级准确率，以及每道纠错题的回放：会改变多少句的去向，其中改对、改错各多少
+第 13 版（--stages s1,s2）：再对每条样本问第二级 6 选 1，报告第二级和两级组合的结果。
 
 标准答案由评测集原来的 label 换算：
     16 个 NLU domain 和中枢简单任务 → 快思考
@@ -12,7 +13,8 @@
     音乐、影视、复杂导航、记忆、车控模糊意图、中枢复杂多任务、闲聊 → Agent大脑
 
 常用：
-    python eval_two_stage.py --split dev --per-label 20 --out runs/2stage-dev
+    python eval_two_stage.py --split dev --per-label 20 --out runs/v14-dev
+    python eval_two_stage.py --split dev --per-label 20 --stages s1,s2 --out runs/2stage-dev
     python eval_two_stage.py --split dev --per-label 5 --mock --out runs/mock2
 """
 import argparse, asyncio, collections, csv, hashlib, json, os, random, sys
@@ -39,8 +41,13 @@ def gold_of(it):
     return fast_ok, bool(s2), (s2 | ({BACK} if fast_ok else set())), dest
 
 
+def active_corrections(crit):
+    """回放时 shadow 和 on 的纠错题都要问；off 的已下线。"""
+    return {k: v for k, v in crit.get("corrections", {}).items() if v.get("status") != "off"}
+
+
 def stage1_questions(crit, it, Noul):
-    c = crit["stage1"]
+    c = dict(crit["stage1"], **active_corrections(crit))
     return {k: Noul(instructions=c[k]["instructions"], criteria=c[k]["criteria"]) for k in c}
 
 
@@ -161,7 +168,7 @@ def report(args, crit, items, fixtures, n_err):
     # ---------- 第一级 ----------
     L.append("\n## 第一级：是否交给快思考\n")
     L.append(f"应交给快思考 {len(only_fast)} 条，不应交给 {len(only_agent)} 条，两种都算对 {both} 条（如条件任务里的纯提醒）。\n")
-    L.append("| is_fast 阈值 | 该走 Agent 却交给快思考 | 该走快思考却送第二级 | 第一级准确率 |\n|---|---|---|---|")
+    L.append("| is_fast 阈值 | 该走 Agent 却交给快思考 | 该走快思考却交给大脑 | 第一级准确率 |\n|---|---|---|---|")
     for T in (0.3, 0.5, 0.7, 0.8, 0.9):
         fp = sum(s1["is_fast"] >= T for _, s1, _ in only_agent)
         fn = sum(s1["is_fast"] < T for _, s1, _ in only_fast)
@@ -172,15 +179,50 @@ def report(args, crit, items, fixtures, n_err):
         fn = sorted(((s1["is_fast"], it) for it, s1, _ in only_fast if s1["is_fast"] < T), key=lambda x: x[0])
         L.append(f"\n阈值 {T} 时的错误，按原 label 统计：")
         L.append("- 该走 Agent 却交给快思考：" + ("，".join(f"{k} {v}" for k, v in collections.Counter(it["primary"] for _, it in fp).most_common()) or "无"))
-        L.append("- 该走快思考却送第二级：" + ("，".join(f"{k} {v}" for k, v in collections.Counter(it["primary"] for _, it in fn).most_common()) or "无"))
+        L.append("- 该走快思考却交给大脑：" + ("，".join(f"{k} {v}" for k, v in collections.Counter(it["primary"] for _, it in fn).most_common()) or "无"))
     L.append("\n阈值 0.5 时该走 Agent 却交给快思考的句子：\n\n| is_fast | 原 label | 句子 |\n|---|---|---|")
     for sc, it in sorted(((s1["is_fast"], it) for it, s1, _ in only_agent if s1["is_fast"] >= 0.5), key=lambda x: -x[0])[:60]:
         L.append(f"| {sc} | {it['primary']} | {it['query'].replace('|', '/')[:60]} |")
-    L.append("\n阈值 0.8 时该走快思考却送第二级的句子：\n\n| is_fast | 原 label | 句子 |\n|---|---|---|")
+    L.append("\n阈值 0.8 时该走快思考却交给大脑的句子：\n\n| is_fast | 原 label | 句子 |\n|---|---|---|")
     for sc, it in sorted(((s1["is_fast"], it) for it, s1, _ in only_fast if s1["is_fast"] < 0.8), key=lambda x: x[0])[:60]:
         L.append(f"| {sc} | {it['primary']} | {it['query'].replace('|', '/')[:60]} |")
 
-    # ---------- 第二级 ----------
+    # ---------- Jev 纠错题回放 ----------
+    corr = {k: v for k, v in active_corrections(crit).items() if all(k in s1 for _, s1, _ in rows)}
+    if corr:
+        T, CT = 0.7, 0.5
+        gold14 = {i: ({"快思考"} if g[0] else set()) | ({"Agent大脑"} if g[1] else set()) for i, g in G.items()}
+        base = {it["id"]: ("快思考" if s1["is_fast"] >= T else "Agent大脑") for it, s1, _ in rows}
+        L.append(f"\n## Jev 纠错题回放（is_fast 阈值 {T}，纠错题阈值 {CT}）\n")
+        L.append("回放时不管题目当前是 shadow 还是 on，都按命中后改变去向来算。\n")
+        L.append("| 纠错题 | 状态 | 命中后去向 | 命中 | 改变去向 | 改对 | 改错 |\n|---|---|---|---|---|---|---|")
+        changed_rows = {}
+        for k, v in corr.items():
+            hit = [(it, s1) for it, s1, _ in rows if s1[k] >= CT]
+            ch = [(it, s1) for it, s1 in hit if v["route"] != base[it["id"]]]
+            fixed = sum(v["route"] in gold14[it["id"]] and base[it["id"]] not in gold14[it["id"]] for it, _ in ch)
+            broke = sum(base[it["id"]] in gold14[it["id"]] and v["route"] not in gold14[it["id"]] for it, _ in ch)
+            L.append(f"| {k} | {v.get('status')} | {v['route']}" + (f"（提示 {v['hint']}）" if v.get("hint") else "")
+                     + f" | {len(hit)} | {len(ch)} | {fixed} | {broke} |")
+            changed_rows[k] = ch
+
+        def dest14(it, s1):
+            hits = sorted(((s1[k], v["route"]) for k, v in corr.items() if s1[k] >= CT), reverse=True)
+            return hits[0][1] if hits else base[it["id"]]
+        ok0 = sum(base[it["id"]] in gold14[it["id"]] for it, _, _ in rows)
+        ok1 = sum(dest14(it, s1) in gold14[it["id"]] for it, s1, _ in rows)
+        L.append(f"\n- 去向准确率：不用纠错题 {pct(ok0, n)}（{ok0}/{n}），全部启用后 {pct(ok1, n)}（{ok1}/{n}）")
+        for k, ch in changed_rows.items():
+            if ch:
+                L.append(f"\n{k} 改变去向的句子（最多 30 条）：\n\n| 得分 | 原 label | 改对了吗 | 句子 |\n|---|---|---|---|")
+                for it, s1 in sorted(ch, key=lambda x: -x[1][k])[:30]:
+                    good = "对" if corr[k]["route"] in gold14[it["id"]] else "错"
+                    L.append(f"| {s1[k]} | {it['primary']} | {good} | {it['query'].replace('|', '/')[:60]} |")
+        t1c = [s1["input_tokens"] for _, s1, _ in rows if s1.get("input_tokens")]
+        if t1c:
+            L.append(f"\n- 第一级请求（含 {len(corr)} 道纠错题）平均输入 token：{sum(t1c) // len(t1c):,}")
+
+    # ---------- 第二级（第 13 版） ----------
     s2rows = [(it, s1, s2) for it, s1, s2 in rows if G[it["id"]][1] and s2]
     ok2 = [s2["choice"] in G[it["id"]][2] for it, _, s2 in s2rows]
     if s2rows:
@@ -257,7 +299,7 @@ def main():
     ap.add_argument("--no-examples", action="store_true")
     ap.add_argument("--mock", action="store_true")
     ap.add_argument("--report-only", action="store_true")
-    ap.add_argument("--stages", default="s1,s2", help="要请求的级别：s1、s2 或 s1,s2")
+    ap.add_argument("--stages", default="s1", help="要请求的级别：s1（第 14 版，默认）或 s1,s2（第 13 版两级）")
     args = ap.parse_args()
 
     crit = json.loads(Path(args.criteria).read_text(encoding="utf-8"))

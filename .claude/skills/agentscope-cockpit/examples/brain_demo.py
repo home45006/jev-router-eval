@@ -1,17 +1,19 @@
 """座舱 Agent 大脑的最小实现（AgentScope 2.0.9）。
 
-演示四件事：
+第 14 版架构里，凡是不交给快思考的句子都由 Agent 大脑处理，没有直达的独立 Agent。演示五件事：
 1. 快思考模型作为工具（FunctionTool）交给大脑；
-2. 子 Agent（美团、导航、闲聊……）包装成工具，由大脑自主调度；
+2. 其他能力（任务大师、条件任务、联网搜索、用车手册、导航、空调、多媒体、美团、闲聊）包装成工具，由大脑自主调度；
 3. 大脑每轮用结构化输出返回会话状态：continue / suspend / end；
-4. 每个会话的 AgentState 存成 JSON，每轮重建 Agent，不在会话之间共享 Agent 实例。
+4. 每个会话的 AgentState 存成 JSON，每轮重建 Agent，不在会话之间共享 Agent 实例；
+5. DeepSeek V4 Flash 用非思考模式（Parameters(thinking_enable=False)），前置分流的 Jev 纠错题给出的 hint 附在用户原话后面。
 
 运行：
     离线（假模型，只验证接线，结果不代表模型效果）：
         python brain_demo.py --offline
     接真实模型：
         export DEEPSEEK_API_KEY=...
-        export DEEPSEEK_MODEL=<DeepSeek V4 Flash 的模型 ID>
+        export DEEPSEEK_MODEL=deepseek-v4-flash      # 不设时用这个；以 rewrite_check.py 探测出的可用 ID 为准
+        export DEEPSEEK_FALLBACK_MODEL=deepseek-flash # 可选，主模型调用失败时改用
         export DEEPSEEK_BASE_URL=https://api.deepseek.com   # 走代理时改成代理地址
         python brain_demo.py
 """
@@ -26,7 +28,7 @@ from typing import Callable, Literal
 
 from pydantic import BaseModel, Field
 
-from agentscope.agent import Agent, ReActConfig
+from agentscope.agent import Agent, ModelConfig, ReActConfig
 from agentscope.credential import DeepSeekCredential
 from agentscope.message import UserMsg
 from agentscope.model import ChatModelBase, DeepSeekChatModel
@@ -95,11 +97,24 @@ class SubAgentSpec:
     tools: list = field(default_factory=list)
 
 
+# 大脑的能力清单。新增能力只改这里，不改前置分流。tools 留空的是占位，接入真实服务时补上。
 SUB_AGENTS = [
+    SubAgentSpec("task_master_agent", "任务大师：建立长期有效、反复触发的规则，例如每天定时执行、每当上车或进入某种模式时自动执行。",
+                 "你是车机的自动化规则助手。把用户的要求整理成触发条件和动作，缺信息时提问，建好后复述规则。"),
+    SubAgentSpec("conditional_task_agent", "条件任务：一次性的定时或延时动作，例如后天两点导航到火车站、十分钟后关车窗。",
+                 "你是车机的定时任务助手。确认执行时间和动作后创建任务。"),
+    SubAgentSpec("web_search_agent", "联网搜索：新闻资讯、热点、需要实时信息的问题。",
+                 "你是联网搜索助手。搜索接口尚未接入时，如实告诉调用方暂时无法联网。"),
+    SubAgentSpec("car_manual_agent", "用车手册：本车功能是什么、怎么用、在哪设置、故障和报警原因、某个部件状态是否正常。",
+                 "你是本车的用车手册助手，只回答与本车有关的问题。"),
+    SubAgentSpec("navigation_agent", "导航 Agent：靠描述找地点、规划路线、多地点行程、顺路找加油站餐馆，会多轮确认。",
+                 "你是车载导航助手。"),
+    SubAgentSpec("climate_agent", "空调 Agent：根据用户的感受和车内外环境推断空调、座椅通风加热、车窗该怎么调。",
+                 "你是车内空调和舒适性助手。说清楚准备怎么调，再给出调整后的设置。"),
+    SubAgentSpec("media_agent", "多媒体 Agent：按心情、场景、歌词、剧情找歌找片，推荐音乐和影视。",
+                 "你是车载多媒体助手。推荐时给出具体的歌名或片名。"),
     SubAgentSpec("meituan_agent", "美团 Agent：找餐厅、点外卖、下单。需要多轮确认菜品和地址。",
                  "你是美团点餐助手。缺信息时向用户提问，下单前复述订单。"),
-    SubAgentSpec("navigation_agent", "导航 Agent：靠描述找地点、规划路线、多地点行程、顺路找加油站餐馆。",
-                 "你是车载导航助手。"),
     SubAgentSpec("chat_agent", "闲聊 Agent：开放问答、百科、写诗、建议和陪伴聊天。用户在闲聊时调用。",
                  "你是车上的聊天伙伴，回答简短口语化。"),
 ]
@@ -131,10 +146,11 @@ def make_subagent_tool(spec: SubAgentSpec, session_id: str, store: SessionStore,
     )
 
 
-BRAIN_PROMPT = """你是智能座舱的 Agent 大脑。你可以调用以下能力完成用户的事：
+BRAIN_PROMPT = """你是智能座舱的 Agent 大脑。快思考模型处理不了的话都交给你。你可以调用以下能力完成用户的事：
 - fast_think：执行说清楚的车控、媒体、导航、电话等直接指令；
-- 各个子 Agent：美团点餐、导航规划、闲聊等。
-一件事需要几个能力配合时，按顺序调度它们。每轮结束时用 GenerateStructuredOutput 返回会话状态：
+- 各个子 Agent：任务大师、条件任务、联网搜索、用车手册、导航、空调、多媒体、美团、闲聊。
+先判断用户要办什么事，一件事需要几个能力配合时，按顺序调度它们；能直接回答的闲聊和常识问题交给 chat_agent。
+用户原话后面如果附有“前置分流提示”，优先考虑提示里的能力，但仍以用户原话为准。每轮结束时用 GenerateStructuredOutput 返回会话状态：
 任务还要继续时 status=continue；用户这句话和当前任务无关（例如点外卖途中说“把空调调低”）时 status=suspend；
 任务完成、用户放弃或闲聊告一段落时 status=end。"""
 
@@ -149,14 +165,19 @@ def build_brain(session_id: str, store: SessionStore, model_factory: Callable[[s
         toolkit=Toolkit(tools=tools),
         state=store.load(session_id, "agent_brain"),
         react_config=ReActConfig(max_iters=8),  # 车上要控制时延，限制推理轮数
+        model_config=fallback_config(),
     )
 
 
 async def handle_turn(session_id: str, text: str, store: SessionStore,
-                      model_factory: Callable[[str], ChatModelBase]) -> TurnStatus:
-    """大脑处理一轮。调用方根据返回的 status 决定下一句是否还交给大脑。"""
+                      model_factory: Callable[[str], ChatModelBase], hint: str | None = None) -> TurnStatus:
+    """大脑处理一轮。调用方根据返回的 status 决定下一句是否还交给大脑。
+
+    hint 来自前置分流的 Jev 纠错题（Route.hint），例如“任务大师”。
+    """
     brain = build_brain(session_id, store, model_factory)
-    res = await brain.reply(UserMsg(name="user", content=text), structured_schema=TurnStatus)
+    content = text if not hint else f"{text}\n（前置分流提示：可能需要调用{hint}）"
+    res = await brain.reply(UserMsg(name="user", content=content), structured_schema=TurnStatus)
     if res.finished_reason != ReplyFinishedReason.COMPLETED or not res.structured_output:
         store.drop(session_id)
         return TurnStatus(status="end", speech="抱歉，这件事我没办成。")
@@ -171,14 +192,26 @@ async def handle_turn(session_id: str, text: str, store: SessionStore,
 # --------------------------------------------------------------------------- #
 # 入口
 # --------------------------------------------------------------------------- #
-def real_model_factory(agent_name: str) -> ChatModelBase:
+def deepseek(model_id: str) -> DeepSeekChatModel:
+    """DeepSeek V4 Flash，非思考模式：请求带 thinking.type=disabled，不产生推理 token，时延低。"""
     return DeepSeekChatModel(
         credential=DeepSeekCredential(
             api_key=os.environ["DEEPSEEK_API_KEY"],
             base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         ),
-        model=os.environ["DEEPSEEK_MODEL"],
+        model=model_id,
+        parameters=DeepSeekChatModel.Parameters(thinking_enable=False, temperature=0.3),
+        client_kwargs={"timeout": 20},
     )
+
+
+def real_model_factory(agent_name: str) -> ChatModelBase:
+    return deepseek(os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+
+
+def fallback_config() -> ModelConfig | None:
+    fb = os.environ.get("DEEPSEEK_FALLBACK_MODEL")
+    return ModelConfig(max_retries=1, fallback_model=deepseek(fb)) if fb and os.environ.get("DEEPSEEK_API_KEY") else None
 
 
 def offline_model_factory():

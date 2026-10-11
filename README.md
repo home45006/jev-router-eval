@@ -36,7 +36,7 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 | `criteria.json` | 给 Jev 的三个问题和 28 个选项的判据（由 `make_criteria.py` 生成，改判据请改脚本再重新生成） |
 | `eval_jev.py` | 评测脚本：准确率、各标签召回/精确、混淆、置信度阈值、多指令和追问诊断 |
 | `build_dataset.py` | 从测试集 xlsx 生成 `eval_set.jsonl` 和 `待确认改标.csv` |
-| `eval_two_stage.py` | 两级分流评测（第 13 版架构）：第一级 is_fast / needs_rewrite，第二级 6 选 1（闲聊归 Agent 大脑）；推送 eval/* 分支时在 `eval-request.env` 里设 `EVAL_SCRIPT=eval_two_stage.py` |
+| `eval_two_stage.py` | 前置分流评测。默认第 14 版：第一级 is_fast / needs_rewrite 加 Jev 纠错题，报告去向准确率和纠错题回放；`--stages s1,s2` 复现第 13 版两级分流。推送 eval/* 分支时在 `eval-request.env` 里设 `EVAL_SCRIPT=eval_two_stage.py` |
 | `rewrite_check.py` | 用 DeepSeek 改写模糊指代，检查 `fixtures/fuzzy_refs.jsonl`；推送 eval/* 分支时在 `eval-request.env` 里设 `REWRITE_CHECK=1` |
 | `make_criteria_v2.py` | 生成两级判据 `criteria_v2.json` |
 | `fixtures/fuzzy_refs.jsonl` | 人工构造的 20 条模糊指代样本，用来测 needs_rewrite |
@@ -52,4 +52,4 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 ## AgentScope 开发 skill
 
 `.claude/skills/agentscope-cockpit/` 是给 Claude Code 用的开发指南：用 AgentScope 2.0.9 实现 Agent 大脑、子 Agent、会话三态和 Jev 两级分流。
-`examples/` 下的两个示例都能用 `--offline`（假模型）跑通，CI 每次提交都会跑；接真实模型时设置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`、`TYPESAFE_API_KEY`。
+`examples/` 下的两个示例都能用 `--offline`（假模型）跑通，CI 每次提交都会跑；接真实模型时设置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`，非思考模式）、`TYPESAFE_API_KEY`。

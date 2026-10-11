@@ -14,7 +14,7 @@ pip install 'agentscope[classifier-jev]==2.0.9'    # 用 JevClassifierModel 时
 
 | 用途 | 类 | 要点 |
 |---|---|---|
-| DeepSeek | `DeepSeekChatModel(credential=DeepSeekCredential(api_key=..., base_url="https://api.deepseek.com"), model="<模型 ID>")` | 默认 `stream=True`、`max_retries=3`、`context_size=65536`；`client_kwargs` 透传给 `openai.AsyncClient`（如 `timeout`） |
+| DeepSeek | `DeepSeekChatModel(credential=DeepSeekCredential(api_key=..., base_url="https://api.deepseek.com"), model="<模型 ID>")` | 默认 `stream=True`、`max_retries=3`、`context_size=65536`；`client_kwargs` 透传给 `openai.AsyncClient`（如 `timeout`）。非思考模式：`parameters=DeepSeekChatModel.Parameters(thinking_enable=False)`（默认就是 False，请求带 `thinking.type=disabled`；显式写出以免误开） |
 | OpenAI 兼容接口 | `OpenAIChatModel(credential=OpenAICredential(api_key=..., base_url=...), model=...)` | 走公司代理或其他兼容服务时用 |
 | 通义 | `DashScopeChatModel(credential=DashScopeCredential(api_key=...), model=...)` | 官方示例默认用它 |
 | Jev 分类 | `JevClassifierModel(credential=TypeSafeCredential(api_key=...), model="jev-latest", timeout=30.0, max_retries=2)` | 不是聊天模型，`TypeSafeCredential` 只能用于分类器 |
