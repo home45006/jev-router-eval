@@ -103,8 +103,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
   <header>
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
-    <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先只回答一个问题：这句话该不该交给快思考？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 4 版 · 2026-10-11 · 取代第 3 版的“28 个标签一次判完”。成本和 token 数字中标“估”的是估算，其余为实测</div>
+    <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
+    <div class="meta">第 5 版 · 2026-10-11 · 按快思考的实际能力修订：有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
   </header>
 
   <section>
@@ -117,7 +117,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key">NLU 的 domain 由谁定</td><td>Jev 输出 16 个 domain 之一</td><td>快思考模型自己理解，Jev 不再输出 domain</td></tr>
           <tr><td class="key">判据怎么分工</td><td>一份判据同时写 domain 之间和 domain 与 agent 之间的边界</td><td>第一级只写“快思考管什么、不管什么”；第二级只写 12 个 agent label 之间的边界</td></tr>
           <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>拆分后每条直接交给快思考，不再过 Jev</td></tr>
-          <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
+          <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>快思考拒识或低置信，升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
+          <tr><td class="key">指代和改写</td><td>追问一律改写：槽位继承优先，其余调大模型</td><td>上下文指代交给快思考自己消解；只有模糊指代（“导航到大裤衩”）才调大模型改写</td></tr>
           <tr><td class="key">代价</td><td>—</td><td>domain 和 agent 的联合判断拆开后，边界上的少数句子会多绕一步；不走快思考的句子要调两次 Jev</td></tr>
         </tbody>
       </table>
@@ -136,18 +137,16 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <span><i class="dash" style="--c:var(--c-warn)"></i>兜底升级</span>
     </div>
     <figure class="diagram">
-      <svg viewBox="0 0 960 860" role="img" aria-label="前置分流流程图：输入先查精确匹配表，未命中则由 Jev 第一级判断是否交给快思考；不交给快思考的由 Jev 第二级判断 agent label，再按 label 分发">
+      <svg viewBox="0 0 960 874" role="img" aria-label="前置分流流程图：输入先查精确匹配表；未命中由 Jev 第一级判断是否交给快思考、是否需要改写模糊指代；需要改写的先由大模型改写再交给快思考；不交给快思考的由 Jev 第二级判断 agent label，再按 label 分发">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="ahu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead-up" d="M0,0 L10,5 L0,10 z"/></marker>
         </defs>
 
-        <!-- 输入 -->
         <rect class="box b-code" x="40" y="16" width="360" height="58" rx="8"/>
         <text class="t-title" x="60" y="42">query ＋ 上一轮内容和标签 ＋ 播放状态</text>
         <text class="t-sub" x="60" y="62">已经过 ASR，带车辆和媒体上下文</text>
 
-        <!-- 精确匹配表 -->
         <path class="edge" d="M220 74 V100" marker-end="url(#ah)"/>
         <rect class="box b-code" x="40" y="102" width="360" height="62" rx="8"/>
         <text class="t-who w-code" x="60" y="122">代码</text>
@@ -156,110 +155,117 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <path class="edge" d="M400 133 H578" marker-end="url(#ah)"/>
         <text class="t-edge" x="420" y="125">命中，不调 Jev</text>
 
-        <!-- 快思考模型 -->
         <rect class="box b-fast" x="580" y="102" width="340" height="270" rx="8"/>
         <text class="t-who w-fast" x="600" y="124">快思考模型 · 千问 8B 微调</text>
         <text class="t-title" x="600" y="150">理解 domain、意图、槽位</text>
-        <text class="t-sub" x="600" y="174">覆盖语音 NLU 的全部说法</text>
-        <text class="t-sub" x="600" y="196">追问先做槽位继承或补全，再理解</text>
+        <text class="t-sub" x="600" y="174">带上一轮输入，自己消解上下文指代</text>
+        <text class="t-sub" x="600" y="196">不能还原俗称、外号这类模糊指代</text>
         <line x1="600" x2="900" y1="214" y2="214" stroke="var(--line)" stroke-width="1"/>
         <text class="t-sub" x="600" y="238">理解成功 → 交给现有执行链路</text>
-        <text class="t-sub" x="600" y="260">输出拒识或置信度低 → 升级</text>
+        <text class="t-sub" x="600" y="260">拒识或置信度低 → 升级到第二级</text>
         <text class="t-sub" x="600" y="296">也接收：</text>
         <text class="t-sub" x="600" y="318">· 第二级判为“退回快思考”的句子</text>
         <text class="t-sub" x="600" y="340">· 中枢简单任务拆出的每一条指令</text>
 
-        <!-- Jev 第一级 -->
         <path class="edge" d="M220 164 V196" marker-end="url(#ah)"/>
         <text class="t-edge" x="232" y="186">未命中</text>
-        <rect class="box b-jev" x="40" y="198" width="360" height="96" rx="8"/>
-        <text class="t-who w-jev" x="60" y="220">Jev 第一级 · 每句一次</text>
+        <rect class="box b-jev" x="40" y="198" width="360" height="112" rx="8"/>
+        <text class="t-who w-jev" x="60" y="220">Jev 第一级 · 每句一次，三问并行</text>
         <text class="t-title" x="60" y="244">is_fast · Noul 交给快思考吗</text>
-        <text class="t-sub" x="60" y="266">is_followup · Noul 是上一轮的追问吗</text>
-        <text class="t-sub" x="60" y="284">（只在有上一轮时问，同一次请求并行作答）</text>
+        <text class="t-sub" x="60" y="268">needs_rewrite · Noul 有要靠常识还原的模糊指代吗</text>
+        <text class="t-sub" x="60" y="290">is_followup · Noul 是上一轮的追问吗（有上一轮时才问）</text>
 
-        <!-- 闲聊追问 -->
-        <path class="edge" d="M220 294 V326" marker-end="url(#ah)"/>
-        <rect class="box b-code" x="40" y="328" width="360" height="56" rx="8"/>
-        <text class="t-who w-code" x="60" y="348">代码</text>
-        <text class="t-title" x="60" y="372">闲聊会话里的追问？</text>
-        <path class="edge" d="M400 356 H408" marker-end="url(#ah)"/>
-        <rect class="box b-chat" x="410" y="326" width="130" height="60" rx="8"/>
-        <text class="t-who w-chat" x="424" y="346">是 → 闲聊</text>
-        <text class="t-sub" x="424" y="370">端到端语音</text>
+        <path class="edge" d="M220 310 V340" marker-end="url(#ah)"/>
+        <rect class="box b-code" x="40" y="342" width="360" height="56" rx="8"/>
+        <text class="t-who w-code" x="60" y="362">代码</text>
+        <text class="t-title" x="60" y="386">闲聊会话里的追问？</text>
+        <path class="edge" d="M400 370 H408" marker-end="url(#ah)"/>
+        <rect class="box b-chat" x="410" y="340" width="96" height="60" rx="8"/>
+        <text class="t-who w-chat" x="422" y="362">是 → 闲聊</text>
+        <text class="t-sub" x="422" y="386">端到端语音</text>
 
-        <!-- is_fast 阈值 -->
-        <path class="edge" d="M220 384 V416" marker-end="url(#ah)"/>
-        <text class="t-edge" x="232" y="406">否</text>
-        <rect class="box b-code" x="40" y="418" width="360" height="56" rx="8"/>
-        <text class="t-who w-code" x="60" y="438">代码</text>
-        <text class="t-title" x="60" y="462">is_fast 达到阈值？</text>
-        <path class="edge" d="M400 446 H570 V300 H578" marker-end="url(#ah)"/>
-        <text class="t-edge" x="410" y="438">是，交给快思考</text>
+        <path class="edge" d="M220 398 V430" marker-end="url(#ah)"/>
+        <text class="t-edge" x="232" y="420">否</text>
+        <rect class="box b-code" x="40" y="432" width="360" height="56" rx="8"/>
+        <text class="t-who w-code" x="60" y="452">代码</text>
+        <text class="t-title" x="60" y="476">is_fast 达到阈值？</text>
+        <path class="edge" d="M400 460 H520"/>
+        <text class="t-edge" x="410" y="452">是</text>
+        <path class="edge" d="M520 460 V250 H578" marker-end="url(#ah)"/>
+        <text class="t-edge" x="526" y="300">无需</text>
+        <text class="t-edge" x="526" y="318">改写</text>
+        <path class="edge" d="M520 460 H598" marker-end="url(#ah)"/>
+        <text class="t-edge" x="530" y="452">需改写</text>
 
-        <!-- Jev 第二级 -->
-        <path class="edge" d="M220 474 V512" marker-end="url(#ah)"/>
-        <text class="t-edge" x="232" y="498">否</text>
-        <rect class="box b-jev" x="40" y="514" width="360" height="96" rx="8"/>
-        <text class="t-who w-jev" x="60" y="536">Jev 第二级 · 只有不走快思考的句子</text>
-        <text class="t-title" x="60" y="560">label · Choice 12 个 agent label</text>
-        <text class="t-sub" x="60" y="582">＋ 一个“退回快思考”选项</text>
-        <text class="t-sub" x="60" y="600">从快思考升级来的句子不带这个选项</text>
+        <rect class="box b-slow" x="600" y="420" width="260" height="80" rx="8"/>
+        <text class="t-who w-slow" x="616" y="442">大模型改写</text>
+        <text class="t-title" x="616" y="466">模糊指代还原成标准名称</text>
+        <text class="t-sub" x="616" y="488">大裤衩 → 中央电视台总部大楼</text>
+        <path class="edge" d="M730 420 V374" marker-end="url(#ah)"/>
 
-        <!-- 退回快思考 -->
-        <path class="edge" d="M400 530 H555 V250 H578" marker-end="url(#ah)"/>
-        <text class="t-edge" x="410" y="522">退回快思考</text>
-        <!-- 升级：快思考 → 第二级 -->
-        <path class="edge-up" d="M750 372 V580 H402" marker-end="url(#ahu)"/>
-        <text class="t-edge" x="590" y="572" style="fill:var(--c-warn)">拒识或低置信，升级</text>
+        <path class="edge" d="M220 488 V526" marker-end="url(#ah)"/>
+        <text class="t-edge" x="232" y="512">否</text>
+        <rect class="box b-jev" x="40" y="528" width="360" height="96" rx="8"/>
+        <text class="t-who w-jev" x="60" y="550">Jev 第二级 · 只有不走快思考的句子</text>
+        <text class="t-title" x="60" y="574">label · Choice 12 个 agent label</text>
+        <text class="t-sub" x="60" y="596">＋ 一个“退回快思考”选项</text>
+        <text class="t-sub" x="60" y="614">从快思考升级来的句子不带这个选项</text>
 
-        <!-- 分发 -->
-        <path class="edge" d="M220 610 V642" marker-end="url(#ah)"/>
-        <rect class="box b-code" x="40" y="644" width="360" height="62" rx="8"/>
-        <text class="t-who w-code" x="60" y="664">代码</text>
-        <text class="t-title" x="60" y="688">按 label 和置信度分发</text>
+        <path class="edge-up" d="M890 372 V600 H402" marker-end="url(#ahu)"/>
+        <text class="t-edge" x="620" y="592" style="fill:var(--c-warn)">拒识或低置信，升级</text>
 
-        <path class="edge" d="M220 706 V730"/>
-        <path class="edge" d="M115 730 H820"/>
-        <path class="edge" d="M115 730 V752" marker-end="url(#ah)"/>
-        <path class="edge" d="M340 730 V752" marker-end="url(#ah)"/>
-        <path class="edge" d="M575 730 V752" marker-end="url(#ah)"/>
-        <path class="edge" d="M820 730 V752" marker-end="url(#ah)"/>
+        <path class="edge" d="M220 624 V656" marker-end="url(#ah)"/>
+        <rect class="box b-code" x="40" y="658" width="360" height="62" rx="8"/>
+        <text class="t-who w-code" x="60" y="678">代码</text>
+        <text class="t-title" x="60" y="702">按 label 和置信度分发</text>
 
-        <!-- 出口 -->
-        <rect class="box b-agent" x="20" y="754" width="190" height="90" rx="8"/>
-        <text class="t-who w-agent" x="36" y="776">Agent 直达</text>
-        <text class="t-title" x="36" y="800">9 个 agent label</text>
-        <text class="t-sub" x="36" y="822">对应 Agent 一次调用</text>
+        <path class="edge" d="M220 720 V744"/>
+        <path class="edge" d="M99 744 H852"/>
+        <path class="edge" d="M99 744 V766" marker-end="url(#ah)"/>
+        <path class="edge" d="M285 744 V766" marker-end="url(#ah)"/>
+        <path class="edge" d="M471 744 V766" marker-end="url(#ah)"/>
+        <path class="edge" d="M657 744 V766" marker-end="url(#ah)"/>
+        <path class="edge" d="M852 744 V766" marker-end="url(#ah)"/>
 
-        <rect class="box b-fast" x="230" y="754" width="220" height="90" rx="8"/>
-        <text class="t-who w-fast" x="246" y="776">拆分后逐条快思考</text>
-        <text class="t-title" x="246" y="800">中枢简单任务</text>
-        <text class="t-sub" x="246" y="822">拆成多条，每条给快思考</text>
+        <rect class="box b-agent" x="12" y="768" width="174" height="90" rx="8"/>
+        <text class="t-who w-agent" x="26" y="790">Agent 直达</text>
+        <text class="t-title" x="26" y="814">9 个 agent label</text>
+        <text class="t-sub" x="26" y="836">对应 Agent 调用</text>
 
-        <rect class="box b-chat" x="470" y="754" width="210" height="90" rx="8"/>
-        <text class="t-who w-chat" x="486" y="776">闲聊</text>
-        <text class="t-title" x="486" y="800">端到端语音</text>
-        <text class="t-sub" x="486" y="822">音频进出</text>
+        <rect class="box b-fast" x="198" y="768" width="174" height="90" rx="8"/>
+        <text class="t-who w-fast" x="212" y="790">拆分后逐条快思考</text>
+        <text class="t-title" x="212" y="814">中枢简单任务</text>
+        <text class="t-sub" x="212" y="836">每条交给快思考</text>
 
-        <rect class="box b-slow" x="700" y="754" width="240" height="90" rx="8"/>
-        <text class="t-who w-slow" x="716" y="776">慢思考编排</text>
-        <text class="t-title" x="716" y="800">中枢复杂多任务</text>
-        <text class="t-sub" x="716" y="822">第二级置信度不足也走这里</text>
+        <rect class="box b-fast" x="384" y="768" width="174" height="90" rx="8"/>
+        <text class="t-who w-fast" x="398" y="790">退回快思考</text>
+        <text class="t-title" x="398" y="814">交给快思考模型</text>
+        <text class="t-sub" x="398" y="836">第一级送错的句子</text>
+
+        <rect class="box b-chat" x="570" y="768" width="174" height="90" rx="8"/>
+        <text class="t-who w-chat" x="584" y="790">闲聊</text>
+        <text class="t-title" x="584" y="814">端到端语音</text>
+        <text class="t-sub" x="584" y="836">音频进出</text>
+
+        <rect class="box b-slow" x="756" y="768" width="192" height="90" rx="8"/>
+        <text class="t-who w-slow" x="770" y="790">慢思考编排</text>
+        <text class="t-title" x="770" y="814">中枢复杂多任务</text>
+        <text class="t-sub" x="770" y="836">低置信也走这里</text>
       </svg>
     </figure>
-    <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考。只有不归快思考的句子才走第二级。精确匹配表命中的高频说法连第一级都不经过。</p>
+    <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考，包括“再高一点”这类上下文追问。只有带模糊指代的句子多调一次大模型改写，只有不归快思考的句子才走第二级。精确匹配表命中的高频说法连第一级都不经过。</p>
   </section>
 
-  <section>
+    <section>
     <h2>每一级做什么</h2>
     <div class="scroll">
       <table>
         <thead><tr><th>环节</th><th>谁来做</th><th>输入</th><th>输出</th><th>只负责</th></tr></thead>
         <tbody>
           <tr><td class="key"><span class="tag" style="--c:var(--line-strong)">精确匹配表</span></td><td>代码</td><td>归一化后的 query</td><td>缓存的快思考解析结果</td><td>高频标准说法，省掉 Jev 和快思考两次调用</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第一级</span></td><td>Jev，两个 Noul</td><td>query、上一轮、播放状态</td><td><code>is_fast</code>、<code>is_followup</code> 两个概率</td><td>快思考和非快思考的边界；是否追问</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>千问 8B 微调</td><td>query，追问时带上一轮的 domain 和槽位</td><td>domain、意图、槽位、置信度、拒识标记</td><td>语音 NLU 的全部理解，包括 domain 之间的边界</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第一级</span></td><td>Jev，三个 Noul</td><td>query、上一轮、播放状态</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code> 三个概率</td><td>快思考和非快思考的边界；有没有模糊指代；是否追问</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">大模型改写</span></td><td>通用大模型</td><td>query、上一轮</td><td>把模糊指代换成标准名称后的一句话</td><td>只处理要交给快思考、又带模糊指代的句子</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>千问 8B 微调</td><td>query（或改写后的句子）、上一轮</td><td>domain、意图、槽位、置信度、拒识标记</td><td>语音 NLU 的全部理解，包括 domain 之间的边界和上下文指代</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第二级</span></td><td>Jev，一个 Choice</td><td>同第一级</td><td>12 个 label 加“退回快思考”的概率</td><td>12 个 agent label 之间的边界</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--line-strong)">分发</span></td><td>代码</td><td>第二级的概率</td><td>去向</td><td>置信度门限和兜底</td></tr>
         </tbody>
@@ -267,16 +273,16 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     </div>
   </section>
 
-  <section>
+    <section>
     <h2>代码里的决策顺序</h2>
     <ol class="steps">
       <li><strong>查精确匹配表。</strong>命中就返回缓存的快思考结果，不调 Jev。表里只放快思考在线上解析稳定的高频说法，随快思考模型版本一起更新。</li>
-      <li><strong>调第一级 Jev。</strong>一次请求问 <code>is_fast</code>，有上一轮时同时问 <code>is_followup</code>。</li>
-      <li><strong>判断闲聊追问。</strong>上一轮是闲聊，且 <code>is_followup</code> 达到阈值，输出闲聊，不看 <code>is_fast</code>。</li>
-      <li><strong>判断是否交给快思考。</strong><code>is_fast</code> 达到阈值就交给快思考。是非闲聊会话里的追问（如调完空调后说“再高一点”），先带上一轮的 domain 和槽位做继承，继承不了再调大模型补全。</li>
-      <li><strong>快思考兜底。</strong>快思考输出拒识或置信度低于门限，升级到第二级 Jev，这时第二级不带“退回快思考”选项，避免来回绕。</li>
-      <li><strong>调第二级 Jev。</strong>12 个 agent label 加“退回快思考”选一个。</li>
-      <li><strong>分发。</strong>置信度达标按 label 走：9 个 agent label 去对应 Agent，中枢简单任务拆分后每条交给快思考，中枢复杂多任务去慢思考编排，闲聊去端到端语音，退回快思考的交给快思考。置信度不达标走慢思考编排。</li>
+      <li><strong>调第一级 Jev。</strong>一次请求并行问 <code>is_fast</code> 和 <code>needs_rewrite</code>，有上一轮时同时问 <code>is_followup</code>。</li>
+      <li><strong>判断闲聊追问。</strong>上一轮是闲聊，且 <code>is_followup</code> 达到阈值，输出闲聊，不看其他两个问题。</li>
+      <li><strong>判断是否交给快思考。</strong><code>is_fast</code> 达到阈值：<code>needs_rewrite</code> 也达到阈值的，先调大模型把模糊指代改写成标准名称，再交给快思考；否则直接交给快思考，连同上一轮一起，上下文指代（“再高一点”“换成第二个”）由快思考自己消解。</li>
+      <li><strong>快思考兜底。</strong>快思考拒识或置信度低于门限，升级到第二级 Jev，这时第二级不带“退回快思考”选项，避免来回绕。改写后仍被拒识的，同样升级。</li>
+      <li><strong>调第二级 Jev。</strong><code>is_fast</code> 没达到阈值，或从快思考升级来的句子，12 个 agent label 加“退回快思考”选一个。</li>
+      <li><strong>分发。</strong>置信度达标按 label 走：9 个 agent label 去对应 Agent，中枢简单任务拆分后每条交给快思考，中枢复杂多任务去慢思考编排，闲聊去端到端语音，退回快思考的交给快思考。置信度不达标走慢思考编排。走 Agent 的句子不需要先改写，Agent 自己是大模型，能理解模糊指代。</li>
     </ol>
   </section>
 
@@ -311,7 +317,19 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         </ul>
       </div>
     </div>
-    <p class="note">第 3 版判据里“domain 和 agent label 之间”的那张边界表，现在就是第一级判据的全部内容；“domain 之间”的边界（如中控亮度归 carControl 还是 systemControl）交还给快思考，Jev 不再管。</p>
+    <p class="note">第 3 版判据里“domain 和 agent label 之间”的那张边界表，现在就是 <code>is_fast</code> 判据的主体；“domain 之间”的边界（如中控亮度归 carControl 还是 systemControl）交还给快思考，Jev 不再管。<code>is_fast</code> 只看指令类型，不看对象说得是否标准：“导航到大裤衩”的 <code>is_fast</code> 应为是，它的问题交给 <code>needs_rewrite</code>。</p>
+    <h3>needs_rewrite：三种指代分开处理</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>指代类型</th><th>例子</th><th>谁处理</th><th>needs_rewrite</th></tr></thead>
+        <tbody>
+          <tr><td class="key">上下文指代</td><td class="ex">调完空调后说“再高一点”；“换成第二个”；“那到公司呢”</td><td>快思考，带上一轮输入</td><td>否</td></tr>
+          <tr><td class="key">模糊指代</td><td class="ex">导航到大裤衩；去鸟巢；放一首周董的歌；打开那个吹脚的</td><td>大模型改写成标准名称，再交给快思考</td><td><strong>是</strong></td></tr>
+          <tr><td class="key">描述找对象</td><td class="ex">杭州那个建在运河边上保留了古代码头格局的历史街区；有一部电视剧里和珅和纪晓岚斗嘴</td><td>不交给快思考，第二级判给复杂导航、影视、音乐 agent</td><td>不问（<code>is_fast</code> 已为否）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>模糊指代和描述找对象的分界：常识就能还原成<strong>唯一</strong>一个标准名称的（俗称、外号、简称、昵称）归模糊指代，改写一步就够；需要检索、比较候选，或者答案不唯一的，归描述找对象，交给 Agent。判据里要用正反例把这条线写清楚。</p>
   </section>
 
   <section>
@@ -328,35 +346,35 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <p>因此 <code>is_fast</code> 的阈值偏向保守：拿不准的句子送第二级。在 val 上标定时，先把“该走 Agent 却交给快思考”的比例压到目标以下，再看送到第二级的比例是否可以接受。</p>
   </section>
 
-  <section>
+    <section>
     <h2>调用量和成本</h2>
-    <p>设线上不经过精确匹配表的句子里，比例为 <em>p</em> 的句子交给快思考。第一级每句都调，第二级只有其余的句子调：</p>
-    <div class="formula">每句平均输入 token ＝ T₁ ＋ (1 − p) × T₂　　每句平均 Jev 调用次数 ＝ 1 ＋ (1 − p)</div>
-    <p class="note">T₁：第一级请求，两个 Noul，判据约为快思考范围加边界清单，估 2,500 token。T₂：第二级请求，12 个 label，按 v0.5 判据中 agent 选项所占篇幅折算，估 4,000 token。第 3 版的实测值为每句一次请求、平均 7,882 token。</p>
+    <p>设线上不经过精确匹配表的句子里，比例为 <em>p</em> 的句子交给快思考，其中比例为 <em>r</em> 的带模糊指代需要改写。第一级每句都调，第二级只有其余的句子调：</p>
+    <div class="formula">每句平均 Jev 输入 token ＝ T₁ ＋ (1 − p) × T₂　　每句平均 Jev 调用次数 ＝ 1 ＋ (1 − p)　　每句平均改写调用 ＝ p × r</div>
+    <p class="note">T₁：第一级请求，三个 Noul，判据约为快思考范围、边界清单和模糊指代正反例，估 2,800 token。T₂：第二级请求，12 个 label，按 v0.5 判据中 agent 选项所占篇幅折算，估 4,000 token。第 3 版的实测值为每句一次请求、平均 7,882 token。改写调用的是通用大模型，不计入 Jev。</p>
     <div class="scroll">
       <table>
-        <thead><tr><th>交给快思考的比例 p</th><th class="num">每句 token<span class="est">估</span></th><th class="num">比第 3 版</th><th class="num">每句 Jev 调用次数</th></tr></thead>
+        <thead><tr><th>交给快思考的比例 p</th><th class="num">每句 Jev token<span class="est">估</span></th><th class="num">比第 3 版</th><th class="num">每句 Jev 调用次数</th></tr></thead>
         <tbody>
           <tr><td>第 3 版（实测）</td><td class="num">7,882</td><td class="num">—</td><td class="num">1.0</td></tr>
-          <tr><td>60%</td><td class="num">4,100</td><td class="num">−48%</td><td class="num">1.4</td></tr>
-          <tr><td>70%</td><td class="num">3,700</td><td class="num">−53%</td><td class="num">1.3</td></tr>
-          <tr><td>80%</td><td class="num">3,300</td><td class="num">−58%</td><td class="num">1.2</td></tr>
-          <tr><td>90%</td><td class="num">2,900</td><td class="num">−63%</td><td class="num">1.1</td></tr>
+          <tr><td>60%</td><td class="num">4,400</td><td class="num">−44%</td><td class="num">1.4</td></tr>
+          <tr><td>70%</td><td class="num">4,000</td><td class="num">−49%</td><td class="num">1.3</td></tr>
+          <tr><td>80%</td><td class="num">3,600</td><td class="num">−54%</td><td class="num">1.2</td></tr>
+          <tr><td>90%</td><td class="num">3,200</td><td class="num">−59%</td><td class="num">1.1</td></tr>
         </tbody>
       </table>
     </div>
-    <p>省下来的是 <strong>token</strong>，不是调用次数。第一级每句都要调一次，不走快思考的句子还要调第二次，所以调用次数比第 3 版略多。如果 Jev 按 token 计费，这个架构省一半以上；如果按次数计费，要靠精确匹配表的命中率来省。</p>
-    <p class="note">延迟参考：评测中 409 条请求在 8 路并发下约 6 秒跑完，单次约 0.1 秒。这是 GitHub 美国机房测得的，车端链路需要另测。走第二级的句子要串行调两次 Jev。</p>
+    <p>省下来的是 <strong>token</strong>，不是调用次数。第一级每句都要调一次，不走快思考的句子还要调第二次，所以调用次数比第 3 版略多。如果 Jev 按 token 计费，这个架构省一半左右；如果按次数计费，要靠精确匹配表的命中率来省。</p>
+    <p class="note">延迟参考：评测中 409 条请求在 8 路并发下约 6 秒跑完，单次约 0.1 秒。这是 GitHub 美国机房测得的，车端链路需要另测。走第二级的句子要串行调两次 Jev；带模糊指代的句子多一次大模型改写，这是延迟最长的一段，<em>r</em> 需要从线上日志统计。</p>
   </section>
 
-  <section>
+    <section>
     <h2>后续可选：快思考先跑</h2>
-    <p>如果快思考的拒识足够可靠，可以把第一级去掉：所有句子先交给快思考，快思考拒识的才调 Jev。Jev 调用次数降到 (1 − p)，p = 80% 时每句平均约 860 token<span class="est">估</span>。</p>
+    <p>快思考已经有拒识能力，所以可以考虑把第一级去掉：所有句子先交给快思考，快思考拒识的才调 Jev。Jev 调用次数降到 (1 − p)，p = 80% 时每句平均约 860 token<span class="est">估</span>。</p>
     <div class="grid2">
-      <div class="panel"><h3>好处</h3><ul class="plain"><li>交给快思考的句子完全不调 Jev</li><li>不需要维护第一级判据</li></ul></div>
-      <div class="panel"><h3>前提和代价</h3><ul class="plain"><li>快思考必须对“空调是不是坏了”这类句子拒识，而不是硬落 domain</li><li>不走快思考的句子多一段快思考的延迟</li><li>快思考要知道自己不管什么，又把边界放回了快思考模型里</li></ul></div>
+      <div class="panel"><h3>好处</h3><ul class="plain"><li>交给快思考的句子完全不调 Jev</li><li>不需要维护 <code>is_fast</code> 的判据</li></ul></div>
+      <div class="panel"><h3>前提和代价</h3><ul class="plain"><li>快思考要对“空调是不是坏了”这类句子拒识，而不是硬落 domain。拒识能力有了，召回率还要测</li><li><strong>模糊指代仍然需要单独检测。</strong>“导航到大裤衩”的句式快思考能理解，它不会拒识，只会把“大裤衩”原样当成目的地。所以即使快思考先跑，<code>needs_rewrite</code> 这一问也省不掉</li><li>不走快思考的句子多一段快思考的延迟</li></ul></div>
     </div>
-    <p class="note">这件事可以先测：测试集里有 9,000 多条 agent 侧的句子，全部送给快思考，看它的拒识率。拒识率足够高，再考虑切换。</p>
+    <p class="note">可以先测：测试集里有 9,000 多条 agent 侧的句子，全部送给快思考，看拒识率；再从线上日志里挑一批模糊指代的句子，看快思考是否会硬解。两项都达标，再考虑把第一级缩成只问 <code>needs_rewrite</code>，或者把这一问并进改写前的轻量检测。</p>
   </section>
 
   <section>
@@ -366,10 +384,11 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <thead><tr><th>约定</th><th>内容</th><th>谁维护</th></tr></thead>
         <tbody>
           <tr><td class="key">快思考能力清单</td><td>快思考覆盖的 domain 和说法范围，以及明确不管的类型。第一级判据从它生成</td><td>快思考团队</td></tr>
-          <tr><td class="key">快思考输出</td><td>domain、意图、槽位、置信度，以及拒识标记。拒识和置信度是兜底升级的唯一依据，必须有</td><td>快思考团队</td></tr>
-          <tr><td class="key">第一级判据</td><td><code>is_fast</code> 和 <code>is_followup</code> 两个问题的说明和例句</td><td>分流团队</td></tr>
+          <tr><td class="key">快思考输入输出</td><td>输入 query 和上一轮（query、domain、槽位）；输出 domain、意图、槽位、置信度、拒识标记。拒识和置信度是兜底升级的依据</td><td>快思考团队</td></tr>
+          <tr><td class="key">改写约定</td><td>只把模糊指代换成标准名称，其余字词不动；还原不了就原样返回并标记失败，失败的句子直接升级到第二级</td><td>分流团队</td></tr>
+          <tr><td class="key">第一级判据</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code> 三个问题的说明和例句</td><td>分流团队</td></tr>
           <tr><td class="key">第二级判据</td><td>12 个 agent label 和“退回快思考”的说明、不包含什么、例句</td><td>分流团队，和各 Agent 负责人对齐</td></tr>
-          <tr><td class="key">阈值</td><td><code>is_fast</code>、<code>is_followup</code>、第二级置信度、快思考置信度</td><td>在 val 上标定，随判据版本发布</td></tr>
+          <tr><td class="key">阈值</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code>、第二级置信度、快思考置信度</td><td>在 val 上标定，随判据版本发布</td></tr>
         </tbody>
       </table>
     </div>
@@ -385,23 +404,25 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <tbody>
           <tr><td class="key">第一级</td><td>该走 Agent 却交给快思考的比例；该走快思考却送到第二级的比例；按阈值画曲线</td><td>v0.5 判据在 409 条 dev 上的 28 选 1 结果里，跨快思考和 Agent 边界的错误有 4 条，约 1%。这是从 28 选 1 折算的，第一级要单独测</td></tr>
           <tr><td class="key">第二级</td><td>只用 agent 侧样本，12 个 label 的准确率和混淆</td><td>v0.5 在 dev 上剩余的 agent 侧错误集中在闲聊和影视、新闻、导航的边界</td></tr>
-          <tr><td class="key">快思考拒识</td><td>把 agent 侧样本送给快思考，统计拒识率和低置信率</td><td>还没有，需要快思考团队配合</td></tr>
+          <tr><td class="key">快思考拒识</td><td>把 agent 侧样本送给快思考，统计拒识率和低置信率</td><td>快思考已有拒识能力，召回率还没有在这批数据上测过</td></tr>
+          <tr><td class="key">模糊指代</td><td><code>needs_rewrite</code> 的准确率；改写后快思考的理解正确率</td><td>现有评测集里基本没有这类样本，要从线上日志补：地图搜索无结果、快思考槽位里出现俗称的句子</td></tr>
           <tr><td class="key">端到端</td><td>第一级、快思考、第二级串起来后，每句最终去向是否正确</td><td>需要快思考的输出接口</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-  <section>
+    <section>
     <h2>待确认</h2>
     <ul class="plain">
       <li><strong>快思考能否直接处理一句话里的多条指令。</strong>能的话，多条直接指令可以在第一级就交给快思考，省掉第二级和拆分；不能的话按本文设计，走中枢简单任务拆分。</li>
-      <li><strong>快思考有没有拒识输出和可用的置信度。</strong>兜底升级完全依赖它。</li>
-      <li><strong>快思考是否接收上一轮的 domain 和槽位。</strong>接收的话，非闲聊追问不需要大模型补全。</li>
+      <li><strong>快思考上下文消解的范围。</strong>本文假设“再高一点”“换成第二个”“那到公司呢”这类都能处理，不在范围内的类型需要列出来，归到改写。</li>
+      <li><strong>改写用哪个大模型，延迟上限是多少。</strong>它在快思考链路上串行，直接影响这部分句子的响应时间。</li>
+      <li><strong>模糊指代的样本。</strong>需要从线上日志收集一批，才能写 <code>needs_rewrite</code> 的判据并标定阈值。</li>
       <li><strong>第二级要不要“退回快思考”选项。</strong>本文默认要；去掉的话第二级判据更纯，但第一级送错的句子回不到快思考。</li>
       <li><strong>“条件任务”下 128 行纯提醒。</strong>提醒归快思考，条件任务归第二级，这件事现在决定句子走哪一级，需要先定口径。</li>
       <li><strong>闲聊和影视 agent 的界线。</strong>原标注不一致，只影响第二级。</li>
-      <li><strong>线上交给快思考的比例 p 和精确匹配表的命中率。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
+      <li><strong>线上交给快思考的比例 p、模糊指代比例 r、精确匹配表命中率。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
     </ul>
   </section>
 </div>
