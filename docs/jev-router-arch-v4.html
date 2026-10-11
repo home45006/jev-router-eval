@@ -104,8 +104,27 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
     <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 9 版 · 2026-10-11 · 中枢复杂多任务明确为 Agent 大脑：编排调度多个 Agent 完成一件任务，并持有会话。会话占用：Agent 大脑、复杂导航 Agent。快思考有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
+    <div class="meta">第 10 版 · 2026-10-11 · 明确两层体验：测试集里的 query 保证基础交互体验，智能体现在 Agent 大脑；大脑以工具方式调度快思考、各 Agent 和联网搜索。</div>
   </header>
+
+  <section>
+    <h2>两层体验</h2>
+    <div class="thesis">
+      <p><strong>测试集里的 query 保证基础交互体验，智能体现在 Agent 大脑上。</strong>前置分流的任务是把基础体验的句子准确、快速、低成本地交给快思考或直达的 Agent；其余的交给大脑，由它自主编排调度各项能力。</p>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th></th><th>基础体验</th><th>智能体验</th></tr></thead>
+        <tbody>
+          <tr><td class="key">什么样的句子</td><td>说清楚了的指令和单一领域的请求：打开空调、导航回家、放一首稻香、座椅加热怎么用</td><td>要理解意图、组合多种能力才能办成的事：点份外卖送到公司顺便导航过去；有点累，找个能休息的地方</td></tr>
+          <tr><td class="key">谁来做</td><td>快思考；单个 Agent 直达</td><td>Agent 大脑，调度快思考、各 Agent 和联网搜索</td></tr>
+          <tr><td class="key">要求</td><td>快、稳、便宜，结果可预期</td><td>能办成，能多轮，能处理没见过的说法</td></tr>
+          <tr><td class="key">怎么评测</td><td>C518-1 测试集的分流准确率</td><td>任务完成率、轮数、耗时，需要另建场景集</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>两种分错的代价不同：基础体验的句子误入大脑，只是慢一点、贵一点，结果通常仍然正确；需要智能的句子被留在快车道，会被当成字面指令执行或直接失败。所以分流拿不准时，倾向交给大脑。</p>
+  </section>
 
   <section>
     <h2>和第 3 版相比改了什么</h2>
@@ -295,7 +314,23 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
 
   <section>
     <h2>Agent 大脑</h2>
-    <p>第二级判为中枢复杂多任务的句子交给 Agent 大脑。它把快思考和各个 Agent 当作工具，先理解用户要完成的整件事，再编排调度多个 Agent，一步一步把事情做完。一句话里要几个能力配合才能办成的事，座舱的“智能”主要体现在这里。</p>
+    <p>第二级判为中枢复杂多任务的句子交给 Agent 大脑。它先理解用户要完成的整件事，再自主决定调用哪些能力、按什么顺序调用，一步一步把事情做完。座舱的智能主要体现在这里。</p>
+    <h3>大脑可调度的能力</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>能力</th><th>以什么形式给大脑</th><th>大脑用它做什么</th></tr></thead>
+        <tbody>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>工具</td><td>把一条明确的指令解析成 domain、意图、槽位并执行。大脑因此拥有全部基础 NLU 能力</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">导航 Agent</span></td><td>Agent</td><td>找地点、规划路线、多地点行程</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">空调 Agent</span></td><td>Agent</td><td>按感受和场景调节温度、风量、座椅等舒适性设置</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">多媒体 Agent</span></td><td>Agent</td><td>按氛围、描述找歌找片，播放和控制</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">美团 Agent</span></td><td>Agent，多轮</td><td>选店、点餐、下单</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">用车 Agent</span></td><td>Agent</td><td>本车功能、故障、使用建议</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">联网搜索</span></td><td>工具</td><td>查实时信息：路况、营业时间、新闻、天气</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">清单会随能力扩充而增加。大脑看到的是每个能力的说明和输入输出约定，新增一个能力不需要改前置分流。</p>
     <div class="scroll">
       <table>
         <thead><tr><th>用户说</th><th>Agent 大脑怎么编排</th></tr></thead>
@@ -477,6 +512,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key">第二级</td><td>只用 agent 侧样本，12 个 label 的准确率和混淆</td><td>v0.5 在 dev 上剩余的 agent 侧错误集中在闲聊和影视、新闻、导航的边界</td></tr>
           <tr><td class="key">快思考拒识</td><td>把 agent 侧样本送给快思考，统计拒识率和低置信率</td><td>快思考已有拒识能力，召回率还没有在这批数据上测过</td></tr>
           <tr><td class="key">模糊指代</td><td><code>needs_rewrite</code> 的准确率；改写后快思考的理解正确率</td><td>现有评测集里基本没有这类样本，要从线上日志补：地图搜索无结果、快思考槽位里出现俗称的句子</td></tr>
+          <tr><td class="key">Agent 大脑</td><td>任务完成率、调用了哪些能力、轮数和耗时</td><td>测试集里中枢复杂多任务只有 186 条，而且只有单句。需要另建多轮场景集，覆盖跨能力的任务</td></tr>
           <tr><td class="key">会话放手</td><td>多轮任务中途插入一句无关指令，Agent 是否正确返回“不归我”；正常的后续轮次是否被误放手</td><td>现有 574 条多轮样本全是闲聊追问，没有复杂任务的多轮对话，需要补</td></tr>
           <tr><td class="key">端到端</td><td>第一级、快思考、第二级串起来后，每句最终去向是否正确</td><td>需要快思考的输出接口</td></tr>
         </tbody>
@@ -495,7 +531,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <li><strong>“条件任务”下 128 行纯提醒。</strong>提醒归快思考，条件任务归第二级，这件事现在决定句子走哪一级，需要先定口径。</li>
       <li><strong>闲聊和影视 agent 的界线。</strong>原标注不一致，只影响第二级。</li>
       <li><strong>会话占用的超时时长、轮数上限和退出词清单。</strong>重新唤醒时会话保留还是释放，本文暂按保留写。</li>
-      <li><strong>Agent 大脑可调度的工具清单。</strong>快思考、各 agent、美团 Agent 之外还有哪些，各自的输入输出约定。</li>
+      <li><strong>各能力给大脑的接口约定。</strong>快思考、导航、空调、多媒体、美团、用车 Agent 和联网搜索各自的说明、输入输出和失败返回。</li>
+      <li><strong>第二级要保留多少个直达 label。</strong>大脑能完成所有 Agent 的事，直达 label 只是为了快和省。可以只为量大的单 Agent 请求保留直达，其余都交给大脑，第二级判据会更简单。</li>
       <li><strong>Agent 大脑的延迟预算。</strong>多 Agent 编排比直达慢得多，需要定首句响应的上限，以及中间过程怎么播报。</li>
       <li><strong>挂起后恢复时怎么提示用户。</strong>需要和 Agent 大脑、复杂导航 Agent 的负责人对齐。</li>
       <li><strong>线上交给快思考的比例 p、模糊指代比例 r。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
