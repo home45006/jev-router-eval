@@ -34,6 +34,7 @@ Agent 大脑把快思考、导航、空调、多媒体、美团、用车、闲�
 5. **Jev 的选项描述是字符串。** `ChoiceQuestion.criteria` 只接受“选项名 → 描述文字”，
    `criteria_v2.json` 里的 what / not_for / examples 要拼成一段（见 `jev_router._flatten`）。
 6. **模型 ID 和地址从环境变量读。** `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`、`DEEPSEEK_BASE_URL`、`TYPESAFE_API_KEY`。
+   当前 key 可用的 DeepSeek 模型（2026-10-11 从 `/models` 查得）：`deepseek-flash`（V4 Flash，改写实测中位 1.5 秒）、`deepseek-v4-pro`。
    不要把 key 写进代码或提交到仓库；CI 里用仓库 Secret。
 7. **控制时延。** 大脑 `ReActConfig(max_iters=6~10)`；用 `reply_stream()` 把 `TextBlockDeltaEvent.delta` 边生成边送 TTS。
 
