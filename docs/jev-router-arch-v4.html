@@ -104,7 +104,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
     <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 11 版 · 2026-10-11 · 第二级只保留高频独立 Agent：任务大师、条件任务、联网搜索 Agent、用车手册 Agent，加闲聊；其余全部交给 Agent 大脑。</div>
+    <div class="meta">第 12 版 · 2026-10-11 · 一句话连说几条直接指令由快思考直接处理；第二级只保留任务大师、条件任务、联网搜索 Agent（接口未接入，先只出标签）、用车手册 Agent 和闲聊，其余交给 Agent 大脑。</div>
   </header>
 
   <section>
@@ -135,7 +135,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key">Jev 判几次</td><td>一次请求，28 个标签选一个</td><td>第一级只判“是否交给快思考”；不交的再过第二级，在 4 个独立 Agent、闲聊、Agent 大脑里选一个</td></tr>
           <tr><td class="key">NLU 的 domain 由谁定</td><td>Jev 输出 16 个 domain 之一</td><td>快思考模型自己理解，Jev 不再输出 domain</td></tr>
           <tr><td class="key">判据怎么分工</td><td>一份判据同时写 domain 之间和 domain 与 agent 之间的边界</td><td>第一级只写“快思考管什么、不管什么”；第二级只写 4 个独立 Agent、闲聊和 Agent 大脑之间的边界</td></tr>
-          <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>拆分后每条直接交给快思考，不再过 Jev</td></tr>
+          <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>快思考直接处理整句，第一级就交给快思考，不再拆分</td></tr>
           <tr><td class="key">中枢复杂多任务</td><td>慢思考编排，先规划再多步调度</td><td>Agent 大脑：把快思考和各个 Agent 当作工具，编排调度多个 Agent 完成一件任务</td></tr>
           <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>快思考拒识或低置信，升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
           <tr><td class="key">多轮任务</td><td>每一轮都重新判断</td><td>会话占用：Agent 大脑接管后（包括它调度的美团、导航 Agent），后续轮次直接交给它，由它判断这句是否归自己</td></tr>
@@ -393,6 +393,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <h3><span class="tag" style="--c:var(--c-fast)">交给快思考</span></h3>
         <p class="note">一句话里只有一条说清楚了的直接指令或简单查询。</p>
         <ul class="plain">
+          <li>一句话连说几条直接指令（原来的中枢简单任务），快思考能整句处理</li>
           <li>车控、车窗座椅空调、HUD、驾驶模式、能量充电</li>
           <li>打开关闭应用和页面，各类音量、亮度、网络、语音设置</li>
           <li>按歌名、歌手、片名、节目名点播；播放控制和收藏</li>
@@ -412,7 +413,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <li>靠描述找地点、多地点行程、去某个具体地名要多久</li>
           <li>新闻资讯；记住个人信息</li>
           <li>一次性定时动作（条件任务）、长期规则（任务大师）</li>
-          <li>一句话里有两条以上指令；开放问答和闲聊</li>
+          <li>多条指令里有需要推断、查询或互相依赖的步骤；开放问答和闲聊</li>
         </ul>
       </div>
     </div>
@@ -442,13 +443,13 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key"><span class="tag" style="--c:var(--c-chat)">闲聊</span></td><td>端到端语音</td><td>闲聊</td><td class="num">1,792</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">任务大师</span></td><td>直达</td><td>任务大师</td><td class="num">551</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">条件任务</span></td><td>直达</td><td>条件任务</td><td class="num">520</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">联网搜索 Agent</span></td><td>直达</td><td>新闻agent</td><td class="num">385</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">Agent 大脑</span></td><td>编排</td><td>音乐agent、复杂导航agent、记忆agent、影视agent、车控agent模糊意图、中枢简单任务、中枢复杂多任务</td><td class="num">2,938</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">联网搜索 Agent</span></td><td>直达（接口未接入，先只出标签）</td><td>新闻agent</td><td class="num">385</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">Agent 大脑</span></td><td>编排</td><td>音乐agent、复杂导航agent、记忆agent、影视agent、车控agent模糊意图、中枢复杂多任务</td><td class="num">2,829</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">退回快思考</span></td><td>快思考</td><td>第一级送错的句子</td><td class="num">—</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">条数是 C518-1 测试集“大模型agent”sheet 的行数，不代表线上分布。按测试集算，agent 侧 9,200 条里约 32% 会进入大脑。</p>
+    <p class="note">条数是 C518-1 测试集“大模型agent”sheet 的行数，不代表线上分布。原来的中枢简单任务（109 条）改为第一级交给快思考，不再进第二级。按测试集算，进入第二级的 9,091 条里约 31% 会交给大脑。</p>
   </section>
 
   <section>
@@ -537,7 +538,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <section>
     <h2>待确认</h2>
     <ul class="plain">
-      <li><strong>快思考能否直接处理一句话里的多条指令。</strong>能的话，多条直接指令可以在第一级就交给快思考，省掉第二级和拆分；不能的话按本文设计，走中枢简单任务拆分。</li>
       <li><strong>快思考上下文消解的范围。</strong>本文假设“再高一点”“换成第二个”“那到公司呢”这类都能处理，不在范围内的类型需要列出来，归到改写。</li>
       <li><strong>改写的延迟上限。</strong>改写用 DeepSeek V4 Flash，它在快思考链路上串行，直接影响这部分句子的响应时间，需要实测。</li>
       <li><strong>模糊指代的样本。</strong>需要从线上日志收集一批，才能写 <code>needs_rewrite</code> 的判据并标定阈值。</li>
@@ -546,7 +546,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <li><strong>闲聊和影视 agent 的界线。</strong>原标注不一致，只影响第二级。</li>
       <li><strong>会话占用的超时时长、轮数上限和退出词清单。</strong>重新唤醒时会话保留还是释放，本文暂按保留写。</li>
       <li><strong>各能力给大脑的接口约定。</strong>快思考、导航、空调、多媒体、美团、用车 Agent 和联网搜索各自的说明、输入输出和失败返回。</li>
-      <li><strong>中枢简单任务（一句话连着几条直接指令）交给谁。</strong>本文按并入 Agent 大脑写，由大脑多次调用快思考。代价是这类句子变慢；如果要保证它的基础体验，可以恢复“拆分后逐条快思考”这条直达。</li>
+      <li><strong>联网搜索 Agent 接入前怎么落地。</strong>现在只出标签；上线前判为联网搜索的句子暂时交给 Agent 大脑或闲聊兜底。</li>
       <li><strong>闲聊和联网搜索 Agent 的界线。</strong>原标注里查股价、天气、限行属于闲聊；按新的划分，需要实时信息的问题更适合交给联网搜索 Agent。</li>
       <li><strong>Agent 大脑的延迟预算。</strong>多 Agent 编排比直达慢得多，需要定首句响应的上限，以及中间过程怎么播报。</li>
       <li><strong>挂起后恢复时怎么提示用户。</strong>需要和 Agent 大脑、美团 Agent、导航 Agent 的负责人对齐。</li>
