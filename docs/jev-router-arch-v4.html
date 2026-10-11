@@ -103,44 +103,38 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
   <header>
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
-    <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 13 版 · 2026-10-11 · 闲聊也作为 Agent 交给 Agent 大脑，由大脑判断用户是否在闲聊；第一级去掉 is_followup，第二级 5 选 1 加“退回快思考”。</div>
+    <p class="lede">每句话只分两条路：说清楚的直接指令交给快思考模型，其余全部交给 Agent 大脑。Agent 大脑下挂各种能力，自己决定调谁。Jev 每句只调一次，只判断“交不交给快思考、要不要先改写”；线上发现落域错误时，再给 Jev 加一道纠错题来修。</p>
+    <div class="meta">第 14 版 · 2026-10-11 · 去掉独立 Agent 直达和 Jev 第二级；改写和大脑用 DeepSeek V4 Flash 非思考模式。标“估”的为估算，其余为实测</div>
   </header>
 
   <section>
     <h2>两层体验</h2>
     <div class="thesis">
-      <p><strong>测试集里的 query 保证基础交互体验，智能体现在 Agent 大脑上。</strong>前置分流的任务是把基础体验的句子准确、快速、低成本地交给快思考或直达的 Agent；其余的交给大脑，由它自主编排调度各项能力。</p>
+      <p><strong>快思考保证基础体验，智能体现在 Agent 大脑上。</strong>Agent 之间的边界太难判断，不再由前置分流来分；分流只回答一件事：这句话是不是快思考能直接处理的指令。</p>
     </div>
     <div class="scroll">
       <table>
         <thead><tr><th></th><th>基础体验</th><th>智能体验</th></tr></thead>
         <tbody>
-          <tr><td class="key">什么样的句子</td><td>说清楚了的指令和单一领域的请求：打开空调、导航回家、放一首稻香、座椅加热怎么用</td><td>要理解意图、组合多种能力才能办成的事：点份外卖送到公司顺便导航过去；有点累，找个能休息的地方</td></tr>
-          <tr><td class="key">谁来做</td><td>快思考；单个 Agent 直达</td><td>Agent 大脑，调度快思考、各 Agent 和联网搜索</td></tr>
+          <tr><td class="key">什么样的句子</td><td>一条或连着几条说清楚的直接指令和简单查询：打开空调、导航回家、放一首稻香、空调调低一度并打开雨刮</td><td>其余全部：怎么用、为什么坏、定时任务、长期规则、找歌找片、规划行程、点外卖、新闻、闲聊……</td></tr>
+          <tr><td class="key">谁来做</td><td>快思考模型（千问 8B 微调）</td><td>Agent 大脑（DeepSeek V4 Flash 非思考模式），调度下挂的各项能力</td></tr>
           <tr><td class="key">要求</td><td>快、稳、便宜，结果可预期</td><td>能办成，能多轮，能处理没见过的说法</td></tr>
-          <tr><td class="key">怎么评测</td><td>C518-1 测试集的分流准确率</td><td>任务完成率、轮数、耗时，需要另建场景集</td></tr>
         </tbody>
       </table>
     </div>
-    <p>两种分错的代价不同：基础体验的句子误入大脑，只是慢一点、贵一点，结果通常仍然正确；需要智能的句子被留在快车道，会被当成字面指令执行或直接失败。所以分流拿不准时，倾向交给大脑。</p>
   </section>
 
   <section>
-    <h2>和第 3 版相比改了什么</h2>
+    <h2>和第 13 版相比改了什么</h2>
     <div class="scroll">
       <table>
-        <thead><tr><th></th><th>第 3 版</th><th>第 4 版</th></tr></thead>
+        <thead><tr><th></th><th>第 13 版</th><th>第 14 版</th></tr></thead>
         <tbody>
-          <tr><td class="key">Jev 判几次</td><td>一次请求，28 个标签选一个</td><td>第一级只判“是否交给快思考”；不交的再过第二级，在 4 个独立 Agent 和 Agent 大脑里选一个</td></tr>
-          <tr><td class="key">NLU 的 domain 由谁定</td><td>Jev 输出 16 个 domain 之一</td><td>快思考模型自己理解，Jev 不再输出 domain</td></tr>
-          <tr><td class="key">判据怎么分工</td><td>一份判据同时写 domain 之间和 domain 与 agent 之间的边界</td><td>第一级只写“快思考管什么、不管什么”；第二级只写 4 个独立 Agent 和 Agent 大脑之间的边界</td></tr>
-          <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>快思考直接处理整句，第一级就交给快思考，不再拆分</td></tr>
-          <tr><td class="key">中枢复杂多任务</td><td>慢思考编排，先规划再多步调度</td><td>Agent 大脑：把快思考和各个 Agent 当作工具，编排调度多个 Agent 完成一件任务</td></tr>
-          <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>快思考拒识或低置信，升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
-          <tr><td class="key">多轮任务</td><td>每一轮都重新判断</td><td>会话占用：Agent 大脑接管后（包括它调度的美团、导航 Agent），后续轮次直接交给它，由它判断这句是否归自己</td></tr>
-          <tr><td class="key">指代和改写</td><td>追问一律改写：槽位继承优先，其余调大模型</td><td>上下文指代交给快思考自己消解；只有模糊指代（“导航到大裤衩”）才调大模型改写</td></tr>
-          <tr><td class="key">代价</td><td>—</td><td>domain 和 agent 的联合判断拆开后，边界上的少数句子会多绕一步；不走快思考的句子要调两次 Jev</td></tr>
+          <tr><td class="key">Jev 判几次</td><td>第一级每句一次；不走快思考的再调第二级，5 选 1</td><td>只有第一级，每句一次</td></tr>
+          <tr><td class="key">任务大师、条件任务、联网搜索、用车手册</td><td>第二级判出后直接调用</td><td>挂到 Agent 大脑下，由大脑调用</td></tr>
+          <tr><td class="key">快思考拒识或低置信</td><td>升级到 Jev 第二级</td><td>直接交给 Agent 大脑</td></tr>
+          <tr><td class="key">分错了怎么修</td><td>改第二级判据</td><td>给第一级加一道针对这类句子的 Jev 纠错题，随同一次请求作答，不增加调用次数</td></tr>
+          <tr><td class="key">代价</td><td>—</td><td>原来直达的独立 Agent 现在多经过一次大脑，慢一些、贵一些</td></tr>
         </tbody>
       </table>
     </div>
@@ -152,19 +146,19 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <span><i style="--c:var(--line-strong)"></i>代码规则</span>
       <span><i style="--c:var(--accent)"></i>Jev 判断</span>
       <span><i style="--c:var(--c-fast)"></i>快思考模型</span>
-      <span><i style="--c:var(--c-agent)"></i>Agent</span>
       <span><i style="--c:var(--c-slow)"></i>Agent 大脑 / 大模型</span>
-      <span><i class="dash" style="--c:var(--c-warn)"></i>兜底升级</span>
+      <span><i style="--c:var(--c-agent)"></i>大脑下挂的能力</span>
+      <span><i class="dash" style="--c:var(--c-warn)"></i>兜底</span>
     </div>
     <figure class="diagram">
-      <svg viewBox="0 0 960 790" role="img" aria-label="前置分流流程图：先看有没有进行中的会话，有就交给 Agent 大脑；没有则由 Jev 第一级判断是否交给快思考、是否需要改写模糊指代；不交给快思考的由 Jev 第二级在 4 个独立 Agent、Agent 大脑和退回快思考中选一个">
+      <svg viewBox="0 0 960 740" role="img" aria-label="前置分流流程图：有进行中的会话就交给 Agent 大脑；否则由 Jev 第一级判断是否交给快思考、是否需要改写模糊指代，纠错题命中时以纠错结果为准；交给快思考的句子需要时先改写，快思考拒识或低置信时交给 Agent 大脑；其余全部交给 Agent 大脑，大脑调度快思考、任务大师、条件任务、联网搜索、用车手册、导航、空调、多媒体、美团、闲聊等能力">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="ahu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead-up" d="M0,0 L10,5 L0,10 z"/></marker>
         </defs>
 
         <rect class="box b-code" x="40" y="16" width="360" height="58" rx="8"/>
-        <text class="t-title" x="60" y="42">query ＋ 上一轮内容和标签 ＋ 播放状态</text>
+        <text class="t-title" x="60" y="42">query ＋ 上一轮内容 ＋ 播放状态</text>
         <text class="t-sub" x="60" y="62">已经过 ASR，带车辆和媒体上下文</text>
 
         <path class="edge" d="M220 74 V100" marker-end="url(#ah)"/>
@@ -185,23 +179,25 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
 
         <rect class="box b-fast" x="580" y="102" width="340" height="198" rx="8"/>
         <text class="t-who w-fast" x="600" y="124">快思考模型 · 千问 8B 微调</text>
-        <text class="t-title" x="600" y="150">理解 domain、意图、槽位</text>
+        <text class="t-title" x="600" y="150">理解 domain、意图、槽位并执行</text>
         <text class="t-sub" x="600" y="174">带上一轮输入，自己消解上下文指代</text>
         <text class="t-sub" x="600" y="196">整句处理连说的几条直接指令</text>
         <line x1="600" x2="900" y1="212" y2="212" stroke="var(--line)" stroke-width="1"/>
         <text class="t-sub" x="600" y="236">理解成功 → 交给现有执行链路</text>
-        <text class="t-sub" x="600" y="258">拒识或置信度低 → 升级到第二级</text>
-        <text class="t-sub" x="600" y="280">也接收第二级退回、大脑的工具调用</text>
+        <text class="t-sub" x="600" y="258">拒识或置信度低 → 交给 Agent 大脑</text>
+        <text class="t-sub" x="600" y="280">也作为工具供大脑调用</text>
 
-        <rect class="box b-jev" x="40" y="198" width="360" height="92" rx="8"/>
-        <text class="t-who w-jev" x="60" y="220">Jev 第一级 · 每句一次，两问并行</text>
-        <text class="t-title" x="60" y="244">is_fast · Noul 交给快思考吗</text>
-        <text class="t-sub" x="60" y="268">needs_rewrite · Noul 有要靠常识还原的模糊指代吗</text>
+        <rect class="box b-jev" x="40" y="198" width="360" height="110" rx="8"/>
+        <text class="t-who w-jev" x="60" y="220">Jev 第一级 · 每句只调一次</text>
+        <text class="t-title" x="60" y="244">is_fast · 交给快思考吗</text>
+        <text class="t-sub" x="60" y="268">needs_rewrite · 有要靠常识还原的模糊指代吗</text>
+        <text class="t-sub" x="60" y="292">＋ 纠错题：针对已知落域错误，按需添加</text>
 
-        <path class="edge" d="M220 290 V338" marker-end="url(#ah)"/>
-        <rect class="box b-code" x="40" y="340" width="360" height="56" rx="8"/>
+        <path class="edge" d="M220 308 V338" marker-end="url(#ah)"/>
+        <rect class="box b-code" x="40" y="340" width="360" height="64" rx="8"/>
         <text class="t-who w-code" x="60" y="360">代码</text>
-        <text class="t-title" x="60" y="384">is_fast 达到阈值？</text>
+        <text class="t-title" x="60" y="382">is_fast 达到阈值？</text>
+        <text class="t-sub" x="60" y="398">纠错题命中时，以纠错题指定的去向为准</text>
         <path class="edge" d="M400 368 H520"/>
         <text class="t-edge" x="410" y="360">是</text>
         <path class="edge" d="M520 368 V250 H578" marker-end="url(#ah)"/>
@@ -211,270 +207,183 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <text class="t-edge" x="530" y="360">需改写</text>
 
         <rect class="box b-slow" x="600" y="330" width="260" height="80" rx="8"/>
-        <text class="t-who w-slow" x="616" y="352">大模型改写</text>
+        <text class="t-who w-slow" x="616" y="352">大模型改写 · V4 Flash 非思考</text>
         <text class="t-title" x="616" y="376">模糊指代还原成标准名称</text>
         <text class="t-sub" x="616" y="398">大裤衩 → 中央电视台总部大楼</text>
         <path class="edge" d="M730 330 V302" marker-end="url(#ah)"/>
 
-        <path class="edge" d="M220 396 V438" marker-end="url(#ah)"/>
-        <text class="t-edge" x="232" y="422">否</text>
-        <rect class="box b-jev" x="40" y="440" width="360" height="96" rx="8"/>
-        <text class="t-who w-jev" x="60" y="462">Jev 第二级 · 只有不走快思考的句子</text>
-        <text class="t-title" x="60" y="486">label · Choice 5 选 1</text>
-        <text class="t-sub" x="60" y="508">4 个独立 Agent、Agent 大脑，＋ 退回快思考</text>
-        <text class="t-sub" x="60" y="526">从快思考升级来的句子不带“退回”选项</text>
+        <path class="edge-up" d="M890 300 V466" marker-end="url(#ahu)"/>
+        <text class="t-edge" x="770" y="446" style="fill:var(--c-warn)">拒识或低置信</text>
 
-        <path class="edge-up" d="M890 300 V510 H402" marker-end="url(#ahu)"/>
-        <text class="t-edge" x="620" y="502" style="fill:var(--c-warn)">拒识或低置信，升级</text>
+        <path class="edge" d="M220 404 V466" marker-end="url(#ah)"/>
+        <text class="t-edge" x="232" y="440">否</text>
 
-        <path class="edge" d="M220 536 V568" marker-end="url(#ah)"/>
-        <rect class="box b-code" x="40" y="570" width="360" height="62" rx="8"/>
-        <text class="t-who w-code" x="60" y="590">代码</text>
-        <text class="t-title" x="60" y="614">按 label 和置信度分发</text>
+        <rect class="box b-slow" x="40" y="468" width="900" height="252" rx="10"/>
+        <text class="t-who w-slow" x="64" y="494">Agent 大脑 · DeepSeek V4 Flash 非思考模式</text>
+        <text class="t-title" x="64" y="520">理解用户要办的事，自主编排调度下挂的能力，持有多轮会话</text>
 
-        <path class="edge" d="M220 632 V656"/>
-        <path class="edge" d="M160 656 H800"/>
-        <path class="edge" d="M160 656 V678" marker-end="url(#ah)"/>
-        <path class="edge" d="M480 656 V678" marker-end="url(#ah)"/>
-        <path class="edge" d="M800 656 V678" marker-end="url(#ah)"/>
+        <rect class="box b-fast" x="66" y="544" width="160" height="44" rx="6"/>
+        <text class="t-title" x="146" y="571" text-anchor="middle">快思考（工具）</text>
+        <rect class="box b-agent" x="238" y="544" width="160" height="44" rx="6"/>
+        <text class="t-title" x="318" y="571" text-anchor="middle">任务大师</text>
+        <rect class="box b-agent" x="410" y="544" width="160" height="44" rx="6"/>
+        <text class="t-title" x="490" y="571" text-anchor="middle">条件任务</text>
+        <rect class="box b-agent" x="582" y="544" width="160" height="44" rx="6"/>
+        <text class="t-title" x="662" y="571" text-anchor="middle">联网搜索</text>
+        <rect class="box b-agent" x="754" y="544" width="160" height="44" rx="6"/>
+        <text class="t-title" x="834" y="571" text-anchor="middle">用车手册</text>
 
-        <rect class="box b-agent" x="20" y="680" width="280" height="90" rx="8"/>
-        <text class="t-who w-agent" x="36" y="702">独立 Agent 直达</text>
-        <text class="t-title" x="36" y="726">任务大师 · 条件任务</text>
-        <text class="t-sub" x="36" y="748">联网搜索 · 用车手册</text>
+        <rect class="box b-agent" x="66" y="600" width="160" height="44" rx="6"/>
+        <text class="t-title" x="146" y="627" text-anchor="middle">导航</text>
+        <rect class="box b-agent" x="238" y="600" width="160" height="44" rx="6"/>
+        <text class="t-title" x="318" y="627" text-anchor="middle">空调</text>
+        <rect class="box b-agent" x="410" y="600" width="160" height="44" rx="6"/>
+        <text class="t-title" x="490" y="627" text-anchor="middle">多媒体</text>
+        <rect class="box b-agent" x="582" y="600" width="160" height="44" rx="6"/>
+        <text class="t-title" x="662" y="627" text-anchor="middle">美团（多轮）</text>
+        <rect class="box b-agent" x="754" y="600" width="160" height="44" rx="6"/>
+        <text class="t-title" x="834" y="627" text-anchor="middle">闲聊</text>
 
-        <rect class="box b-fast" x="340" y="680" width="280" height="90" rx="8"/>
-        <text class="t-who w-fast" x="356" y="702">退回快思考</text>
-        <text class="t-title" x="356" y="726">交给快思考模型</text>
-        <text class="t-sub" x="356" y="748">第一级送错的句子</text>
-
-        <rect class="box b-slow" x="660" y="680" width="280" height="90" rx="8"/>
-        <text class="t-who w-slow" x="676" y="702">Agent 大脑</text>
-        <text class="t-title" x="676" y="726">闲聊、其余全部 ＋ 低置信</text>
-        <text class="t-sub" x="676" y="748">编排多 Agent，持有会话</text>
+        <text class="t-sub" x="64" y="676">不交给快思考的句子、快思考拒识的句子、多轮会话中的后续发言，都由大脑处理。</text>
+        <text class="t-sub" x="64" y="698">能力清单随业务扩充，新增能力只改大脑的工具列表，不改前置分流。</text>
       </svg>
     </figure>
-    <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考，包括“再高一点”这类上下文追问。只有带模糊指代的句子多调一次大模型改写，只有不归快思考的句子才走第二级。</p>
+    <p class="note">每句话只调一次 Jev。交给快思考的句子到此为止（带模糊指代的先改写一次）；其余句子交给大脑，由大脑决定调用哪些能力。</p>
   </section>
 
-    <section>
-    <h2>每一级做什么</h2>
+  <section>
+    <h2>每一环节做什么</h2>
     <div class="scroll">
       <table>
-        <thead><tr><th>环节</th><th>谁来做</th><th>输入</th><th>输出</th><th>只负责</th></tr></thead>
+        <thead><tr><th>环节</th><th>谁来做</th><th>输出</th><th>只负责</th></tr></thead>
         <tbody>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">会话占用</span></td><td>代码 ＋ 占用会话的 Agent</td><td>query、会话状态</td><td>继续、挂起、结束三选一</td><td>多轮任务进行中，这句是否还归当前 Agent</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第一级</span></td><td>Jev，两个 Noul</td><td>query、上一轮、播放状态</td><td><code>is_fast</code>、<code>needs_rewrite</code> 两个概率</td><td>快思考和非快思考的边界；有没有模糊指代</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">大模型改写</span></td><td>通用大模型</td><td>query、上一轮</td><td>把模糊指代换成标准名称后的一句话</td><td>只处理要交给快思考、又带模糊指代的句子</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>千问 8B 微调</td><td>query（或改写后的句子）、上一轮</td><td>domain、意图、槽位、置信度、拒识标记</td><td>语音 NLU 的全部理解，包括 domain 之间的边界和上下文指代</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第二级</span></td><td>Jev，一个 Choice</td><td>同第一级</td><td>6 个选项加“退回快思考”的概率</td><td>4 个独立 Agent、闲聊和 Agent 大脑之间的边界</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--line-strong)">分发</span></td><td>代码</td><td>第二级的概率</td><td>去向</td><td>置信度门限和兜底</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--line-strong)">会话检查</span></td><td>代码</td><td>有会话就交给大脑</td><td>多轮任务进行中，后续发言不过 Jev</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第一级</span></td><td>Jev，一次请求</td><td><code>is_fast</code>、<code>needs_rewrite</code>，以及各纠错题的概率</td><td>快思考和大脑的边界；有没有模糊指代；已知错误的纠正</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">大模型改写</span></td><td>DeepSeek V4 Flash 非思考</td><td>把模糊指代换成标准名称后的一句话</td><td>只处理交给快思考、又带模糊指代的句子</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>千问 8B 微调</td><td>domain、意图、槽位、置信度、拒识标记</td><td>语音 NLU 的全部理解，包括 domain 之间的边界和上下文指代</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">Agent 大脑</span></td><td>DeepSeek V4 Flash 非思考，AgentScope 实现</td><td>调用哪些能力、播报内容、会话状态（继续、挂起、结束）</td><td>快思考以外的全部请求，以及 Agent 之间怎么分工</td></tr>
         </tbody>
       </table>
     </div>
   </section>
 
-    <section>
+  <section>
     <h2>代码里的决策顺序</h2>
     <ol class="steps">
-      <li><strong>检查会话占用。</strong>有进行中的会话，就把这句直接交给占用会话的 Agent，不调 Jev。Agent 返回“继续”或“结束”则本轮到此为止；返回“不归我”则会话挂起，这句从下一步开始走正常流程，处理完后会话恢复。没有会话的直接进入下一步。</li>
-      <li><strong>调第一级 Jev。</strong>一次请求并行问 <code>is_fast</code> 和 <code>needs_rewrite</code>。</li>
-      <li><strong>判断是否交给快思考。</strong><code>is_fast</code> 达到阈值：<code>needs_rewrite</code> 也达到阈值的，先调大模型把模糊指代改写成标准名称，再交给快思考；否则直接交给快思考，连同上一轮一起，上下文指代（“再高一点”“换成第二个”）由快思考自己消解。</li>
-      <li><strong>快思考兜底。</strong>快思考拒识或置信度低于门限，升级到第二级 Jev，这时第二级不带“退回快思考”选项，避免来回绕。改写后仍被拒识的，同样升级。</li>
-      <li><strong>调第二级 Jev。</strong><code>is_fast</code> 没达到阈值，或从快思考升级来的句子，在任务大师、条件任务、联网搜索 Agent、用车手册 Agent、Agent 大脑和“退回快思考”里选一个。</li>
-      <li><strong>分发。</strong>置信度达标按 label 走：4 个独立 Agent 直接调用，退回快思考的交给快思考，其余（包括闲聊）交给 Agent 大脑。置信度不达标也交给 Agent 大脑，由它决定怎么完成。走 Agent 的句子不需要先改写，Agent 自己是大模型，能理解模糊指代。</li>
+      <li><strong>检查会话。</strong>有进行中的会话，就把这句交给 Agent 大脑。大脑返回“继续”或“结束”，本轮到此为止；返回“不归我”则会话挂起，这句从下一步开始走正常流程，处理完后会话恢复。</li>
+      <li><strong>调 Jev 第一级。</strong>一次请求并行问 <code>is_fast</code>、<code>needs_rewrite</code> 和当前启用的纠错题。</li>
+      <li><strong>看纠错题。</strong>有纠错题命中，按它指定的去向走（快思考，或者大脑并附上指定能力的提示）。</li>
+      <li><strong>看 is_fast。</strong>达到阈值交给快思考；<code>needs_rewrite</code> 也达到阈值的，先用 DeepSeek 改写再交给快思考。没达到阈值交给 Agent 大脑。</li>
+      <li><strong>快思考兜底。</strong>快思考拒识或置信度低于门限，交给 Agent 大脑。</li>
     </ol>
   </section>
 
   <section>
     <h2>Agent 大脑</h2>
-    <p>第二级判为中枢复杂多任务的句子交给 Agent 大脑。它先理解用户要完成的整件事，再自主决定调用哪些能力、按什么顺序调用，一步一步把事情做完。座舱的智能主要体现在这里。</p>
-    <h3>大脑可调度的能力</h3>
+    <p>大脑先理解用户要办的整件事，再自主决定调用哪些能力、按什么顺序调用。原来由分流决定的 Agent 边界，现在由大脑在调用时判断；单个能力就能办完的事，大脑只调一次。</p>
     <div class="scroll">
       <table>
-        <thead><tr><th>能力</th><th>以什么形式给大脑</th><th>大脑用它做什么</th></tr></thead>
+        <thead><tr><th>能力</th><th>形式</th><th>做什么</th></tr></thead>
         <tbody>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>工具</td><td>把一条明确的指令解析成 domain、意图、槽位并执行。大脑因此拥有全部基础 NLU 能力</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">导航 Agent</span></td><td>Agent</td><td>找地点、规划路线、多地点行程</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">空调 Agent</span></td><td>Agent</td><td>按感受和场景调节温度、风量、座椅等舒适性设置</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">多媒体 Agent</span></td><td>Agent</td><td>按氛围、描述找歌找片，播放和控制</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">美团 Agent</span></td><td>Agent，多轮</td><td>选店、点餐、下单</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">用车 Agent</span></td><td>Agent</td><td>本车功能、故障、使用建议</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-chat)">闲聊 Agent</span></td><td>Agent，多轮</td><td>开放问答和聊天，可接端到端语音。大脑判断用户在闲聊时调用它</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">联网搜索</span></td><td>工具</td><td>查实时信息：路况、营业时间、新闻、天气</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考</span></td><td>工具</td><td>执行说清楚的直接指令，大脑因此拥有全部基础 NLU 能力</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">任务大师</span></td><td>Agent</td><td>周期性、每当某事发生就触发的长期规则</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">条件任务</span></td><td>Agent</td><td>到某个时间或时机执行一次的动作</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">联网搜索</span></td><td>Agent，接口未接入</td><td>新闻资讯、实时信息</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">用车手册</span></td><td>Agent</td><td>本车功能、故障、使用建议</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">导航</span></td><td>Agent，多轮</td><td>靠描述找地点、规划路线、多地点行程</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">空调</span></td><td>Agent</td><td>按感受和场景调节温度、风量、座椅</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">多媒体</span></td><td>Agent</td><td>按氛围、描述找歌找片，播放和控制</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">美团</span></td><td>Agent，多轮</td><td>选店、点餐、下单</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-chat)">闲聊</span></td><td>Agent，多轮</td><td>开放问答和聊天，可接端到端语音</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">清单会随能力扩充而增加。大脑看到的是每个能力的说明和输入输出约定，新增一个能力不需要改前置分流。</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>用户说</th><th>Agent 大脑怎么编排</th></tr></thead>
-        <tbody>
-          <tr><td class="ex">把空调调到二十六度然后导航去我常去的那家商场</td><td>快思考调空调 → 记忆 agent 查“常去的商场” → 导航 Agent 规划路线</td></tr>
-          <tr><td class="ex">帮我点份外卖送到公司，顺便导航过去</td><td>美团 Agent 选店下单（多轮） → 取得送达地址 → 导航 Agent 导航到公司</td></tr>
-          <tr><td class="ex">打开网易云给这首歌加个心，等开过前面这个拥堵路段再提醒我</td><td>快思考收藏歌曲 → 条件任务 Agent 设定“驶出拥堵后提醒”</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>和前面几条路径的关系：</p>
     <ul class="plain">
-      <li><strong>直达是捷径，大脑是上限。</strong>单个 Agent 就能办完的事，第二级直接派给它，省掉大脑的规划，响应更快、更省。需要多个能力配合的，交给大脑。</li>
-      <li><strong>拿不准的交给大脑。</strong>第二级置信度不足时不再猜标签，交给大脑，由它决定调谁、调几个。这样分流判错的代价最小。</li>
-      <li><strong>大脑持有会话。</strong>编排过程中用户的后续发言先到大脑，大脑再转给正在对话的子 Agent（如美团 Agent）。子 Agent 说“不归我”时，先由大脑判断这句是不是任务里的另一步（如“顺便导航过去”）；大脑也认为不属于当前任务，才交回 Jev 第一级。</li>
+      <li><strong>模型：</strong>改写和大脑默认用 DeepSeek V4 Flash 非思考模式（AgentScope 里 <code>DeepSeekChatModel.Parameters(thinking_enable=False)</code>，即请求带 <code>thinking.type=disabled</code>）。复杂多步编排是否需要 V4 Pro 或思考模式，等大脑场景集测完再定。</li>
+      <li><strong>会话：</strong>大脑持有多轮会话，每轮返回继续、挂起、结束之一；超时、轮数上限、退出词由代码兜底。美团、导航这类子 Agent 的多轮对话都经大脑转达。</li>
+      <li><strong>代价：</strong>原来直达的任务大师、条件任务、用车手册等，现在都多经过一次大脑。实测 V4 Flash 非思考模式改写一句中位约 1.5 秒（GitHub 美国机房）；大脑调用一次工具至少两轮模型调用，车端时延需要单独测。</li>
     </ul>
   </section>
 
   <section>
-    <h2>会话占用</h2>
-    <p>点外卖、选目的地这类任务通常要和用户来回好几轮才能完成，比如用美团点外卖：选店、选菜、确认地址、下单。进入这类任务后，后续轮次如果每轮都重新过 Jev，既费调用，又容易判错：“要中辣的”“第二个”单看一句话，Jev 判断不了是在点外卖。所以这类任务开始后，由对应的 Agent 占用会话，后续轮次直接交给它。</p>
-
-    <h3>Agent 每轮返回三种状态之一</h3>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>状态</th><th>例子（点外卖过程中）</th><th>系统怎么做</th></tr></thead>
-        <tbody>
-          <tr><td class="key">继续</td><td class="ex">要中辣的；第二个；地址用公司</td><td>会话保持，下一句还交给它</td></tr>
-          <tr><td class="key">不归我，挂起</td><td class="ex">先把空调调低一点；导航去最近的加油站</td><td>这一句走正常流程，从 Jev 第一级开始。处理完后会话恢复，Agent 可以接着问“刚才的外卖还要继续下单吗”</td></tr>
-          <tr><td class="key">结束</td><td class="ex">下单成功；不点了；算了</td><td>释放会话，下一句恢复正常流程</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>由 Agent 判断，而不是每轮再问一次 Jev，是因为 Agent 掌握完整的任务上下文（选了哪家店、购物车里有什么），对“第二个”“换一家”的理解比只看上一轮的 Jev 更准。这和快思考的拒识是同一个思路：由执行方判断自己能不能接这句话，接不了的交回分流。</p>
-
-    <h3>系统兜底</h3>
-    <p>不能全靠 Agent 自觉放手，代码层面还有四条：</p>
-    <ul class="plain">
-      <li><strong>超时：</strong>一段时间没有交互就释放会话，时长按场景标定。</li>
-      <li><strong>轮数上限：</strong>防止卡在同一个 Agent 里出不来。</li>
-      <li><strong>退出词：</strong>“退出”“取消”“回到主页”直接释放会话，不问 Agent。</li>
-      <li><strong>重新唤醒：</strong>用户重新说唤醒词时，会话保留，但这一句先过 Jev 第一级，再决定是否交回 Agent。</li>
-    </ul>
-
-    <h3>哪些 Agent 可以占用会话</h3>
-    <p>由各 Agent 在注册时声明。目前声明的有两个：</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>Agent</th><th>怎么进入</th><th>典型的多轮</th></tr></thead>
-        <tbody>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">Agent 大脑</span></td><td>第二级判为中枢复杂多任务，Agent 大脑接管并持有会话。它调度美团 Agent 时，后续轮次经大脑转给美团 Agent</td><td class="ex">帮我点份外卖送到公司 → 第二家 → 要中辣的 → 顺便导航过去 → 下单</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">导航 Agent（经大脑）</span></td><td>复杂导航不再直达，由 Agent 大脑调起导航 Agent，会话仍由大脑持有</td><td class="ex">找个顺路的加油站 → 第二个 → 有没有便宜点的 → 就去这个</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>4 个独立 Agent 暂不占用会话，每轮照常过 Jev。多轮的事都在大脑之下进行，会话只由大脑持有，规则最简单。</p>
-    <p class="note">闲聊由 Agent 大脑调度闲聊 Agent 完成，聊天过程中会话由大脑持有，追问自然跟随，第一级不再需要 <code>is_followup</code>。</p>
-  </section>
-
-
-  <section>
-    <h2>第一级判据怎么写</h2>
-    <p>第一级的判据只回答“这句话是不是快思考能直接理解的一条指令或查询”。它不需要区分 16 个 domain，只需要写清快思考覆盖的范围，以及和 agent 之间的分界。覆盖范围以快思考团队维护的<strong>能力清单</strong>为准，判据从清单生成，快思考扩大覆盖时同步更新。</p>
+    <h2>第一级判据</h2>
+    <p>第一级只判断“这句话是不是快思考能直接理解的一条或几条指令”，判据从快思考的能力清单生成。</p>
     <div class="grid2">
       <div class="panel">
         <h3><span class="tag" style="--c:var(--c-fast)">交给快思考</span></h3>
-        <p class="note">一句话里只有一条说清楚了的直接指令或简单查询。</p>
         <ul class="plain">
-          <li>一句话连说几条直接指令（原来的中枢简单任务），快思考能整句处理</li>
           <li>车控、车窗座椅空调、HUD、驾驶模式、能量充电</li>
-          <li>打开关闭应用和页面，各类音量、亮度、网络、语音设置</li>
-          <li>按歌名、歌手、片名、节目名点播；播放控制和收藏</li>
-          <li>导航去说得出名字的地点；导航过程和地图控制；到家、公司、当前目的地的距离和路况</li>
-          <li>智驾和泊车指令；场景模式；电话</li>
-          <li>胎压、空调温度、保养、存储空间这几项数值查询</li>
-          <li>到时间提醒用户做某事；查询、删除日程</li>
+          <li>打开关闭应用和页面，音量、亮度、网络、语音设置</li>
+          <li>按歌名、歌手、片名点播，也包括按风格、年代、语种点播；播放控制和收藏</li>
+          <li>上一个、下一集、拜拜、退下等通用短指令</li>
+          <li>导航去说得出名字的地点，导航设置，到家、公司、当前目的地的距离和路况</li>
+          <li>智驾和泊车、场景模式、电话、几项车辆数值查询</li>
+          <li>到时间提醒用户做某事；一句话连说几条直接指令</li>
         </ul>
       </div>
       <div class="panel">
-        <h3><span class="tag" style="--c:var(--c-agent)">不交给快思考</span></h3>
-        <p class="note">需要理解、检索、规划，或者带触发条件、有多条指令。</p>
+        <h3><span class="tag" style="--c:var(--c-slow)">交给 Agent 大脑</span></h3>
         <ul class="plain">
-          <li>只说感受没说指令（“热得浑身不自在”）</li>
-          <li>问本车功能是什么、怎么用、为什么坏、是否正常</li>
-          <li>按氛围、歌词、剧情找歌找片；让系统推荐</li>
+          <li>问本车功能怎么用、为什么坏、状态是否正常，即使说法像指令</li>
+          <li>只说感受没说指令；按氛围、歌词、剧情找歌找片</li>
           <li>靠描述找地点、多地点行程、去某个具体地名要多久</li>
-          <li>新闻资讯；记住个人信息</li>
-          <li>一次性定时动作（条件任务）、长期规则（任务大师）</li>
-          <li>多条指令里有需要推断、查询或互相依赖的步骤；开放问答和闲聊</li>
+          <li>带执行时间的动作（条件任务）、长期规则（任务大师）</li>
+          <li>多条指令里有需要推断、查询、订票、带话的步骤</li>
+          <li>新闻、记住个人信息、开放问答和闲聊</li>
         </ul>
       </div>
     </div>
-    <p class="note">第 3 版判据里“domain 和 agent label 之间”的那张边界表，现在就是 <code>is_fast</code> 判据的主体；“domain 之间”的边界（如中控亮度归 carControl 还是 systemControl）交还给快思考，Jev 不再管。<code>is_fast</code> 只看指令类型，不看对象说得是否标准：“导航到大裤衩”的 <code>is_fast</code> 应为是，它的问题交给 <code>needs_rewrite</code>。</p>
     <h3>needs_rewrite：三种指代分开处理</h3>
     <div class="scroll">
       <table>
-        <thead><tr><th>指代类型</th><th>例子</th><th>谁处理</th><th>needs_rewrite</th></tr></thead>
+        <thead><tr><th>指代类型</th><th>例子</th><th>谁处理</th></tr></thead>
         <tbody>
-          <tr><td class="key">上下文指代</td><td class="ex">调完空调后说“再高一点”；“换成第二个”；“那到公司呢”</td><td>快思考，带上一轮输入</td><td>否</td></tr>
-          <tr><td class="key">模糊指代</td><td class="ex">导航到大裤衩；去鸟巢；放一首周董的歌；打开那个吹脚的</td><td>大模型改写成标准名称，再交给快思考</td><td><strong>是</strong></td></tr>
-          <tr><td class="key">描述找对象</td><td class="ex">杭州那个建在运河边上保留了古代码头格局的历史街区；有一部电视剧里和珅和纪晓岚斗嘴</td><td>不交给快思考，第二级判给复杂导航、影视、音乐 agent</td><td>不问（<code>is_fast</code> 已为否）</td></tr>
+          <tr><td class="key">上下文指代</td><td class="ex">调完空调后说“再高一点”；“换成第二个”</td><td>快思考，带上一轮输入</td></tr>
+          <tr><td class="key">模糊指代</td><td class="ex">导航到大裤衩；放一首周董的歌</td><td>DeepSeek 改写成标准名称，再交给快思考</td></tr>
+          <tr><td class="key">描述找对象</td><td class="ex">杭州那个建在运河边上保留了古代码头格局的历史街区</td><td>不交给快思考，大脑处理</td></tr>
         </tbody>
       </table>
     </div>
-    <p>模糊指代和描述找对象的分界：常识就能还原成<strong>唯一</strong>一个标准名称的（俗称、外号、简称、昵称）归模糊指代，改写一步就够；需要检索、比较候选，或者答案不唯一的，归描述找对象，交给 Agent。判据里要用正反例把这条线写清楚。</p>
   </section>
 
   <section>
-    <h2>第二级的选项</h2>
-    <p>第二级只保留量大的独立 Agent 作为直达，其余全部交给 Agent 大脑。大脑能做所有 Agent 的事，直达只是为了快和省。</p>
+    <h2>Jev 纠错：落域错了怎么修</h2>
+    <p>上线后发现某一类句子落错了地方，不改大脑、不重训快思考，先给 Jev 第一级加一道纠错题。纠错题是一个二元问题，描述这类句子长什么样，附正例和反例；它和 <code>is_fast</code> 在同一次请求里作答，不增加调用次数。</p>
     <div class="scroll">
       <table>
-        <thead><tr><th>选项</th><th>去向</th><th>来自原来的 label</th><th class="num">测试集条数</th></tr></thead>
+        <thead><tr><th>例子（取自实测中判错的句子）</th><th>纠错题</th><th>命中后去向</th></tr></thead>
         <tbody>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">用车手册 Agent</span></td><td>直达</td><td>用车agent</td><td class="num">3,014</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">任务大师</span></td><td>直达</td><td>任务大师</td><td class="num">551</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">条件任务</span></td><td>直达</td><td>条件任务</td><td class="num">520</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">联网搜索 Agent</span></td><td>直达（接口未接入，先只出标签）</td><td>新闻agent</td><td class="num">385</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">Agent 大脑</span></td><td>编排</td><td>音乐agent、复杂导航agent、记忆agent、影视agent、车控agent模糊意图、中枢复杂多任务、闲聊</td><td class="num">4,621</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">退回快思考</span></td><td>快思考</td><td>第一级送错的句子</td><td class="num">—</td></tr>
+          <tr><td class="ex">山地模式时空气悬架调到便携装载模式；在自动驾驶模式下播放舒缓的音乐</td><td>是否是“在某种模式或状态下自动执行动作”的长期规则？</td><td>Agent 大脑，提示调用任务大师</td></tr>
+          <tr><td class="ex">打开自适应；关闭隐私政策；打开微信绑定</td><td>是否是打开、关闭某个系统设置项或页面？</td><td>快思考</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">条数是 C518-1 测试集“大模型agent”sheet 的行数，不代表线上分布。原来的中枢简单任务（109 条）改为第一级交给快思考，不再进第二级。按测试集算，进入第二级的 9,091 条里约 51% 会交给大脑。</p>
+    <ul class="plain">
+      <li><strong>上线前回放：</strong>新纠错题在 13,662 条评测集和回归集上回放，报告它会改变多少句的去向、其中多少句改错了，有改错的要收窄描述。</li>
+      <li><strong>先灰度：</strong>只记录命中、不改变去向，确认线上没有误伤再启用。</li>
+      <li><strong>要退场：</strong>每道纠错题对应一类已知错误。快思考的能力清单、第一级判据或大脑的提示词修好后，就下线这道题。纠错题保持在十道以内，每道约增加一两百 token<span class="est">估</span>。</li>
+    </ul>
   </section>
 
   <section>
-    <h2>两种判错，代价不同</h2>
+    <h2>实测：第一级分得准不准</h2>
+    <p>第 14 版只有两个去向，所以第一级的准确率就是整条分流的准确率。下面是判据 v2.2 在 Jev 上的实测，样本按原 label 每类最多 20 条。val 没有参与改判据，更能代表实际水平。</p>
     <div class="scroll">
       <table>
-        <thead><tr><th>错误</th><th>例子</th><th>后果</th><th>能不能兜回来</th></tr></thead>
+        <thead><tr><th>is_fast 阈值</th><th class="num">val：该去大脑却给了快思考</th><th class="num">val：该给快思考却去了大脑</th><th class="num">val 准确率</th><th class="num">dev 准确率</th></tr></thead>
         <tbody>
-          <tr><td class="key" style="color:var(--c-warn)">该走 Agent，交给了快思考</td><td class="ex">“空调是不是坏了” 被当成空调指令</td><td>快思考可能硬落一个 domain，执行错误动作</td><td>只有快思考拒识或低置信时才能升级。依赖快思考的拒识能力</td></tr>
-          <tr><td class="key">该走快思考，送到了第二级</td><td class="ex">“打开空调页面”</td><td>多一次 Jev 调用，延迟增加</td><td>第二级选“退回快思考”即可回到正路</td></tr>
+          <tr><td>0.5</td><td class="num">13.8%</td><td class="num">1.7%</td><td class="num">91.7%</td><td class="num">93.9%</td></tr>
+          <tr><td>0.7</td><td class="num">5.1%</td><td class="num">9.5%</td><td class="num"><strong>93.0%</strong></td><td class="num">96.6%</td></tr>
+          <tr><td>0.8</td><td class="num">2.3%</td><td class="num">22.9%</td><td class="num">88.5%</td><td class="num">94.6%</td></tr>
         </tbody>
       </table>
     </div>
-    <p>因此 <code>is_fast</code> 的阈值偏向保守：拿不准的句子送第二级。在 val 上标定时，先把“该走 Agent 却交给快思考”的比例压到目标以下，再看送到第二级的比例是否可以接受。</p>
-  </section>
-
-    <section>
-    <h2>调用量和成本</h2>
-    <p>设线上的句子里，比例为 <em>p</em> 的句子交给快思考，其中比例为 <em>r</em> 的带模糊指代需要改写。第一级每句都调，第二级只有其余的句子调：</p>
-    <div class="formula">每句平均 Jev 输入 token ＝ T₁ ＋ (1 − p) × T₂　　每句平均 Jev 调用次数 ＝ 1 ＋ (1 − p)　　每句平均改写调用 ＝ p × r</div>
-    <p class="note">T₁：第一级请求，三个 Noul，判据约为快思考范围、边界清单和模糊指代正反例，估 2,800 token。T₂：第二级请求，6 个选项，估 2,500 token。第 3 版的实测值为每句一次请求、平均 7,882 token。改写调用的是通用大模型，不计入 Jev。</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>交给快思考的比例 p</th><th class="num">每句 Jev token<span class="est">估</span></th><th class="num">比第 3 版</th><th class="num">每句 Jev 调用次数</th></tr></thead>
-        <tbody>
-          <tr><td>第 3 版（实测）</td><td class="num">7,882</td><td class="num">—</td><td class="num">1.0</td></tr>
-          <tr><td>60%</td><td class="num">3,800</td><td class="num">−52%</td><td class="num">1.4</td></tr>
-          <tr><td>70%</td><td class="num">3,550</td><td class="num">−55%</td><td class="num">1.3</td></tr>
-          <tr><td>80%</td><td class="num">3,300</td><td class="num">−58%</td><td class="num">1.2</td></tr>
-          <tr><td>90%</td><td class="num">3,050</td><td class="num">−61%</td><td class="num">1.1</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>省下来的是 <strong>token</strong>，不是调用次数。第一级每句都要调一次，不走快思考的句子还要调第二次，所以调用次数比第 3 版略多。如果 Jev 按 token 计费，这个架构省一半以上；如果按次数计费，会比第 3 版略贵。</p>
-    <p class="note">延迟参考：评测中 409 条请求在 8 路并发下约 6 秒跑完，单次约 0.1 秒。这是 GitHub 美国机房测得的，车端链路需要另测。走第二级的句子要串行调两次 Jev；带模糊指代的句子多一次大模型改写，这是延迟最长的一段，<em>r</em> 需要从线上日志统计。</p>
-  </section>
-
-    <section>
-    <h2>后续可选：快思考先跑</h2>
-    <p>快思考已经有拒识能力，所以可以考虑把第一级去掉：所有句子先交给快思考，快思考拒识的才调 Jev。Jev 调用次数降到 (1 − p)，p = 80% 时每句平均约 860 token<span class="est">估</span>。</p>
-    <div class="grid2">
-      <div class="panel"><h3>好处</h3><ul class="plain"><li>交给快思考的句子完全不调 Jev</li><li>不需要维护 <code>is_fast</code> 的判据</li></ul></div>
-      <div class="panel"><h3>前提和代价</h3><ul class="plain"><li>快思考要对“空调是不是坏了”这类句子拒识，而不是硬落 domain。拒识能力有了，召回率还要测</li><li><strong>模糊指代仍然需要单独检测。</strong>“导航到大裤衩”的句式快思考能理解，它不会拒识，只会把“大裤衩”原样当成目的地。所以即使快思考先跑，<code>needs_rewrite</code> 这一问也省不掉</li><li>不走快思考的句子多一段快思考的延迟</li></ul></div>
-    </div>
-    <p class="note">可以先测：测试集里有 9,000 多条 agent 侧的句子，全部送给快思考，看拒识率；再从线上日志里挑一批模糊指代的句子，看快思考是否会硬解。两项都达标，再考虑把第一级缩成只问 <code>needs_rewrite</code>，或者把这一问并进改写前的轻量检测。</p>
+    <ul class="plain">
+      <li><strong>Jev 每句只调一次，平均 1,720 token</strong>（第 3 版每句 7,882 token，少 78%）。</li>
+      <li>该去大脑却给了快思考的句子，快思考还能拒识兜底；该给快思考却去了大脑的句子，大脑可以调用快思考工具完成，只是更慢。</li>
+      <li>val 上剩下的错误主要是三类：“在某种模式下自动做某事”的规则；家或某地点到某地点有多远、多久；生僻的系统设置和页面开关。前一类和后一类适合用纠错题修，中间一类要先定口径。</li>
+      <li>模糊指代：人工构造的 20 条里，Jev 识别和 DeepSeek 改写全部正确，没有误改。样本是人工构造的，线上样本还要补。</li>
+    </ul>
   </section>
 
   <section>
@@ -483,53 +392,25 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <table>
         <thead><tr><th>约定</th><th>内容</th><th>谁维护</th></tr></thead>
         <tbody>
-          <tr><td class="key">快思考能力清单</td><td>快思考覆盖的 domain 和说法范围，以及明确不管的类型。第一级判据从它生成</td><td>快思考团队</td></tr>
-          <tr><td class="key">快思考输入输出</td><td>输入 query 和上一轮（query、domain、槽位）；输出 domain、意图、槽位、置信度、拒识标记。拒识和置信度是兜底升级的依据</td><td>快思考团队</td></tr>
-          <tr><td class="key">改写约定</td><td>只把模糊指代换成标准名称，其余字词不动；还原不了就原样返回并标记失败，失败的句子直接升级到第二级</td><td>分流团队</td></tr>
-          <tr><td class="key">会话协议</td><td>Agent 声明是否支持多轮；每轮返回继续、挂起、结束之一；挂起恢复后由 Agent 负责提示用户</td><td>各 Agent 负责人，分流团队定协议</td></tr>
-          <tr><td class="key">第一级判据</td><td><code>is_fast</code>、<code>needs_rewrite</code> 两个问题的说明和例句</td><td>分流团队</td></tr>
-          <tr><td class="key">第二级判据</td><td>4 个独立 Agent、Agent 大脑和“退回快思考”的说明、不包含什么、例句</td><td>分流团队，和各 Agent 负责人对齐</td></tr>
-          <tr><td class="key">阈值</td><td><code>is_fast</code>、<code>needs_rewrite</code>、第二级置信度、快思考置信度</td><td>在 val 上标定，随判据版本发布</td></tr>
+          <tr><td class="key">快思考能力清单</td><td>快思考覆盖的范围和明确不管的类型。第一级判据从它生成</td><td>快思考团队</td></tr>
+          <tr><td class="key">快思考输入输出</td><td>输入 query 和上一轮；输出 domain、意图、槽位、置信度、拒识标记</td><td>快思考团队</td></tr>
+          <tr><td class="key">大脑的能力清单</td><td>每个能力的说明、输入输出和失败返回；新增能力只改这里</td><td>各能力负责人，大脑团队汇总</td></tr>
+          <tr><td class="key">会话协议</td><td>大脑每轮返回继续、挂起、结束之一；超时、轮数上限、退出词由代码兜底</td><td>大脑团队</td></tr>
+          <tr><td class="key">第一级判据和纠错题</td><td><code>is_fast</code>、<code>needs_rewrite</code> 的说明和例句；纠错题的描述、正反例、回放报告、启用状态</td><td>分流团队</td></tr>
         </tbody>
       </table>
     </div>
-    <p>快思考新增 domain 时，只要不改变它和 agent 的边界，第一级判据和第二级判据都不用动。新增一个 Agent 时，只改第二级判据，以及在第一级“不交给快思考”里补一行。</p>
   </section>
 
   <section>
-    <h2>评测怎么做</h2>
-    <p>现有的 13,662 条评测集不用重标。“语义”sheet 的句子就是第一级的“交给快思考”，“大模型agent”sheet 的句子是“不交给快思考”，第二级的标准答案就是原来的 label。</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>评测</th><th>看什么</th><th>现有参考</th></tr></thead>
-        <tbody>
-          <tr><td class="key">第一级</td><td>该走 Agent 却交给快思考的比例；该走快思考却送到第二级的比例；按阈值画曲线</td><td>v0.5 判据在 409 条 dev 上的 28 选 1 结果里，跨快思考和 Agent 边界的错误有 4 条，约 1%。这是从 28 选 1 折算的，第一级要单独测</td></tr>
-          <tr><td class="key">第二级</td><td>只用 agent 侧样本，5 个选项的准确率和混淆，以及落到 Agent 大脑的比例</td><td>原来 12 个 label 里最难分的几对（闲聊和影视、音乐和多媒体、复杂导航和导航）现在大多都归大脑，预计准确率会明显上升</td></tr>
-          <tr><td class="key">快思考拒识</td><td>把 agent 侧样本送给快思考，统计拒识率和低置信率</td><td>快思考已有拒识能力，召回率还没有在这批数据上测过</td></tr>
-          <tr><td class="key">模糊指代</td><td><code>needs_rewrite</code> 的准确率；改写后快思考的理解正确率</td><td>现有评测集里基本没有这类样本，要从线上日志补：地图搜索无结果、快思考槽位里出现俗称的句子</td></tr>
-          <tr><td class="key">Agent 大脑</td><td>任务完成率、调用了哪些能力、轮数和耗时</td><td>测试集里中枢复杂多任务只有 186 条，而且只有单句。需要另建多轮场景集，覆盖跨能力的任务</td></tr>
-          <tr><td class="key">会话放手</td><td>多轮任务中途插入一句无关指令，Agent 是否正确返回“不归我”；正常的后续轮次是否被误放手</td><td>现有 574 条多轮样本全是闲聊追问，没有复杂任务的多轮对话，需要补</td></tr>
-          <tr><td class="key">端到端</td><td>第一级、快思考、第二级串起来后，每句最终去向是否正确</td><td>需要快思考的输出接口</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-    <section>
     <h2>待确认</h2>
     <ul class="plain">
-      <li><strong>快思考上下文消解的范围。</strong>本文假设“再高一点”“换成第二个”“那到公司呢”这类都能处理，不在范围内的类型需要列出来，归到改写。</li>
-      <li><strong>改写的延迟上限。</strong>改写用 DeepSeek V4 Flash，它在快思考链路上串行，直接影响这部分句子的响应时间，需要实测。</li>
-      <li><strong>模糊指代的样本。</strong>需要从线上日志收集一批，才能写 <code>needs_rewrite</code> 的判据并标定阈值。</li>
-      <li><strong>第二级要不要“退回快思考”选项。</strong>本文默认要；去掉的话第二级判据更纯，但第一级送错的句子回不到快思考。</li>
-      <li><strong>“条件任务”下 128 行纯提醒。</strong>提醒归快思考，条件任务归第二级，这件事现在决定句子走哪一级，需要先定口径。</li>
-      <li><strong>会话占用的超时时长、轮数上限和退出词清单。</strong>重新唤醒时会话保留还是释放，本文暂按保留写。</li>
-      <li><strong>各能力给大脑的接口约定。</strong>快思考、导航、空调、多媒体、美团、用车 Agent 和联网搜索各自的说明、输入输出和失败返回。</li>
-      <li><strong>联网搜索 Agent 接入前怎么落地。</strong>现在只出标签；上线前判为联网搜索的句子暂时交给 Agent 大脑兜底。</li>
-      <li><strong>Agent 大脑和联网搜索 Agent 的界线。</strong>查股价、天气、限行这类原来标为闲聊的实时问题，交给大脑（大脑可调用搜索）还是直接给联网搜索 Agent。</li>
-      <li><strong>Agent 大脑的延迟预算。</strong>多 Agent 编排比直达慢得多，需要定首句响应的上限，以及中间过程怎么播报。</li>
-      <li><strong>挂起后恢复时怎么提示用户。</strong>需要和 Agent 大脑、美团 Agent、导航 Agent 的负责人对齐。</li>
-      <li><strong>线上交给快思考的比例 p、模糊指代比例 r。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
+      <li><strong>家或某地点到某地点有多远、多久，归快思考还是大脑。</strong>原标注算 naviControl（快思考），判据写的是去具体地名要多久归大脑，两边冲突。</li>
+      <li><strong>“到时候提醒我做某事”归快思考还是大脑。</strong>原标注里有一批这样的句子标为条件任务。</li>
+      <li><strong>is_fast 阈值。</strong>val 上 0.7 最好；如果更在意“该去大脑却给了快思考”，可以提高到 0.8，代价是更多句子绕道大脑。</li>
+      <li><strong>大脑的时延预算。</strong>大脑至少两轮模型调用，需要定首句响应上限和中间过程怎么播报。</li>
+      <li><strong>大脑的评测集。</strong>测试集衡量的是分流，衡量不了大脑；需要另建多轮场景集，看任务完成率、调用了哪些能力和耗时。</li>
+      <li><strong>模糊指代的线上样本。</strong>用来标定 <code>needs_rewrite</code> 的阈值。</li>
     </ul>
   </section>
 </div>
