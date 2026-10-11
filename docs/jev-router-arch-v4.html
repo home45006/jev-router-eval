@@ -104,7 +104,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
     <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 6 版 · 2026-10-11 · 精确匹配表改为自定义规则引擎，用来快速修复分流错误。快思考有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
+    <div class="meta">第 7 版 · 2026-10-11 · 去掉前置的代码匹配环节，先验证 Jev ＋ 大模型能做到什么程度。快思考有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
   </header>
 
   <section>
@@ -115,7 +115,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <tbody>
           <tr><td class="key">Jev 判几次</td><td>一次请求，28 个标签选一个</td><td>第一级只判“是否交给快思考”；不交的再过第二级，12 个 label 选一个</td></tr>
           <tr><td class="key">NLU 的 domain 由谁定</td><td>Jev 输出 16 个 domain 之一</td><td>快思考模型自己理解，Jev 不再输出 domain</td></tr>
-          <tr><td class="key">最前面的代码环节</td><td>标准说法精确匹配表，命中直接出 domain</td><td>自定义规则引擎：正则、关键词加上下文条件，命中就直接指定去向。用来热修复分流错误，不发版就能生效</td></tr>
           <tr><td class="key">判据怎么分工</td><td>一份判据同时写 domain 之间和 domain 与 agent 之间的边界</td><td>第一级只写“快思考管什么、不管什么”；第二级只写 12 个 agent label 之间的边界</td></tr>
           <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>拆分后每条直接交给快思考，不再过 Jev</td></tr>
           <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>快思考拒识或低置信，升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
@@ -138,7 +137,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <span><i class="dash" style="--c:var(--c-warn)"></i>兜底升级</span>
     </div>
     <figure class="diagram">
-      <svg viewBox="0 0 960 874" role="img" aria-label="前置分流流程图：输入先过自定义规则引擎，命中按规则指定的去向走；未命中由 Jev 第一级判断是否交给快思考、是否需要改写模糊指代；需要改写的先由大模型改写再交给快思考；不交给快思考的由 Jev 第二级判断 agent label，再按 label 分发">
+      <svg viewBox="0 0 960 874" role="img" aria-label="前置分流流程图：输入由 Jev 第一级判断是否交给快思考、是否需要改写模糊指代；需要改写的先由大模型改写再交给快思考；不交给快思考的由 Jev 第二级判断 agent label，再按 label 分发">
         <defs>
           <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead" d="M0,0 L10,5 L0,10 z"/></marker>
           <marker id="ahu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead-up" d="M0,0 L10,5 L0,10 z"/></marker>
@@ -147,15 +146,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <rect class="box b-code" x="40" y="16" width="360" height="58" rx="8"/>
         <text class="t-title" x="60" y="42">query ＋ 上一轮内容和标签 ＋ 播放状态</text>
         <text class="t-sub" x="60" y="62">已经过 ASR，带车辆和媒体上下文</text>
-
-        <path class="edge" d="M220 74 V100" marker-end="url(#ah)"/>
-        <rect class="box b-code" x="40" y="102" width="360" height="62" rx="8"/>
-        <text class="t-who w-code" x="60" y="122">代码 · 配置热更新</text>
-        <text class="t-title" x="60" y="144">自定义规则引擎</text>
-        <text class="t-sub" x="182" y="144">正则、关键词 ＋ 上下文条件</text>
-        <path class="edge" d="M400 133 H578" marker-end="url(#ah)"/>
-        <text class="t-edge" x="414" y="125">命中快思考规则，不调 Jev</text>
-        <path class="edge" d="M40 150 H24 V689 H38" marker-end="url(#ah)"/>
 
         <rect class="box b-fast" x="580" y="102" width="340" height="270" rx="8"/>
         <text class="t-who w-fast" x="600" y="124">快思考模型 · 千问 8B 微调</text>
@@ -169,8 +159,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <text class="t-sub" x="600" y="318">· 第二级判为“退回快思考”的句子</text>
         <text class="t-sub" x="600" y="340">· 中枢简单任务拆出的每一条指令</text>
 
-        <path class="edge" d="M220 164 V196" marker-end="url(#ah)"/>
-        <text class="t-edge" x="232" y="186">未命中</text>
+        <path class="edge" d="M220 74 V196" marker-end="url(#ah)"/>
         <rect class="box b-jev" x="40" y="198" width="360" height="112" rx="8"/>
         <text class="t-who w-jev" x="60" y="220">Jev 第一级 · 每句一次，三问并行</text>
         <text class="t-title" x="60" y="244">is_fast · Noul 交给快思考吗</text>
@@ -220,7 +209,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <rect class="box b-code" x="40" y="658" width="360" height="62" rx="8"/>
         <text class="t-who w-code" x="60" y="678">代码</text>
         <text class="t-title" x="60" y="702">按 label 和置信度分发</text>
-        <text class="t-sub" x="232" y="702">含规则直接指定的 label</text>
 
         <path class="edge" d="M220 720 V744"/>
         <path class="edge" d="M99 744 H852"/>
@@ -256,7 +244,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <text class="t-sub" x="770" y="836">低置信也走这里</text>
       </svg>
     </figure>
-    <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考，包括“再高一点”这类上下文追问。只有带模糊指代的句子多调一次大模型改写，只有不归快思考的句子才走第二级。命中规则的句子连第一级都不经过：指定快思考的直接交给快思考，指定 agent label 或闲聊的沿左侧连线直接分发。</p>
+    <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考，包括“再高一点”这类上下文追问。只有带模糊指代的句子多调一次大模型改写，只有不归快思考的句子才走第二级。</p>
   </section>
 
     <section>
@@ -265,7 +253,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <table>
         <thead><tr><th>环节</th><th>谁来做</th><th>输入</th><th>输出</th><th>只负责</th></tr></thead>
         <tbody>
-          <tr><td class="key"><span class="tag" style="--c:var(--line-strong)">规则引擎</span></td><td>代码，配置热更新</td><td>归一化后的 query、上一轮、播放状态</td><td>去向：快思考，或某个 label</td><td>已知分错的句式，在判据或模型修好之前强制落到正确去向</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--accent)">Jev 第一级</span></td><td>Jev，三个 Noul</td><td>query、上一轮、播放状态</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code> 三个概率</td><td>快思考和非快思考的边界；有没有模糊指代；是否追问</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">大模型改写</span></td><td>通用大模型</td><td>query、上一轮</td><td>把模糊指代换成标准名称后的一句话</td><td>只处理要交给快思考、又带模糊指代的句子</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考模型</span></td><td>千问 8B 微调</td><td>query（或改写后的句子）、上一轮</td><td>domain、意图、槽位、置信度、拒识标记</td><td>语音 NLU 的全部理解，包括 domain 之间的边界和上下文指代</td></tr>
@@ -279,7 +266,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <section>
     <h2>代码里的决策顺序</h2>
     <ol class="steps">
-      <li><strong>过规则引擎。</strong>按优先级逐条匹配，第一条命中的规则决定去向：指定快思考的直接交给快思考（仍由快思考理解，拒识照样升级），指定 label 的直接分发，都不调 Jev。没有命中的继续往下。</li>
       <li><strong>调第一级 Jev。</strong>一次请求并行问 <code>is_fast</code> 和 <code>needs_rewrite</code>，有上一轮时同时问 <code>is_followup</code>。</li>
       <li><strong>判断闲聊追问。</strong>上一轮是闲聊，且 <code>is_followup</code> 达到阈值，输出闲聊，不看其他两个问题。</li>
       <li><strong>判断是否交给快思考。</strong><code>is_fast</code> 达到阈值：<code>needs_rewrite</code> 也达到阈值的，先调大模型把模糊指代改写成标准名称，再交给快思考；否则直接交给快思考，连同上一轮一起，上下文指代（“再高一点”“换成第二个”）由快思考自己消解。</li>
@@ -289,52 +275,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     </ol>
   </section>
 
-  <section>
-    <h2>自定义规则引擎</h2>
-    <p>Jev 判据和快思考模型的修正都要经过改判据或训练、评测、发版，周期以天或周计。线上发现一类句子分错了，规则引擎可以在判据修好之前，先用一条规则让这类句子落到正确的去向，配置下发后几分钟内生效。规则是补丁，不是第二套分类器。</p>
-
-    <h3>一条规则包含什么</h3>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>字段</th><th>说明</th></tr></thead>
-        <tbody>
-          <tr><td class="key">匹配</td><td>完全相等、正则、关键词组合三选一，在归一化后的 query 上匹配（去唤醒词、标点、空格，全角转半角，数字写法统一）</td></tr>
-          <tr><td class="key">排除</td><td>出现就不命中的词或正则。“打开空调”规则要排除“是不是坏了”“怎么用”这类问句</td></tr>
-          <tr><td class="key">上下文条件</td><td>默认只在没有上一轮、或上一轮不是闲聊时生效，避免截走闲聊追问。可以按上一轮 label、播放状态加条件</td></tr>
-          <tr><td class="key">去向</td><td>快思考，或 12 个 label 之一（含闲聊、中枢复杂多任务）。不能指定“改写”，模糊指代仍交给第一级判断</td></tr>
-          <tr><td class="key">优先级</td><td>数字越小越先匹配，第一条命中即停。窄规则排在宽规则前面</td></tr>
-          <tr><td class="key">正例、反例</td><td>每条规则至少附几条应当命中和不应命中的句子，没有就不能上线</td></tr>
-          <tr><td class="key">来源和期限</td><td>对应的 bug 单、负责人、复查日期</td></tr>
-          <tr><td class="key">状态</td><td>灰度（只记录命中、不改变去向）、全量、下线</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3>例子</h3>
-    <p class="note">下面的句子都取自本项目 dev 评测中 Jev 判错过的样本，规则是为说明写法而拟的。</p>
-    <div class="scroll">
-      <table>
-        <thead><tr><th>判错的句子</th><th>匹配</th><th>排除</th><th>去向</th></tr></thead>
-        <tbody>
-          <tr><td class="ex">打开钥匙关闭背门（功能名里带“打开”“关闭”，被当成两条指令）</td><td><code>^打开钥匙关闭背门$</code></td><td>—</td><td><span class="tag" style="--c:var(--c-fast)">快思考</span></td></tr>
-          <tr><td class="ex">车窗还好吗；室外灯的读数给我看一下（被当成状态查询指令）</td><td><code>(还好吗|正常吗|读数|什么状态)</code></td><td><code>胎压</code></td><td><span class="tag" style="--c:var(--c-agent)">用车agent</span></td></tr>
-          <tr><td class="ex">当车辆偏离车道时发出警报音（被当成车控指令）</td><td><code>^(当|每当).{1,20}(时|的时候)</code></td><td><code>(今天|明天|这次|等会)</code></td><td><span class="tag" style="--c:var(--c-agent)">任务大师</span></td></tr>
-          <tr><td class="ex">今天高速公路是否有大面积拥堵（被当成导航路况查询）</td><td><code>(全国|高速公路).{0,8}(拥堵|堵)</code></td><td><code>(到|去|回家|公司)</code></td><td><span class="tag" style="--c:var(--c-chat)">闲聊</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h3>防止规则误伤</h3>
-    <ul class="plain">
-      <li><strong>上线前跑回放。</strong>新规则提交后，自动把 13,662 条评测集和累积的回归集全部过一遍，报告它会截走多少句、其中多少句的标准答案和规则去向不一致。有不一致的必须逐条确认或收窄规则才能合入。</li>
-      <li><strong>先灰度。</strong>灰度状态只记录命中、不改变去向，看一两天线上命中的句子，确认没有误伤再转全量。</li>
-      <li><strong>命中可追溯。</strong>每次命中都记下规则编号，抽样复核；某条规则的命中量突然变化要报警。</li>
-      <li><strong>不绕过快思考的拒识。</strong>规则指定快思考的句子，快思考拒识或低置信时照常升级到第二级。</li>
-    </ul>
-
-    <h3>规则要退场</h3>
-    <p>每条规则对应一个已知错误。修复同步进入下一版 Jev 判据或下一版快思考的训练数据；新版本在评测中确认这类句子已经判对，就下线这条规则。超过复查日期还在、或长期零命中的规则要复查。目标是规则数量保持在几十条的量级，而不是越积越多。</p>
-  </section>
 
   <section>
     <h2>第一级判据怎么写</h2>
@@ -398,7 +338,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
 
     <section>
     <h2>调用量和成本</h2>
-    <p>设线上没有命中规则的句子里，比例为 <em>p</em> 的句子交给快思考，其中比例为 <em>r</em> 的带模糊指代需要改写。第一级每句都调，第二级只有其余的句子调：</p>
+    <p>设线上的句子里，比例为 <em>p</em> 的句子交给快思考，其中比例为 <em>r</em> 的带模糊指代需要改写。第一级每句都调，第二级只有其余的句子调：</p>
     <div class="formula">每句平均 Jev 输入 token ＝ T₁ ＋ (1 − p) × T₂　　每句平均 Jev 调用次数 ＝ 1 ＋ (1 − p)　　每句平均改写调用 ＝ p × r</div>
     <p class="note">T₁：第一级请求，三个 Noul，判据约为快思考范围、边界清单和模糊指代正反例，估 2,800 token。T₂：第二级请求，12 个 label，按 v0.5 判据中 agent 选项所占篇幅折算，估 4,000 token。第 3 版的实测值为每句一次请求、平均 7,882 token。改写调用的是通用大模型，不计入 Jev。</p>
     <div class="scroll">
@@ -413,7 +353,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         </tbody>
       </table>
     </div>
-    <p>省下来的是 <strong>token</strong>，不是调用次数。第一级每句都要调一次，不走快思考的句子还要调第二次，所以调用次数比第 3 版略多。如果 Jev 按 token 计费，这个架构省一半左右；如果按次数计费，规则引擎能省一部分，但规则的目的是修错，不是省钱，不建议为了省调用而大量加规则。</p>
+    <p>省下来的是 <strong>token</strong>，不是调用次数。第一级每句都要调一次，不走快思考的句子还要调第二次，所以调用次数比第 3 版略多。如果 Jev 按 token 计费，这个架构省一半左右；如果按次数计费，会比第 3 版略贵。</p>
     <p class="note">延迟参考：评测中 409 条请求在 8 路并发下约 6 秒跑完，单次约 0.1 秒。这是 GitHub 美国机房测得的，车端链路需要另测。走第二级的句子要串行调两次 Jev；带模糊指代的句子多一次大模型改写，这是延迟最长的一段，<em>r</em> 需要从线上日志统计。</p>
   </section>
 
@@ -436,7 +376,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key">快思考能力清单</td><td>快思考覆盖的 domain 和说法范围，以及明确不管的类型。第一级判据从它生成</td><td>快思考团队</td></tr>
           <tr><td class="key">快思考输入输出</td><td>输入 query 和上一轮（query、domain、槽位）；输出 domain、意图、槽位、置信度、拒识标记。拒识和置信度是兜底升级的依据</td><td>快思考团队</td></tr>
           <tr><td class="key">改写约定</td><td>只把模糊指代换成标准名称，其余字词不动；还原不了就原样返回并标记失败，失败的句子直接升级到第二级</td><td>分流团队</td></tr>
-          <tr><td class="key">规则库</td><td>规则配置、正例反例、回放报告、命中日志。改动走评审，上线前必须回放</td><td>分流团队，线上问题值班可提交</td></tr>
           <tr><td class="key">第一级判据</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code> 三个问题的说明和例句</td><td>分流团队</td></tr>
           <tr><td class="key">第二级判据</td><td>12 个 agent label 和“退回快思考”的说明、不包含什么、例句</td><td>分流团队，和各 Agent 负责人对齐</td></tr>
           <tr><td class="key">阈值</td><td><code>is_fast</code>、<code>needs_rewrite</code>、<code>is_followup</code>、第二级置信度、快思考置信度</td><td>在 val 上标定，随判据版本发布</td></tr>
@@ -468,14 +407,12 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <ul class="plain">
       <li><strong>快思考能否直接处理一句话里的多条指令。</strong>能的话，多条直接指令可以在第一级就交给快思考，省掉第二级和拆分；不能的话按本文设计，走中枢简单任务拆分。</li>
       <li><strong>快思考上下文消解的范围。</strong>本文假设“再高一点”“换成第二个”“那到公司呢”这类都能处理，不在范围内的类型需要列出来，归到改写。</li>
-      <li><strong>改写用哪个大模型，延迟上限是多少。</strong>它在快思考链路上串行，直接影响这部分句子的响应时间。</li>
+      <li><strong>改写的延迟上限。</strong>改写用 DeepSeek V4 Flash，它在快思考链路上串行，直接影响这部分句子的响应时间，需要实测。</li>
       <li><strong>模糊指代的样本。</strong>需要从线上日志收集一批，才能写 <code>needs_rewrite</code> 的判据并标定阈值。</li>
-      <li><strong>规则指定快思考时，能否顺带给快思考一个 domain 提示。</strong>能的话，规则也可以修快思考自己的 domain 错误；不能的话，规则只管分流，domain 错误仍要靠快思考迭代。</li>
-      <li><strong>规则配置怎么下发。</strong>云端配置中心热更新，还是随车端版本发布；车端离线时用哪个版本的规则。</li>
       <li><strong>第二级要不要“退回快思考”选项。</strong>本文默认要；去掉的话第二级判据更纯，但第一级送错的句子回不到快思考。</li>
       <li><strong>“条件任务”下 128 行纯提醒。</strong>提醒归快思考，条件任务归第二级，这件事现在决定句子走哪一级，需要先定口径。</li>
       <li><strong>闲聊和影视 agent 的界线。</strong>原标注不一致，只影响第二级。</li>
-      <li><strong>线上交给快思考的比例 p、模糊指代比例 r、规则命中率。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
+      <li><strong>线上交给快思考的比例 p、模糊指代比例 r。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
     </ul>
   </section>
 </div>
