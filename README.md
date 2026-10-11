@@ -37,6 +37,7 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 | `eval_jev.py` | 评测脚本：准确率、各标签召回/精确、混淆、置信度阈值、多指令和追问诊断 |
 | `build_dataset.py` | 从测试集 xlsx 生成 `eval_set.jsonl` 和 `待确认改标.csv` |
 | `eval_two_stage.py` | 前置分流评测。默认第 14 版：第一级 is_fast / needs_rewrite 加 Jev 纠错题，报告去向准确率和纠错题回放；`--stages s1,s2` 复现第 13 版两级分流。推送 eval/* 分支时在 `eval-request.env` 里设 `EVAL_SCRIPT=eval_two_stage.py` |
+| `webdemo/` | 可视化演示系统：输入一句话看全链路判断、大脑能力标签和每一步耗时，支持多轮会话、批量验证和耗时统计。运行方法见 `webdemo/README.md` |
 | `rewrite_check.py` | 用 DeepSeek 改写模糊指代，检查 `fixtures/fuzzy_refs.jsonl`；推送 eval/* 分支时在 `eval-request.env` 里设 `REWRITE_CHECK=1` |
 | `make_criteria_v2.py` | 生成两级判据 `criteria_v2.json` |
 | `fixtures/fuzzy_refs.jsonl` | 人工构造的 20 条模糊指代样本，用来测 needs_rewrite |

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>座舱分流演示</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%232a78d6%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>座舱前置分流演示</h1>
+    <span class="sub">Jev 第一级 → 快思考 / Agent 大脑 · 第 14 版</span>
+  </div>
+  <div class="backends" id="backends"></div>
+  <button class="ghost" id="themeBtn" title="切换深浅色">深浅色</button>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="single" class="on">单句与多轮</button>
+  <button role="tab" data-tab="batch">批量验证</button>
+  <button role="tab" data-tab="latency">耗时统计</button>
+  <button role="tab" data-tab="settings">设置与判据</button>
+</nav>
+
+<main>
+  <!-- 单句与多轮 -->
+  <section id="tab-single" class="tab on">
+    <div class="composer">
+      <div class="session-bar">
+        <span>会话 <code id="sid"></code></span>
+        <span id="occupy" class="pill muted">没有进行中的会话</span>
+        <span class="spacer"></span>
+        <label class="inline"><input type="radio" name="mode" value="label" checked> 标签模式</label>
+        <label class="inline"><input type="radio" name="mode" value="orchestrate"> 编排模式</label>
+        <button class="ghost" id="resetBtn">新会话</button>
+      </div>
+      <form id="askForm" class="ask">
+        <input id="q" autocomplete="off" placeholder="输入一句车内语音，例如：导航到大裤衩">
+        <button type="submit" id="askBtn">发送</button>
+      </form>
+      <div class="chips" id="chips"></div>
+      <div class="chips dialogs" id="dialogs"></div>
+    </div>
+    <div id="turns" class="turns"></div>
+    <p class="empty" id="emptyHint">输入一句话或点上面的示例。每一轮都会展示会话检查、Jev 判断、分流决策、改写、快思考、Agent 大脑和每一步的耗时。</p>
+  </section>
+
+  <!-- 批量验证 -->
+  <section id="tab-batch" class="tab">
+    <div class="card">
+      <div class="row wrap">
+        <label>样本来源
+          <select id="batchSource"></select>
+        </label>
+        <label>并发 <input id="batchConc" type="number" min="1" max="8" value="4" class="num-in"></label>
+        <label class="inline"><input type="checkbox" id="onlyWrong"> 只看错误</label>
+        <span class="spacer"></span>
+        <button id="batchBtn">开始批量验证</button>
+      </div>
+      <textarea id="batchCustom" class="hidden" rows="6" placeholder="每行一句：句子&#9;应去（快思考 / Agent大脑）&#9;应有标签（多个用逗号分隔，可省略）"></textarea>
+      <div class="progress"><div id="batchBar"></div></div>
+      <p class="hint" id="batchNote"></p>
+    </div>
+    <div class="tiles" id="batchTiles"></div>
+    <div class="card" id="perLabelCard" hidden>
+      <h3>按应有标签统计</h3>
+      <div class="scroll"><table id="perLabel"></table></div>
+    </div>
+    <div class="card">
+      <div class="scroll"><table id="batchTable" class="data"></table></div>
+    </div>
+  </section>
+
+  <!-- 耗时统计 -->
+  <section id="tab-latency" class="tab">
+    <p class="hint">统计本页面里跑过的所有请求（单句和批量）。每个点是一次调用，竖线是中位数。</p>
+    <div class="card"><div id="strip" class="scroll"></div></div>
+    <div class="card"><div class="scroll"><table id="latTable" class="data"></table></div></div>
+  </section>
+
+  <!-- 设置与判据 -->
+  <section id="tab-settings" class="tab">
+    <div class="grid2">
+      <div class="card">
+        <h3>阈值</h3>
+        <div id="thresholds"></div>
+        <h3>Jev 纠错题</h3>
+        <p class="hint">off：不问；shadow：问但只记录命中；on：命中后按指定去向走。</p>
+        <div id="corrSettings"></div>
+        <h3>其他</h3>
+        <label class="inline"><input type="checkbox" id="simReject"> 模拟快思考拒识（演示拒识后转大脑）</label>
+        <label class="block">编排模式最多推理轮数 <input id="maxIters" type="number" min="1" max="10" class="num-in"></label>
+        <button class="ghost" id="restoreBtn">恢复默认</button>
+      </div>
+      <div class="card">
+        <h3>服务与判据</h3>
+        <div id="backendInfo"></div>
+        <h3>第一级问题</h3>
+        <div id="stage1Info"></div>
+        <h3>大脑下挂的能力</h3>
+        <div id="abilityInfo"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

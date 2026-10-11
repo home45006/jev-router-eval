@@ -55,6 +55,10 @@ jobs:
           cd .claude/skills/agentscope-cockpit
           python examples/brain_demo.py --offline
           python examples/jev_router.py --offline "导航到大裤衩"
+      - name: 演示系统模拟模式跑通（webdemo）
+        run: |
+          pip install -r webdemo/requirements.txt
+          python -m webdemo.check_mock
       - name: 冒烟集与 criteria 一致
         run: |
           cp fixtures/smoke_set.jsonl /tmp/smoke_before.jsonl
@@ -98,7 +102,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -a; . ./eval-request.env; set +a
-          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
+          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK WEBDEMO_CHECK SKIP_EVAL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
       - name: 检查密钥
         run: |
           if [ -z "$TYPESAFE_API_KEY" ]; then
@@ -117,11 +121,13 @@ jobs:
             echo "SPLIT=dev" >> "$GITHUB_ENV"
           fi
       - name: 连通性：先跑 1 条
+        if: env.SKIP_EVAL != '1'
         run: |
           head -1 "$DATA" > /tmp/ping.jsonl
           python eval_jev.py --data /tmp/ping.jsonl --split all --model "$MODEL" --concurrency 1 --out runs/ping | tail -20
           test -s runs/ping/predictions.jsonl || { echo "::error::Jev 一条都没有返回，见上方日志"; exit 1; }
       - name: 评测
+        if: env.SKIP_EVAL != '1'
         run: |
           OUT="runs/${DATASET}-${SPLIT}-pl${PER_LABEL}"
           echo "OUT=$OUT" >> "$GITHUB_ENV"
@@ -135,6 +141,12 @@ jobs:
           pip install openai
           python rewrite_check.py --out runs/rewrite
           cat runs/rewrite/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 演示系统真实调用检查（WEBDEMO_CHECK=1 时）
+        if: env.WEBDEMO_CHECK == '1'
+        run: |
+          pip install -r webdemo/requirements.txt
+          python -m webdemo.check_real
+          cat runs/webdemo/report.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
