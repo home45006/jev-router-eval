@@ -104,7 +104,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <div class="eyebrow">智能座舱语音交互 · 前置分流</div>
     <h1>Jev 前置分流架构</h1>
     <p class="lede">快思考模型已经覆盖语音 NLU 的全部理解，Jev 不再判断 NLU 的 domain。Jev 先回答：这句话该不该交给快思考？要不要先把模糊指代改写成标准说法？交给快思考的到此为止；剩下的再由第二级 Jev 判断去哪个 Agent。两级判据各管一件事，可以分开开发和评测。</p>
-    <div class="meta">第 8 版 · 2026-10-11 · 新增会话占用：多轮任务进行中，后续轮次直接交给占用会话的 Agent，不再过 Jev。快思考有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
+    <div class="meta">第 8 版 · 2026-10-11 · 新增会话占用：美团 Agent、复杂导航 Agent 的多轮任务进行中，后续轮次直接交给它们，不再过 Jev。快思考有拒识，能消解上下文指代，不能还原模糊指代。成本和 token 数字中标“估”的是估算，其余为实测</div>
   </header>
 
   <section>
@@ -118,7 +118,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <tr><td class="key">判据怎么分工</td><td>一份判据同时写 domain 之间和 domain 与 agent 之间的边界</td><td>第一级只写“快思考管什么、不管什么”；第二级只写 12 个 agent label 之间的边界</td></tr>
           <tr><td class="key">多条直接指令</td><td>中枢简单任务拆分后，每条再过一次 Jev</td><td>拆分后每条直接交给快思考，不再过 Jev</td></tr>
           <tr><td class="key">快思考理解失败</td><td>升级到慢思考</td><td>快思考拒识或低置信，升级到第二级 Jev，由它决定去哪个 Agent</td></tr>
-          <tr><td class="key">多轮任务</td><td>每一轮都重新判断</td><td>会话占用：中枢复杂多任务等多轮 Agent 接管后，后续轮次直接交给它，由它判断这句是否归自己</td></tr>
+          <tr><td class="key">多轮任务</td><td>每一轮都重新判断</td><td>会话占用：美团 Agent、复杂导航 Agent 接管后，后续轮次直接交给它，由它判断这句是否归自己</td></tr>
           <tr><td class="key">指代和改写</td><td>追问一律改写：槽位继承优先，其余调大模型</td><td>上下文指代交给快思考自己消解；只有模糊指代（“导航到大裤衩”）才调大模型改写</td></tr>
           <tr><td class="key">代价</td><td>—</td><td>domain 和 agent 的联合判断拆开后，边界上的少数句子会多绕一步；不走快思考的句子要调两次 Jev</td></tr>
         </tbody>
@@ -236,7 +236,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <rect class="box b-agent" x="12" y="768" width="174" height="90" rx="8"/>
         <text class="t-who w-agent" x="26" y="790">Agent 直达</text>
         <text class="t-title" x="26" y="814">9 个 agent label</text>
-        <text class="t-sub" x="26" y="836">多轮的开启会话</text>
+        <text class="t-sub" x="26" y="836">复杂导航开启会话</text>
 
         <rect class="box b-fast" x="198" y="768" width="174" height="90" rx="8"/>
         <text class="t-who w-fast" x="212" y="790">拆分后逐条快思考</text>
@@ -256,7 +256,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <rect class="box b-slow" x="756" y="768" width="192" height="90" rx="8"/>
         <text class="t-who w-slow" x="770" y="790">慢思考编排</text>
         <text class="t-title" x="770" y="814">中枢复杂多任务</text>
-        <text class="t-sub" x="770" y="836">开启会话；低置信也走</text>
+        <text class="t-sub" x="770" y="836">美团 Agent 开启会话</text>
       </svg>
     </figure>
     <p class="note">大多数车控、媒体、导航指令只经过第一级 Jev 就交给快思考，包括“再高一点”这类上下文追问。只有带模糊指代的句子多调一次大模型改写，只有不归快思考的句子才走第二级。</p>
@@ -294,7 +294,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
 
   <section>
     <h2>会话占用</h2>
-    <p>中枢复杂多任务这类请求通常要和用户来回好几轮才能完成，比如用美团点外卖：选店、选菜、确认地址、下单。进入这类任务后，后续轮次如果每轮都重新过 Jev，既费调用，又容易判错：“要中辣的”“第二个”单看一句话，Jev 判断不了是在点外卖。所以第二级判出这类 label 后，由对应的 Agent 占用会话，后续轮次直接交给它。</p>
+    <p>点外卖、选目的地这类任务通常要和用户来回好几轮才能完成，比如用美团点外卖：选店、选菜、确认地址、下单。进入这类任务后，后续轮次如果每轮都重新过 Jev，既费调用，又容易判错：“要中辣的”“第二个”单看一句话，Jev 判断不了是在点外卖。所以这类任务开始后，由对应的 Agent 占用会话，后续轮次直接交给它。</p>
 
     <h3>Agent 每轮返回三种状态之一</h3>
     <div class="scroll">
@@ -319,7 +319,17 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     </ul>
 
     <h3>哪些 Agent 可以占用会话</h3>
-    <p>由各 Agent 在注册时声明，不限于中枢复杂多任务。复杂导航 agent 在几个候选地点里选一个、影视和音乐 agent 的“换一部”“就这个”，都适合占用会话。单轮就能完成的 Agent 不声明，每轮照常过 Jev。</p>
+    <p>由各 Agent 在注册时声明。目前声明的有两个：</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Agent</th><th>怎么进入</th><th>典型的多轮</th></tr></thead>
+        <tbody>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-slow)">美团 Agent</span></td><td>第二级判为中枢复杂多任务，慢思考编排调起美团 Agent，由美团 Agent 占用会话</td><td class="ex">附近有什么好吃的 → 第二家 → 要中辣的 → 地址用公司 → 下单</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">复杂导航 Agent</span></td><td>第二级判为复杂导航agent，直接调起，由它占用会话</td><td class="ex">找个顺路的加油站 → 第二个 → 有没有便宜点的 → 就去这个</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>其他 Agent 暂不占用会话，每轮照常过 Jev。影视、音乐 agent 的“换一部”“就这个”以后也可以声明。</p>
     <p class="note">闲聊现在用第一级的 <code>is_followup</code> 跟随上一轮。以后可以统一成会话占用：由闲聊链路自己判断这句是否还在聊，第一级就可以去掉 <code>is_followup</code> 这一问。</p>
   </section>
 
@@ -463,7 +473,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <li><strong>“条件任务”下 128 行纯提醒。</strong>提醒归快思考，条件任务归第二级，这件事现在决定句子走哪一级，需要先定口径。</li>
       <li><strong>闲聊和影视 agent 的界线。</strong>原标注不一致，只影响第二级。</li>
       <li><strong>会话占用的超时时长、轮数上限和退出词清单。</strong>重新唤醒时会话保留还是释放，本文暂按保留写。</li>
-      <li><strong>哪些 Agent 声明多轮。</strong>以及挂起后恢复时怎么提示用户，需要和各 Agent 负责人对齐。</li>
+      <li><strong>美团 Agent 怎么进入。</strong>本文按“第二级判为中枢复杂多任务，慢思考编排调起美团 Agent”写。如果点外卖要单独成为第二级的一个 label，需要补判据和评测样本。</li>
+      <li><strong>挂起后恢复时怎么提示用户。</strong>需要和美团 Agent、复杂导航 Agent 的负责人对齐。</li>
       <li><strong>线上交给快思考的比例 p、模糊指代比例 r。</strong>用线上日志统计后，替换上面成本表里的估算值。</li>
     </ul>
   </section>
