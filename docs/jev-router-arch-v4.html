@@ -367,22 +367,35 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
 
   <section>
     <h2>实测：第一级分得准不准</h2>
-    <p>第 14 版只有两个去向，所以第一级的准确率就是整条分流的准确率。下面是判据 v2.2 在 Jev 上的实测，样本按原 label 每类最多 20 条。val 没有参与改判据，更能代表实际水平。</p>
+    <p>第 14 版只有两个去向，所以第一级的准确率就是整条分流的准确率。下面是 2026-10-11 在 Jev 上的实测：完整 val 2,728 句、完整 dev 2,814 句，标注已按“已定口径”改过（日程提醒归条件任务或任务大师，说出出发地的两地距离归大脑），第一级判据 v2.4。</p>
     <div class="scroll">
       <table>
-        <thead><tr><th>is_fast 阈值</th><th class="num">val：该去大脑却给了快思考</th><th class="num">val：该给快思考却去了大脑</th><th class="num">val 准确率</th><th class="num">dev 准确率</th></tr></thead>
+        <thead><tr><th>is_fast 阈值</th><th class="num">val：该去大脑却给了快思考</th><th class="num">val：该给快思考却去了大脑</th><th class="num">val 准确率</th></tr></thead>
         <tbody>
-          <tr><td>0.5</td><td class="num">13.8%</td><td class="num">1.7%</td><td class="num">91.7%</td><td class="num">93.9%</td></tr>
-          <tr><td>0.7</td><td class="num">5.1%</td><td class="num">9.5%</td><td class="num"><strong>93.0%</strong></td><td class="num">96.6%</td></tr>
-          <tr><td>0.8</td><td class="num">2.3%</td><td class="num">22.9%</td><td class="num">88.5%</td><td class="num">94.6%</td></tr>
+          <tr><td>0.5</td><td class="num">224</td><td class="num">7</td><td class="num">91.5%</td></tr>
+          <tr><td>0.7</td><td class="num">89</td><td class="num">34</td><td class="num"><strong>95.5%</strong></td></tr>
+          <tr><td>0.8</td><td class="num">39</td><td class="num">101</td><td class="num">94.9%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>纠错题回放（is_fast 阈值 0.7，纠错题命中阈值 0.5）。第一轮写法在 val 上改错的比改对的多，按“上线前回放”的流程收窄描述后再回放；dev 没有参与写纠错题，最能说明对没见过的句子是否有效。</p>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>纠错题</th><th>val 第一轮</th><th>val 收窄后</th><th>dev 收窄后</th></tr></thead>
+        <tbody>
+          <tr><td>模式下自动执行 → 大脑（提示任务大师）</td><td class="num">改变 14：对 9、错 5</td><td class="num">改变 8：对 8、错 0</td><td class="num">改变 6：对 4、错 2</td></tr>
+          <tr><td>打开关闭冷门设置 → 快思考</td><td class="num">改变 70：对 14、错 56</td><td class="num">改变 14：对 13、错 1</td><td class="num">改变 14：对 13、错 1</td></tr>
+          <tr><td>两道都启用后的准确率</td><td class="num">95.5% → 94.3%</td><td class="num">95.5% → 96.3%</td><td class="num">95.9% → 96.5%</td></tr>
         </tbody>
       </table>
     </div>
     <ul class="plain">
-      <li><strong>Jev 每句只调一次，平均 1,720 token</strong>（第 3 版每句 7,882 token，少 78%）。</li>
+      <li><strong>Jev 每句只调一次。</strong>不带纠错题平均 1,720 token；带两道纠错题 2,483 token，每道题约多 380 token（第 3 版每句 7,882 token）。</li>
+      <li>第一轮的“冷门设置”题把多步指令（开座椅通风然后导航去…）和“如何关闭某功能”这类提问也当成了开关。收窄后要求整句只有一个开关动作，并排除问怎么开关。</li>
+      <li>两道题的例句和收窄用的反例都取自 val，所以 val 的数字偏乐观；dev 上同样是净改对，说明收窄后的写法能推广。两道题仍为 shadow，启用前还要在线上灰度。</li>
+      <li>val 上剩下的错误：问某个功能现在的状态（天窗当前状态是什么、语音助手是开启的吗）被交给快思考，最多；其次是还有几句两地距离（家到目的地还有多远）。前者可以作为下一道纠错题的候选。</li>
       <li>该去大脑却给了快思考的句子，快思考还能拒识兜底；该给快思考却去了大脑的句子，大脑可以调用快思考工具完成，只是更慢。</li>
-      <li>val 上剩下的错误主要是三类：“在某种模式下自动做某事”的规则；家或某地点到某地点有多远、多久；生僻的系统设置和页面开关。第一类和第三类适合用纠错题修；第二类已定口径（说出出发地的两地距离归大脑），标注和判据都已改。</li>
-      <li>模糊指代：人工构造的 20 条里，Jev 识别和 DeepSeek 改写全部正确，没有误改。样本是人工构造的，线上样本还要补。</li>
+      <li><strong>DeepSeek V4 Flash 非思考模式：</strong>模型 ID <code>deepseek-v4-flash</code> 可用（服务端返回 <code>deepseek-flash</code>），推理 token 为 0；改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房测得，车端另测）。人工构造的 20 条里 12 条模糊指代全部改对，8 条无指代的没有误改。</li>
     </ul>
   </section>
 
