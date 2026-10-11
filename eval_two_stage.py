@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""两级分流评测：Jev 第一级判是否交给快思考，第二级在 4 个独立 Agent、闲聊、Agent 大脑里选。
+"""两级分流评测：Jev 第一级判是否交给快思考，第二级在 4 个独立 Agent、Agent 大脑里选（闲聊归大脑）。
 
 每条样本发两次请求：
-    第一级  is_fast、needs_rewrite（Noul），有上一轮时加 is_followup
-    第二级  label（Choice，7 个选项，含“退回快思考”）
+    第一级  is_fast、needs_rewrite（Noul）
+    第二级  label（Choice，6 个选项，含“退回快思考”）
 线上第二级只问第一级没交给快思考的句子；评测时对所有样本都问，便于单独统计第二级，再离线按阈值组合出端到端结果。
 
 标准答案由评测集原来的 label 换算：
     16 个 NLU domain 和中枢简单任务 → 快思考
-    用车agent → 用车手册Agent；新闻agent → 联网搜索Agent；闲聊、任务大师、条件任务不变
-    音乐、影视、复杂导航、记忆、车控模糊意图、中枢复杂多任务 → Agent大脑
+    用车agent → 用车手册Agent；新闻agent → 联网搜索Agent；任务大师、条件任务不变
+    音乐、影视、复杂导航、记忆、车控模糊意图、中枢复杂多任务、闲聊 → Agent大脑
 
 常用：
     python eval_two_stage.py --split dev --per-label 20 --out runs/2stage-dev
@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent
 FAST = {"carControl", "windowControl", "systemControl", "music", "mediaControl", "generalControl", "video",
         "unicast", "naviControl", "navi", "autoPilot", "relaxCapsule", "carInfo", "scheduleReminder", "phone",
         "memoryRecord", "中枢简单任务"}
-STAGE2_OF = {"用车agent": "用车手册Agent", "新闻agent": "联网搜索Agent", "闲聊": "闲聊", "任务大师": "任务大师",
+STAGE2_OF = {"用车agent": "用车手册Agent", "新闻agent": "联网搜索Agent", "闲聊": "Agent大脑", "任务大师": "任务大师",
              "条件任务": "条件任务", "音乐agent": "Agent大脑", "影视agent": "Agent大脑", "复杂导航agent": "Agent大脑",
              "记忆agent": "Agent大脑", "车控agent模糊意图": "Agent大脑", "中枢复杂多任务": "Agent大脑"}
 BACK = "退回快思考"
@@ -41,10 +41,7 @@ def gold_of(it):
 
 def stage1_questions(crit, it, Noul):
     c = crit["stage1"]
-    q = {k: Noul(instructions=c[k]["instructions"], criteria=c[k]["criteria"]) for k in ("is_fast", "needs_rewrite")}
-    if it.get("prev_query"):
-        q["is_followup"] = Noul(instructions=c["is_followup"]["instructions"], criteria=c["is_followup"]["criteria"])
-    return q
+    return {k: Noul(instructions=c[k]["instructions"], criteria=c[k]["criteria"]) for k in c}
 
 
 def stage2_questions(crit, use_examples, Choice):
@@ -206,8 +203,6 @@ def report(args, crit, items, fixtures, n_err):
 
         # ---------- 端到端 ----------
         def dest(it, s1, s2, T):
-            if it.get("prev_label") == "闲聊" and s1.get("is_followup", 0) >= 0.5:
-                return "闲聊"
             if s1["is_fast"] >= T:
                 return "快思考"
             return "快思考" if s2["choice"] == BACK else s2["choice"]
