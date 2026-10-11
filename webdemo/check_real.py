@@ -36,7 +36,7 @@ def fmt(r):
     t = r["timing"]
     steps = "；".join(f"{s['name']} {s['end'] - s['start']:.0f}ms" for s in r["steps"])
     return (f"| {r['query']} | {r['destination']} | {'、'.join(r['labels'])} | {(r.get('brain') or {}).get('status', '-')} | "
-            f"{r['jev']['is_fast']:.2f} | {t['jev_ms']:.0f} | {t['llm_ms'] + t['agent_ms']:.0f} | {t['total_ms']:.0f} | {steps} |")
+            f"{(r.get('jev') or {}).get('is_fast', float('nan')):.2f} | {t['jev_ms']:.0f} | {t['llm_ms'] + t['agent_ms']:.0f} | {t['total_ms']:.0f} | {steps} |")
 
 
 def main():
