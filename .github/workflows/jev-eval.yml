@@ -43,6 +43,12 @@ jobs:
         run: |
           python make_criteria.py /tmp/criteria.json
           diff <(python -m json.tool criteria.json) <(python -m json.tool /tmp/criteria.json)
+      - name: criteria_v2.json 与生成脚本一致
+        run: |
+          python make_criteria_v2.py /tmp/criteria_v2.json
+          diff <(python -m json.tool criteria_v2.json) <(python -m json.tool /tmp/criteria_v2.json)
+      - name: 两级评测模拟模式跑通
+        run: python eval_two_stage.py --data fixtures/smoke_set.jsonl --split dev --mock --out runs/mock2
       - name: 冒烟集与 criteria 一致
         run: |
           cp fixtures/smoke_set.jsonl /tmp/smoke_before.jsonl
@@ -85,7 +91,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -a; . ./eval-request.env; set +a
-          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
+          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
       - name: 检查密钥
         run: |
           if [ -z "$TYPESAFE_API_KEY" ]; then
@@ -112,7 +118,7 @@ jobs:
         run: |
           OUT="runs/${DATASET}-${SPLIT}-pl${PER_LABEL}"
           echo "OUT=$OUT" >> "$GITHUB_ENV"
-          python eval_jev.py --data "$DATA" --split "$SPLIT" --per-label "$PER_LABEL" --model "$MODEL" $EXTRA_ARGS --out "$OUT"
+          python "${EVAL_SCRIPT:-eval_jev.py}" --data "$DATA" --split "$SPLIT" --per-label "$PER_LABEL" --model "$MODEL" $EXTRA_ARGS --out "$OUT"
       - name: 写入运行摘要
         if: always()
         run: test -f "$OUT/report.md" && cat "$OUT/report.md" >> "$GITHUB_STEP_SUMMARY" || true

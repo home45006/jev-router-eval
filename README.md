@@ -36,6 +36,9 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 | `criteria.json` | 给 Jev 的三个问题和 28 个选项的判据（由 `make_criteria.py` 生成，改判据请改脚本再重新生成） |
 | `eval_jev.py` | 评测脚本：准确率、各标签召回/精确、混淆、置信度阈值、多指令和追问诊断 |
 | `build_dataset.py` | 从测试集 xlsx 生成 `eval_set.jsonl` 和 `待确认改标.csv` |
+| `eval_two_stage.py` | 两级分流评测（第 12 版架构）：第一级 is_fast / needs_rewrite / is_followup，第二级 7 选 1；推送 eval/* 分支时在 `eval-request.env` 里设 `EVAL_SCRIPT=eval_two_stage.py` |
+| `make_criteria_v2.py` | 生成两级判据 `criteria_v2.json` |
+| `fixtures/fuzzy_refs.jsonl` | 人工构造的 20 条模糊指代样本，用来测 needs_rewrite |
 | `make_smoke_set.py` | 从判据例句生成 `fixtures/smoke_set.jsonl` |
 | `EVAL_PACKAGE.md` | 评测包 v0.4 原说明（标签规则、切分方式） |
 
