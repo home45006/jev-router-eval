@@ -6,7 +6,7 @@
 - 大模型agent sheet 输出 **label**（12 个，如 用车agent、条件任务、任务大师），走 Agent 直达
 - 闲聊会话里的追问一律跟随上一轮（代码规则，由 `is_followup` 触发）
 
-分流设计见 [`docs/jev-router-flow.html`](docs/jev-router-flow.html)（第 3 版）。
+分流架构见 [`docs/jev-router-arch-v4.html`](docs/jev-router-arch-v4.html)（第 4 版：Jev 先判是否交给快思考模型，其余再判 12 个 agent label）。第 3 版（28 个标签一次判完）保留在 [`docs/jev-router-flow.html`](docs/jev-router-flow.html)。
 
 ## 在云端跑（GitHub Actions）
 
