@@ -30,6 +30,9 @@ with TestClient(app) as c:
     turns = [last(c.post("/api/run", json={"query": q, "session_id": "d"}))
              for q in ["帮我点份外卖送到公司", "先把空调调低一点", "第二家，要中辣的"]]
     assert turns[0]["session"]["active"] and turns[1].get("suspended") and turns[2]["labels"] == ["美团"], turns
+    from .check_real import fmt
+    for x in turns:
+        fmt(x)                                   # 会话占用时没有 Jev 结果，报告格式也要能处理
     items = c.get("/api/samples").json()["builtin"]
     rows = [json.loads(l) for l in c.post("/api/batch", json={"items": items}).text.splitlines()]
     assert len(rows) == len(items) and not any("error" in x for x in rows)
