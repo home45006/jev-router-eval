@@ -38,7 +38,8 @@ Agent 大脑把快思考、任务大师、条件任务、联网搜索、用车�
 6. **DeepSeek 用 V4 Flash 非思考模式。** `DeepSeekChatModel(..., parameters=DeepSeekChatModel.Parameters(thinking_enable=False))`，
    请求带 `thinking.type=disabled`，不产生推理 token。模型 ID 和地址从环境变量读：`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`）、
    `DEEPSEEK_FALLBACK_MODEL`（可选，经 `ModelConfig(fallback_model=...)` 生效）、`DEEPSEEK_BASE_URL`、`TYPESAFE_API_KEY`。
-   2026-10-11 当前 key 的 `/models` 列出 `deepseek-flash`、`deepseek-v4-pro`；哪个 ID 能以非思考模式调通，以 `rewrite_check.py` 的探测结果为准。
+   2026-10-11 实测：`/models` 只列出 `deepseek-flash`、`deepseek-v4-pro`，但 `deepseek-v4-flash` 也能调通，服务端返回的模型名是 `deepseek-flash`（同一个模型）。
+   非思考模式下推理 token 为 0，改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房）。
    不要把 key 写进代码或提交到仓库；CI 里用仓库 Secret。
 7. **控制时延。** 大脑 `ReActConfig(max_iters=6~10)`；用 `reply_stream()` 把 `TextBlockDeltaEvent.delta` 边生成边送 TTS。
 
