@@ -286,8 +286,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <thead><tr><th>能力</th><th>形式</th><th>做什么</th></tr></thead>
         <tbody>
           <tr><td class="key"><span class="tag" style="--c:var(--c-fast)">快思考</span></td><td>工具</td><td>执行说清楚的直接指令，大脑因此拥有全部基础 NLU 能力</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">任务大师</span></td><td>Agent</td><td>周期性、每当某事发生就触发的长期规则</td></tr>
-          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">条件任务</span></td><td>Agent</td><td>到某个时间或时机执行一次的动作</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">任务大师</span></td><td>Agent</td><td>周期性、每当某事发生就触发的长期规则，包括周期性提醒</td></tr>
+          <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">条件任务</span></td><td>Agent</td><td>到某个时间或时机执行一次的动作或提醒；查询、删除日程</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">联网搜索</span></td><td>Agent，接口未接入</td><td>新闻资讯、实时信息</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">用车手册</span></td><td>Agent</td><td>本车功能、故障、使用建议</td></tr>
           <tr><td class="key"><span class="tag" style="--c:var(--c-agent)">导航</span></td><td>Agent，多轮</td><td>靠描述找地点、规划路线、多地点行程</td></tr>
@@ -316,9 +316,9 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
           <li>打开关闭应用和页面，音量、亮度、网络、语音设置</li>
           <li>按歌名、歌手、片名点播，也包括按风格、年代、语种点播；播放控制和收藏</li>
           <li>上一个、下一集、拜拜、退下等通用短指令</li>
-          <li>导航去说得出名字的地点，导航设置，到家、公司、当前目的地的距离和路况</li>
+          <li>导航去说得出名字的地点，导航设置，从当前位置到家、公司、目的地、途经点的距离和路况</li>
           <li>智驾和泊车、场景模式、电话、几项车辆数值查询</li>
-          <li>到时间提醒用户做某事；一句话连说几条直接指令</li>
+          <li>一句话连说几条直接指令</li>
         </ul>
       </div>
       <div class="panel">
@@ -326,8 +326,8 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
         <ul class="plain">
           <li>问本车功能怎么用、为什么坏、状态是否正常，即使说法像指令</li>
           <li>只说感受没说指令；按氛围、歌词、剧情找歌找片</li>
-          <li>靠描述找地点、多地点行程、去某个具体地名要多久</li>
-          <li>带执行时间的动作（条件任务）、长期规则（任务大师）</li>
+          <li>靠描述找地点、多地点行程、去某个具体地名要多久；说出了出发地的两地距离和路况（家到公司还有多远）</li>
+          <li>日程和提醒、带执行时间的动作（条件任务），周期性提醒和长期规则（任务大师）</li>
           <li>多条指令里有需要推断、查询、订票、带话的步骤</li>
           <li>新闻、记住个人信息、开放问答和闲聊</li>
         </ul>
@@ -381,8 +381,17 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
     <ul class="plain">
       <li><strong>Jev 每句只调一次，平均 1,720 token</strong>（第 3 版每句 7,882 token，少 78%）。</li>
       <li>该去大脑却给了快思考的句子，快思考还能拒识兜底；该给快思考却去了大脑的句子，大脑可以调用快思考工具完成，只是更慢。</li>
-      <li>val 上剩下的错误主要是三类：“在某种模式下自动做某事”的规则；家或某地点到某地点有多远、多久；生僻的系统设置和页面开关。前一类和后一类适合用纠错题修，中间一类要先定口径。</li>
+      <li>val 上剩下的错误主要是三类：“在某种模式下自动做某事”的规则；家或某地点到某地点有多远、多久；生僻的系统设置和页面开关。第一类和第三类适合用纠错题修；第二类已定口径（说出出发地的两地距离归大脑），标注和判据都已改。</li>
       <li>模糊指代：人工构造的 20 条里，Jev 识别和 DeepSeek 改写全部正确，没有误改。样本是人工构造的，线上样本还要补。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>已定口径</h2>
+    <ul class="plain">
+      <li><strong>日程提醒不交给快思考。</strong>语义 sheet 里 scheduleReminder 的句子全部改标：周期性的（每周三提醒我开会）归任务大师，其余（5月30日提醒我开会、明天有日程吗、删除第2个日程）归条件任务。评测集里 16 条改标，另有 128 条“条件任务 / 日程提醒”双标签的句子收为只算条件任务。</li>
+      <li><strong>说出了出发地的两地距离归大脑。</strong>语义 sheet 里 naviControl 中的“家到公司还有多远”“儿童医院到北京天信亮酒店还有多长时间”“北京天信亮酒店到五道口堵不堵”这类 22 条改标为复杂导航，交给大脑；只问从当前位置到某地的（到公司还有多远、目的地堵不堵）仍归快思考。</li>
+      <li>改标在切分之后进行，句子留在原来的 dev / val / test 里；规则写在 <code>build_dataset.py</code>，第一级判据是 v2.4。</li>
     </ul>
   </section>
 
@@ -405,8 +414,6 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
   <section>
     <h2>待确认</h2>
     <ul class="plain">
-      <li><strong>家或某地点到某地点有多远、多久，归快思考还是大脑。</strong>原标注算 naviControl（快思考），判据写的是去具体地名要多久归大脑，两边冲突。</li>
-      <li><strong>“到时候提醒我做某事”归快思考还是大脑。</strong>原标注里有一批这样的句子标为条件任务。</li>
       <li><strong>is_fast 阈值。</strong>val 上 0.7 最好；如果更在意“该去大脑却给了快思考”，可以提高到 0.8，代价是更多句子绕道大脑。</li>
       <li><strong>大脑的时延预算。</strong>大脑至少两轮模型调用，需要定首句响应上限和中间过程怎么播报。</li>
       <li><strong>大脑的评测集。</strong>测试集衡量的是分流，衡量不了大脑；需要另建多轮场景集，看任务完成率、调用了哪些能力和耗时。</li>

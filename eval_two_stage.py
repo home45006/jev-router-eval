@@ -8,7 +8,7 @@
 第 13 版（--stages s1,s2）：再对每条样本问第二级 6 选 1，报告第二级和两级组合的结果。
 
 标准答案由评测集原来的 label 换算：
-    16 个 NLU domain 和中枢简单任务 → 快思考
+    15 个 NLU domain 和中枢简单任务 → 快思考（scheduleReminder 已由 build_dataset 改标为条件任务或任务大师）
     用车agent → 用车手册Agent；新闻agent → 联网搜索Agent；任务大师、条件任务不变
     音乐、影视、复杂导航、记忆、车控模糊意图、中枢复杂多任务、闲聊 → Agent大脑
 
@@ -25,11 +25,12 @@ from eval_jev import load_jsonl, select, build_state
 
 HERE = Path(__file__).resolve().parent
 FAST = {"carControl", "windowControl", "systemControl", "music", "mediaControl", "generalControl", "video",
-        "unicast", "naviControl", "navi", "autoPilot", "relaxCapsule", "carInfo", "scheduleReminder", "phone",
+        "unicast", "naviControl", "navi", "autoPilot", "relaxCapsule", "carInfo", "phone",
         "memoryRecord", "中枢简单任务"}
 STAGE2_OF = {"用车agent": "用车手册Agent", "新闻agent": "联网搜索Agent", "闲聊": "Agent大脑", "任务大师": "任务大师",
              "条件任务": "条件任务", "音乐agent": "Agent大脑", "影视agent": "Agent大脑", "复杂导航agent": "Agent大脑",
-             "记忆agent": "Agent大脑", "车控agent模糊意图": "Agent大脑", "中枢复杂多任务": "Agent大脑"}
+             "记忆agent": "Agent大脑", "车控agent模糊意图": "Agent大脑", "中枢复杂多任务": "Agent大脑",
+             "scheduleReminder": "条件任务"}  # 日程提醒不交给快思考；只有冒烟集里还有这个旧标签
 BACK = "退回快思考"
 
 
@@ -167,7 +168,7 @@ def report(args, crit, items, fixtures, n_err):
 
     # ---------- 第一级 ----------
     L.append("\n## 第一级：是否交给快思考\n")
-    L.append(f"应交给快思考 {len(only_fast)} 条，不应交给 {len(only_agent)} 条，两种都算对 {both} 条（如条件任务里的纯提醒）。\n")
+    L.append(f"应交给快思考 {len(only_fast)} 条，不应交给 {len(only_agent)} 条，两种都算对 {both} 条（原标签同时含快思考和 Agent 类，多为依赖上下文的句子）。\n")
     L.append("| is_fast 阈值 | 该走 Agent 却交给快思考 | 该走快思考却交给大脑 | 第一级准确率 |\n|---|---|---|---|")
     for T in (0.3, 0.5, 0.7, 0.8, 0.9):
         fp = sum(s1["is_fast"] >= T for _, s1, _ in only_agent)

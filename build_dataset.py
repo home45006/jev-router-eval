@@ -15,12 +15,13 @@
 
 规则:
     1. “全局”类别表示任何场景下都可以说，是可说范围；现在类别不再是标签，只保留 is_global 标记。
-    2. 日程提醒 = 到时间提醒用户做某事（domain 为 scheduleReminder）；
-       条件任务 = 到时间由车机直接执行动作。
-       “条件任务”里只有提醒、没有车机动作的行，在确认改标之前两个标签都算对。
-       一次性任务归条件任务，周期性任务归任务大师，这两类由大模型 Agent 理解；
-       日程提醒由传统 NLU 理解，速度快。
+    2. 日程提醒（2026-10-11 改）：语义 sheet 里 domain 为 scheduleReminder 的行全部改标，
+       周期性的（每天、每周……）归任务大师，其余归条件任务；不再有 scheduleReminder 标签，提醒不交给快思考。
+       一次性任务归条件任务，周期性任务归任务大师，这两类由 Agent 大脑调度。
     3. 闲聊会话里的追问一律跟随上一轮：评测脚本用 previous_turn 实现，这里只负责带上上一轮。
+    4. 两地距离（2026-10-11）：语义 sheet 里 naviControl 中说出了出发地的“甲到乙还有多远、多久、多少公里、堵不堵”
+       改标为复杂导航agent，交给 Agent 大脑；只问到目的地、公司、途经点的（到公司还有多远）仍是 naviControl。
+    规则 2、4 在切分之后执行，句子留在原来的 dev/val/test 里，和改标前的结果可比。
 """
 import argparse, collections, csv, hashlib, json, re, sys
 from pathlib import Path
@@ -51,6 +52,9 @@ CAR_ACTION = re.compile(
 # ---------- 一次性任务归条件任务，周期性任务归任务大师 ----------
 PERIODIC = re.compile(r"每天|每周|每次|每当|每逢|每晚|每早|天天|每月|工作日|周期")
 ONE_OFF = re.compile(r"等会|待会|一会儿|明天|后天|今晚|\d+分钟后|\d+小时后|半小时后")
+
+# ---------- 规则 4：两地距离 ----------
+TWO_PLACE = re.compile(r"^(?!那)[^到去，,]{1,12}(到|去)[^到去，,]{1,15}(还有)?(多远|多久|多长时间|多少公里|堵不堵)[？?]?$")
 
 def reminder_bucket(q):
     r, a = bool(REMIND.search(q)), bool(CAR_ACTION.search(q))
@@ -157,11 +161,7 @@ def main():
         # 规则 2
         if "条件任务" in g and "scheduleReminder" not in g:
             b = reminder_bucket(it["query"])
-            if b == "只有提醒，没有车机动作":
-                g.append("scheduleReminder")
-                it["review"].append("规则2：" + b)
-                review_rows.append([AGENT_SHEET, it["query"], "条件任务", "scheduleReminder", b])
-            elif b:
+            if b and b != "只有提醒，没有车机动作":
                 it["review"].append("规则2：" + b)
                 review_rows.append([AGENT_SHEET, it["query"], "条件任务", "（请判断）", b])
         if "任务大师" in g and ONE_OFF.search(it["query"]) and not PERIODIC.search(it["query"]):
@@ -190,6 +190,22 @@ def main():
             for it in g[k]:
                 it["split"] = split
 
+    # 规则 2、4：切分之后改标
+    relabeled = collections.Counter()
+    for it in items.values():
+        g = it["gold"]
+        if "scheduleReminder" in g:
+            new = "任务大师" if PERIODIC.search(it["query"]) else "条件任务"
+            g[:] = list(dict.fromkeys(new if x == "scheduleReminder" else x for x in g))
+            it["review"].append(f"规则2：日程提醒改标为{new}")
+            relabeled[f"scheduleReminder → {new}"] += 1
+        if g == ["naviControl"] and TWO_PLACE.search(it["query"]):
+            g[:] = ["复杂导航agent"]
+            it["review"].append("规则4：两地距离改标为复杂导航agent")
+            relabeled["naviControl 两地距离 → 复杂导航agent"] += 1
+        it["primary"] = g[0]
+        it["routes"] = sorted({route_of(x, sem_labels) for x in g})
+
     with open(out / "eval_set.jsonl", "w", encoding="utf-8") as f:
         for i, it in enumerate(items.values()):
             row = {"id": f"q{i:05d}", **{k: it[k] for k in (
@@ -206,6 +222,7 @@ def main():
     merged = {k: dict(v) for k, v in spell.items() if len(v) > 1}
     print("domain 写法合并：", {canon[k]: v for k, v in merged.items()})
     print("domain 列表：", sorted(set(canon.values())))
+    print("改标：", dict(relabeled))
     n = len(items)
     sp = collections.Counter(it["split"] for it in items.values())
     print(f"样本 {n} 条（去重后）  dev/val/test = {sp['dev']}/{sp['val']}/{sp['test']}")

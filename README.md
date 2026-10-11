@@ -45,7 +45,7 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 
 ## 待确认
 
-- “条件任务”下 128 行只有提醒、没有车机动作：归 scheduleReminder 还是留在条件任务。确认前两个标签都算对。
+- （2026-10-11 已定）日程提醒全部归条件任务或任务大师（周期性的归任务大师），不再有 scheduleReminder；说出出发地的两地距离（家到公司还有多远）归复杂导航，交给 Agent 大脑。规则在 `build_dataset.py` 里，切分之后改标。
 - 任务大师里约 4 行疑似一次性任务（如“15分钟后自动关闭视频”）。
 - 所有阈值（置信度、`is_followup`）待在 val 上标定。
 
