@@ -85,7 +85,8 @@ async def run(args, crit, items):
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     path = out / "predictions.jsonl"
     done = {(p["id"], p["stage"]) for p in load_jsonl(path)} if path.exists() else set()
-    jobs = [(it, st) for it in items for st in ("s1", "s2")
+    stages = args.stages.split(",")
+    jobs = [(it, st) for it in items for st in stages
             if (it["id"], st) not in done and not (st == "s2" and it.get("fixture"))]
     print(f"待请求 {len(jobs)} 次（已有 {len(done)} 次）")
     try:
@@ -140,7 +141,8 @@ def report(args, crit, items, fixtures, n_err):
     P = collections.defaultdict(dict)
     for p in load_jsonl(out / "predictions.jsonl"):
         P[p["id"]][p["stage"]] = p
-    rows = [(it, P[it["id"]]["s1"], P[it["id"]]["s2"]) for it in items if "s1" in P[it["id"]] and "s2" in P[it["id"]]]
+    rows = [(it, P[it["id"]]["s1"], P[it["id"]].get("s2")) for it in items if "s1" in P[it["id"]]]
+    has_s2 = all(s2 for _, _, s2 in rows)
     if not rows:
         print("没有可统计的结果"); return
     n = len(rows)
@@ -150,9 +152,9 @@ def report(args, crit, items, fixtures, n_err):
     if n_err:
         L.append(f"- 本次失败 {n_err} 次请求，未计入；再跑一次同样的命令会补上")
     t1 = [s1["input_tokens"] for _, s1, _ in rows if s1.get("input_tokens")]
-    t2 = [s2["input_tokens"] for _, _, s2 in rows if s2.get("input_tokens")]
-    if t1 and t2:
-        L.append(f"- 平均输入 token：第一级 {sum(t1) // len(t1):,}，第二级 {sum(t2) // len(t2):,}")
+    t2 = [s2["input_tokens"] for _, _, s2 in rows if s2 and s2.get("input_tokens")]
+    if t1:
+        L.append(f"- 平均输入 token：第一级 {sum(t1) // len(t1):,}" + (f"，第二级 {sum(t2) // len(t2):,}" if t2 else ""))
 
     G = {it["id"]: gold_of(it) for it, _, _ in rows}
     only_fast = [(it, s1, s2) for it, s1, s2 in rows if G[it["id"]][0] and not G[it["id"]][1]]
@@ -168,41 +170,55 @@ def report(args, crit, items, fixtures, n_err):
         fn = sum(s1["is_fast"] < T for _, s1, _ in only_fast)
         L.append(f"| {T} | {pct(fp, len(only_agent))} ({fp}) | {pct(fn, len(only_fast))} ({fn}) | {pct(n - fp - fn, n)} |")
 
-    # ---------- 第二级 ----------
-    s2rows = [(it, s1, s2) for it, s1, s2 in rows if G[it["id"]][1]]
-    ok2 = [s2["choice"] in G[it["id"]][2] for it, _, s2 in s2rows]
-    L.append("\n## 第二级：单独看（只用应走 Agent 的样本）\n")
-    L.append(f"- 准确率：{pct(sum(ok2), len(ok2))}（{sum(ok2)}/{len(ok2)}）")
-    pred = collections.Counter(s2["choice"] for _, _, s2 in s2rows)
-    L.append("- 预测分布：" + "，".join(f"{k} {v}" for k, v in pred.most_common()))
-    rec = collections.defaultdict(lambda: [0, 0]); conf = collections.Counter(); ex = collections.defaultdict(list)
-    for (it, _, s2), ok in zip(s2rows, ok2):
-        g = sorted(G[it["id"]][2] - {BACK})[0]
-        rec[g][1] += 1; rec[g][0] += ok
-        if not ok:
-            conf[(g, s2["choice"])] += 1; ex[(g, s2["choice"])].append(it["query"])
-    L.append("\n| 应为 | 样本 | 召回 |\n|---|---|---|")
-    for k, (a, b) in sorted(rec.items(), key=lambda x: x[1][0] / x[1][1]):
-        L.append(f"| {k} | {b} | {pct(a, b)} |")
-    L.append("\n| 应为 | 判成 | 次数 | 例句 |\n|---|---|---|---|")
-    for (g, f), c in conf.most_common(20):
-        L.append(f"| {g} | {f} | {c} | {'；'.join(q.replace('|', '/')[:40] for q in ex[(g, f)][:3])} |")
+    for T in (0.5, 0.8):
+        fp = sorted(((s1["is_fast"], it) for it, s1, _ in only_agent if s1["is_fast"] >= T), key=lambda x: -x[0])
+        fn = sorted(((s1["is_fast"], it) for it, s1, _ in only_fast if s1["is_fast"] < T), key=lambda x: x[0])
+        L.append(f"\n阈值 {T} 时的错误，按原 label 统计：")
+        L.append("- 该走 Agent 却交给快思考：" + ("，".join(f"{k} {v}" for k, v in collections.Counter(it["primary"] for _, it in fp).most_common()) or "无"))
+        L.append("- 该走快思考却送第二级：" + ("，".join(f"{k} {v}" for k, v in collections.Counter(it["primary"] for _, it in fn).most_common()) or "无"))
+    L.append("\n阈值 0.5 时该走 Agent 却交给快思考的句子：\n\n| is_fast | 原 label | 句子 |\n|---|---|---|")
+    for sc, it in sorted(((s1["is_fast"], it) for it, s1, _ in only_agent if s1["is_fast"] >= 0.5), key=lambda x: -x[0])[:60]:
+        L.append(f"| {sc} | {it['primary']} | {it['query'].replace('|', '/')[:60]} |")
+    L.append("\n阈值 0.8 时该走快思考却送第二级的句子：\n\n| is_fast | 原 label | 句子 |\n|---|---|---|")
+    for sc, it in sorted(((s1["is_fast"], it) for it, s1, _ in only_fast if s1["is_fast"] < 0.8), key=lambda x: x[0])[:60]:
+        L.append(f"| {sc} | {it['primary']} | {it['query'].replace('|', '/')[:60]} |")
 
-    # ---------- 端到端 ----------
-    def dest(it, s1, s2, T):
-        if it.get("prev_label") == "闲聊" and s1.get("is_followup", 0) >= 0.5:
-            return "闲聊"
-        if s1["is_fast"] >= T:
-            return "快思考"
-        return "快思考" if s2["choice"] == BACK else s2["choice"]
-    L.append("\n## 端到端：最终去向\n")
-    L.append("| is_fast 阈值 | 去向准确率 | 去快思考 | 去 Agent 大脑 | 去其他 |\n|---|---|---|---|---|")
-    for T in (0.3, 0.5, 0.7, 0.8, 0.9):
-        ds = [dest(it, s1, s2, T) for it, s1, s2 in rows]
-        ok = sum(d in G[it["id"]][3] for d, (it, _, _) in zip(ds, rows))
-        c = collections.Counter(ds)
-        L.append(f"| {T} | {pct(ok, n)} ({ok}/{n}) | {pct(c['快思考'], n)} | {pct(c['Agent大脑'], n)} | {pct(n - c['快思考'] - c['Agent大脑'], n)} |")
-    L.append("\n参照：第 3 版 28 选 1 在同一批 409 条上的分支准确率是 97.8%（v0.5 判据），分支口径不同，仅作量级参考。")
+    # ---------- 第二级 ----------
+    s2rows = [(it, s1, s2) for it, s1, s2 in rows if G[it["id"]][1] and s2]
+    ok2 = [s2["choice"] in G[it["id"]][2] for it, _, s2 in s2rows]
+    if s2rows:
+        L.append("\n## 第二级：单独看（只用应走 Agent 的样本）\n")
+        L.append(f"- 准确率：{pct(sum(ok2), len(ok2))}（{sum(ok2)}/{len(ok2)}）")
+        pred = collections.Counter(s2["choice"] for _, _, s2 in s2rows)
+        L.append("- 预测分布：" + "，".join(f"{k} {v}" for k, v in pred.most_common()))
+        rec = collections.defaultdict(lambda: [0, 0]); conf = collections.Counter(); ex = collections.defaultdict(list)
+        for (it, _, s2), ok in zip(s2rows, ok2):
+            g = sorted(G[it["id"]][2] - {BACK})[0]
+            rec[g][1] += 1; rec[g][0] += ok
+            if not ok:
+                conf[(g, s2["choice"])] += 1; ex[(g, s2["choice"])].append(it["query"])
+        L.append("\n| 应为 | 样本 | 召回 |\n|---|---|---|")
+        for k, (a, b) in sorted(rec.items(), key=lambda x: x[1][0] / x[1][1]):
+            L.append(f"| {k} | {b} | {pct(a, b)} |")
+        L.append("\n| 应为 | 判成 | 次数 | 例句 |\n|---|---|---|---|")
+        for (g, f), c in conf.most_common(20):
+            L.append(f"| {g} | {f} | {c} | {'；'.join(q.replace('|', '/')[:40] for q in ex[(g, f)][:3])} |")
+
+        # ---------- 端到端 ----------
+        def dest(it, s1, s2, T):
+            if it.get("prev_label") == "闲聊" and s1.get("is_followup", 0) >= 0.5:
+                return "闲聊"
+            if s1["is_fast"] >= T:
+                return "快思考"
+            return "快思考" if s2["choice"] == BACK else s2["choice"]
+        L.append("\n## 端到端：最终去向\n")
+        L.append("| is_fast 阈值 | 去向准确率 | 去快思考 | 去 Agent 大脑 | 去其他 |\n|---|---|---|---|---|")
+        for T in (0.3, 0.5, 0.7, 0.8, 0.9):
+            ds = [dest(it, s1, s2, T) for it, s1, s2 in rows]
+            ok = sum(d in G[it["id"]][3] for d, (it, _, _) in zip(ds, rows))
+            c = collections.Counter(ds)
+            L.append(f"| {T} | {pct(ok, n)} ({ok}/{n}) | {pct(c['快思考'], n)} | {pct(c['Agent大脑'], n)} | {pct(n - c['快思考'] - c['Agent大脑'], n)} |")
+        L.append("\n参照：第 3 版 28 选 1 在同一批 409 条上的分支准确率是 97.8%（v0.5 判据），分支口径不同，仅作量级参考。")
 
     # ---------- needs_rewrite ----------
     L.append("\n## needs_rewrite：模糊指代\n")
@@ -223,7 +239,7 @@ def report(args, crit, items, fixtures, n_err):
     with open(out / "errors.csv", "w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow(["id", "query", "上一轮", "原 label", "应去", "is_fast", "第二级", "第二级置信度", "needs_rewrite"])
-        for it, s1, s2 in rows:
+        for it, s1, s2 in (rows if s2rows else []):
             d = dest(it, s1, s2, 0.5)
             if d not in G[it["id"]][3]:
                 w.writerow([it["id"], it["query"], it.get("prev_query") or "", "/".join(it["gold"]), "/".join(sorted(G[it["id"]][3])),
@@ -246,6 +262,7 @@ def main():
     ap.add_argument("--no-examples", action="store_true")
     ap.add_argument("--mock", action="store_true")
     ap.add_argument("--report-only", action="store_true")
+    ap.add_argument("--stages", default="s1,s2", help="要请求的级别：s1、s2 或 s1,s2")
     args = ap.parse_args()
 
     crit = json.loads(Path(args.criteria).read_text(encoding="utf-8"))
