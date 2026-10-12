@@ -36,4 +36,10 @@ with TestClient(app) as c:
     items = c.get("/api/samples").json()["builtin"]
     rows = [json.loads(l) for l in c.post("/api/batch", json={"items": items}).text.splitlines()]
     assert len(rows) == len(items) and not any("error" in x for x in rows)
+# 搜索服务不可用时，大脑判出“联网搜索”的句子也要正常返回
+os.environ["SEARCH_MCP_KEY"], os.environ["SEARCH_MCP_URL"] = "x", "http://127.0.0.1:9/mcp"
+with TestClient(app) as c:
+    r = last(c.post("/api/run", json={"query": "今天有什么热点新闻", "session_id": "e"}))
+    se = next(s for s in r["steps"] if s["name"] == "联网搜索 MCP")
+    assert se["status"] == "error" and "联网搜索暂时不可用" in r["brain"]["speech"], r
 print("webdemo mock check ok")

@@ -156,7 +156,9 @@ class SearchMCP:
                 return SearchResult(query, name, url, text, _items(text), (t1 - t0) * 1000, (t2 - t1) * 1000, err)
             except Exception as e:  # 换下一个候选地址
                 errors.append(f"{url}: {_err(e)}"[:300])
-        raise RuntimeError("联网搜索 MCP 调用失败：" + " | ".join(errors))
+        hint = ("（百炼返回 Not Found：通常是还没在百炼控制台的 MCP 广场开通“联网搜索”，"
+                "或 Key 与服务不在同一地域/业务空间）") if any("Not Found" in e for e in errors) else ""
+        raise RuntimeError("联网搜索 MCP 调用失败" + hint + "：" + " | ".join(errors))
 
 
 async def _probe(query: str) -> None:
