@@ -8,9 +8,9 @@ OpenAI 兼容接口（/chat/completions）没有这个能力。
 用 stream=true 接收 SSE 事件，记录三个时间点（相对请求发出）：
     first_event_ms   收到第一个事件（连接建立、开始处理）
     search_done_ms   最后一次搜索结果（web_search_tool_result）到达
-    ttft_ms          答案首字（第一个 text_delta），语音播报能开始的时刻
-模型有时会在搜索前先说一句（“我来查一下”），这时 ttft_ms 早于 search_done_ms；
-answer_first_ms 是搜索结果之后的第一个字。
+    ttft_ms          答案首字：搜索结果之后的第一个字，语音播报能开始的时刻
+模型偶尔会在搜索前先说一句（实测出现过英文的“I'll search for ...”），这段记为 preamble，
+不进播报；preamble_ms 是它的首字时间。没有触发搜索时，第一个字就是答案首字。
 
 环境变量：DEEPSEEK_API_KEY；可选 DEEPSEEK_SEARCH_MODEL（默认同 DEEPSEEK_MODEL，再默认 deepseek-flash）、
 DEEPSEEK_BASE_URL、DEEPSEEK_SEARCH_MAX_USES（默认 2）。没有 DEEPSEEK_API_KEY 时用 MockSearch 演示流程。
@@ -33,8 +33,8 @@ import httpx
 
 from .pricing import cost, cost_anthropic
 
-ANSWER_SYSTEM = ("你是车载语音助手的联网搜索能力。需要最新信息时先联网搜索，然后用适合语音播报的两三句话回答，"
-                 "只说搜到的信息，不要编造；没查到就直说。不要输出链接和 Markdown。")
+ANSWER_SYSTEM = ("你是车载语音助手的联网搜索能力。需要最新信息时先联网搜索，搜索前不要输出任何文字；"
+                 "拿到结果后用中文、适合语音播报的两三句话回答，只说搜到的信息，不要编造；没查到就直说。不要输出链接和 Markdown。")
 OnDelta = Callable[[str], Awaitable[None]] | None
 
 
@@ -53,6 +53,8 @@ class SearchResult:
     search_done_ms: float | None = None
     ttft_ms: float | None = None
     answer_first_ms: float | None = None
+    preamble: str = ""                                 # 搜索前模型说的话，不进播报
+    preamble_ms: float | None = None
 
 
 def _items_of(content) -> list[dict]:
@@ -93,6 +95,7 @@ class DeepSeekSearch:
         blocks: dict[int, dict] = {}              # index → {type, json}
         usage: dict = {}
         texts: list[str] = []
+        res._pre = []                             # 搜索结果到达前的文字
         async with httpx.AsyncClient(timeout=60) as c:
             async with c.stream("POST", self.url, headers=headers, json=self._body(query)) as r:
                 if r.status_code >= 400:
@@ -144,7 +147,10 @@ class DeepSeekSearch:
                     elif et == "error":
                         raise RuntimeError(f"DeepSeek 联网搜索出错：{json.dumps(ev.get('error'), ensure_ascii=False)[:300]}")
         res.ms = ms()
+        res.preamble = "".join(res._pre).strip()
         res.answer = "".join(texts).strip()
+        if not res.answer and res.preamble and res.search_done_ms is None:     # 没搜索就直接回答
+            res.answer, res.preamble, res.ttft_ms, res.preamble_ms = res.preamble, "", res.preamble_ms, None
         res.items = res.items[:10]
         res.usage = usage
         res.cost = cost_anthropic(res.model, usage)
@@ -153,10 +159,13 @@ class DeepSeekSearch:
     @staticmethod
     async def _text(res: SearchResult, texts: list[str], text: str, ms, on_delta: OnDelta) -> None:
         now = ms()
+        if res.search_done_ms is None:            # 还没拿到搜索结果：可能是搜索前的开场白，也可能不搜直接答
+            if res.preamble_ms is None:
+                res.preamble_ms = now
+            res._pre.append(text)
+            return
         if res.ttft_ms is None:
-            res.ttft_ms = now
-        if res.search_done_ms is not None and res.answer_first_ms is None:
-            res.answer_first_ms = now
+            res.ttft_ms = res.answer_first_ms = now
         texts.append(text)
         if on_delta:
             await on_delta(text)
@@ -200,8 +209,8 @@ async def _probe(query: str) -> None:
     for q in [query, "今天有什么热点新闻", "比亚迪最近发布了什么新车"]:
         try:
             r = await s.search(q)
-            print(f"### {q}\n- 首个事件 {r.first_event_ms} ms，搜索结果到达 {r.search_done_ms} ms，答案首字 {r.ttft_ms} ms"
-                  f"（搜索后首字 {r.answer_first_ms} ms），结束 {r.ms} ms")
+            print(f"### {q}\n- 首个事件 {r.first_event_ms} ms，搜索结果到达 {r.search_done_ms} ms，答案首字 {r.ttft_ms} ms，结束 {r.ms} ms"
+                  + (f"；搜索前开场白（不进播报）{r.preamble_ms} ms：{r.preamble}" if r.preamble else ""))
             print(f"- 模型 {r.model}，搜索词 {r.queries}，来源 {len(r.items)} 条，用量 {json.dumps(r.usage, ensure_ascii=False)}，"
                   f"费用 ¥{(r.cost or {}).get('yuan')}")
             for it in r.items[:5]:
