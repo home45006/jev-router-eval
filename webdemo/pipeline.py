@@ -62,6 +62,9 @@ ORCH_MODE_PROMPT = BRAIN_RULES + """
 全部完成后不要再调用工具，只输出一个 JSON 对象：
 {"labels": [实际需要的能力标签，按顺序], "plan": "一句话说明做了什么", "status": "continue | suspend | end", "speech": "播报给用户的一句话"}"""
 
+SEARCH_ANSWER_PROMPT = ("你是车载语音助手的联网搜索能力。根据给出的搜索结果，用适合语音播报的两三句话回答用户的问题，"
+                        "只用搜索结果里有的信息，不要编造；结果里没有答案就直说没查到。")
+
 ABILITY_PROMPT = ("你是座舱里的“{label}”能力（{desc}）。这是演示环境，没有接入真实服务："
                   "请给出你会怎么处理和一个合理的模拟结果，两三句话，开头标注“模拟”。")
 
@@ -79,6 +82,7 @@ class Settings:
     corrections: dict[str, str] = field(default_factory=lambda: {k: v["status"] for k, v in CRITERIA["corrections"].items()})
     brain_mode: str = "label"           # label：一次调用出标签；orchestrate：调用能力工具
     simulate_fast_reject: bool = False
+    run_search: bool = True             # 大脑判出“联网搜索”时真的去搜（需要接入搜索 MCP）
     max_iters: int = 6
 
     @classmethod
@@ -156,8 +160,8 @@ def _llm_detail(r) -> dict:
 
 
 class Pipeline:
-    def __init__(self, jev, llm, fast) -> None:
-        self.jev, self.llm, self.fast = jev, llm, fast
+    def __init__(self, jev, llm, fast, search=None) -> None:
+        self.jev, self.llm, self.fast, self.search = jev, llm, fast, search
         self.sessions: dict[str, Session] = {}
 
     # ------------------------------------------------------------------ #
@@ -264,8 +268,13 @@ class Pipeline:
             labels = _clean_labels(out.get("labels"))
             s["detail"].update(raw=r.content, **_llm_detail(r))
             s["summary"] = "、".join(labels) or "未给出有效标签"
-        return {"labels": labels, "plan": out.get("plan", ""), "status": out.get("status", "end"),
-                "speech": out.get("speech", ""), "tools_called": [], "mode": "label", "raw": r.content}
+        brain = {"labels": labels, "plan": out.get("plan", ""), "status": out.get("status", "end"),
+                 "speech": out.get("speech", ""), "tools_called": [], "mode": "label", "raw": r.content}
+        if "联网搜索" in labels and self._search_on(settings):
+            answer = await self._web_search(tr, query)
+            brain["tools_called"].append({"label": "联网搜索", "task": query, "result": answer})
+            brain["speech"] = answer
+        return brain
 
     async def _brain_orchestrate(self, tr: Trace, content: str, history: list[dict], settings: Settings) -> dict:
         msgs = [{"role": "system", "content": ORCH_MODE_PROMPT}, *history, {"role": "user", "content": content}]
@@ -281,7 +290,7 @@ class Pipeline:
                 out = _parse_json(r.content)
                 break
             msgs.append(r.raw_message or {"role": "assistant", "content": r.content})
-            results = await asyncio.gather(*(self._ability(tr, c) for c in r.tool_calls))
+            results = await asyncio.gather(*(self._ability(tr, c, settings) for c in r.tool_calls))
             for c, text in zip(r.tool_calls, results):
                 called.append({"label": LABEL_OF_TOOL.get(c.name, c.name), "task": c.arguments.get("task", ""), "result": text})
                 msgs.append({"role": "tool", "tool_call_id": c.id, "content": text})
@@ -291,9 +300,29 @@ class Pipeline:
         return {"labels": labels, "plan": out.get("plan", ""), "status": out.get("status", "end"),
                 "speech": out.get("speech", ""), "tools_called": called, "mode": "orchestrate"}
 
-    async def _ability(self, tr: Trace, call) -> str:
+    def _search_on(self, settings: Settings) -> bool:
+        return bool(self.search and self.search.kind == "real" and settings.run_search)
+
+    async def _web_search(self, tr: Trace, task: str) -> str:
+        """真实联网搜索：搜索 MCP 一步，再让大模型根据结果写一句播报。"""
+        async with tr.step("联网搜索 MCP", "search", task=task) as s:
+            sr = await self.search.search(task)
+            s["detail"].update(tool=sr.tool, url=sr.url, connect_ms=round(sr.connect_ms, 1), call_ms=round(sr.call_ms, 1),
+                               items=sr.items, raw=sr.text[:3000], is_error=sr.is_error)
+            s["summary"] = f"{sr.tool} 返回 {len(sr.items) or '未解析出'} 条" + ("（工具报错）" if sr.is_error else "")
+        async with tr.step("能力 · 联网搜索（整理结果）", "llm") as s:
+            r = await self.llm.chat([{"role": "system", "content": SEARCH_ANSWER_PROMPT},
+                                     {"role": "user", "content": f"问题：{task}\n\n搜索结果：\n{sr.text[:6000]}"}],
+                                    temperature=0.3, role="ability:联网搜索")
+            s["detail"].update(reply=r.content, **_llm_detail(r))
+            s["summary"] = r.content[:40]
+        return r.content
+
+    async def _ability(self, tr: Trace, call, settings: Settings | None = None) -> str:
         label = LABEL_OF_TOOL.get(call.name, call.name)
         task = call.arguments.get("task", "")
+        if call.name == "web_search" and settings is not None and self._search_on(settings):
+            return await self._web_search(tr, task)
         if call.name == "fast_think":
             async with tr.step("能力 · 快思考", "fast", task=task) as s:
                 fr = await self.fast.run(task, None, False)
@@ -328,7 +357,7 @@ class Pipeline:
         def total(kind):
             return round(sum(s["end"] - s["start"] for s in steps if s["kind"] == kind and s["end"] is not None), 1)
         result["timing"] = {"total_ms": tr.now(), "jev_ms": total("jev"), "llm_ms": total("llm"),
-                            "agent_ms": total("agent"), "fast_ms": total("fast"),
+                            "agent_ms": total("agent"), "fast_ms": total("fast"), "search_ms": total("search"),
                             "llm_calls": sum(s["kind"] in ("llm", "agent") for s in steps)}
         result["steps"] = steps
         return result

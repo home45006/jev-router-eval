@@ -87,6 +87,7 @@ jobs:
     env:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
       DATASET: ${{ inputs.dataset }}
       SPLIT: ${{ inputs.split }}
       PER_LABEL: ${{ inputs.per_label }}
@@ -102,7 +103,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -a; . ./eval-request.env; set +a
-          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK WEBDEMO_CHECK SKIP_EVAL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
+          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK WEBDEMO_CHECK SEARCH_CHECK SKIP_EVAL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
       - name: 检查密钥
         run: |
           if [ -z "$TYPESAFE_API_KEY" ]; then
@@ -141,6 +142,12 @@ jobs:
           pip install openai
           python rewrite_check.py --out runs/rewrite
           cat runs/rewrite/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 联网搜索 MCP 探测（SEARCH_CHECK=1 时）
+        if: env.SEARCH_CHECK == '1'
+        run: |
+          if [ -z "$DASHSCOPE_API_KEY" ]; then echo "::error::缺少仓库 Secret DASHSCOPE_API_KEY"; exit 1; fi
+          pip install -r webdemo/requirements.txt
+          python -m webdemo.search_mcp "智能座舱最新进展" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: 演示系统真实调用检查（WEBDEMO_CHECK=1 时）
         if: env.WEBDEMO_CHECK == '1'
         run: |
