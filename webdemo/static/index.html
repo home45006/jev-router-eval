@@ -20,7 +20,7 @@
 <nav class="tabs" role="tablist">
   <button role="tab" data-tab="single" class="on">单句与多轮</button>
   <button role="tab" data-tab="batch">批量验证</button>
-  <button role="tab" data-tab="latency">耗时统计</button>
+  <button role="tab" data-tab="latency">耗时与费用</button>
   <button role="tab" data-tab="settings">设置与判据</button>
 </nav>
 
@@ -78,6 +78,9 @@
     <p class="hint">统计本页面里跑过的所有请求（单句和批量）。每个点是一次调用，竖线是中位数。</p>
     <div class="card"><div id="strip" class="scroll"></div></div>
     <div class="card"><div class="scroll"><table id="latTable" class="data"></table></div></div>
+    <div class="card"><h3>大模型费用（DeepSeek）</h3>
+      <p class="hint">每次调用按官方价格计算：输入分命中缓存 / 未命中两档，按调用时的北京时间区分高峰 / 空闲时段；法定节假日无法识别，按工作日算。Jev 按 TypeSafe 计费，不在此统计。</p>
+      <div class="scroll"><table id="costTable" class="data"></table></div></div>
   </section>
 
   <!-- 设置与判据 -->
