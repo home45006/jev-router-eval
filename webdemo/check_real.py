@@ -55,15 +55,18 @@ def main():
         for i, (q, mode) in enumerate(SINGLE):
             r = run(c, q, f"single-{i}", mode)
             L.append(fmt(r) + f" ({mode})")
-            se = next((s for s in r["steps"] if s["name"] == "联网搜索 MCP"), None)
+            se = next((s for s in r["steps"] if s["kind"] == "search"), None)
             if se:
                 searched.append((r, se))
         if searched:
-            L.append("\n## 联网搜索 MCP\n")
+            L.append(f"\n## 联网搜索（{cfg.get('search_provider')}）\n")
             for r, se in searched:
                 d = se["detail"]
-                L.append(f"- {r['query']}：工具 {d['tool']}，建立连接 {d['connect_ms']:.0f} ms，调用 {d['call_ms']:.0f} ms，"
-                         f"解析出 {len(d['items'])} 条；播报：{(r.get('brain') or {}).get('speech', '')}")
+                if se["status"] == "error":
+                    L.append(f"- {r['query']}：失败 {se['summary']}")
+                    continue
+                L.append(f"- {r['query']}：{d['tool']}，耗时 {se['end'] - se['start']:.0f} ms，搜索词 {d.get('queries')}，"
+                         f"来源 {len(d['items'])} 条，用量 {d.get('usage')}；播报：{(r.get('brain') or {}).get('speech', '')}")
                 L += [f"  - {it['title']}" for it in d["items"][:5]]
         L += ["\n## 多轮：点外卖途中调空调\n", head]
         for q in DIALOG:

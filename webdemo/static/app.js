@@ -20,7 +20,7 @@ const KIND = {
   llm: { name: "大模型（DeepSeek）", color: "var(--k-llm)" },
   agent: { name: "能力（子 Agent）", color: "var(--k-agent)" },
   fast: { name: "快思考", color: "var(--k-fast)" },
-  search: { name: "联网搜索 MCP", color: "var(--k-search)" },
+  search: { name: "联网搜索", color: "var(--k-search)" },
   code: { name: "代码", color: "var(--k-code)" },
 };
 
@@ -161,12 +161,15 @@ function panels(result) {
       <dl class="kv"><dt>输入</dt><dd>${esc(fm.detail.input)}</dd><dt>结果</dt><dd>${fm.detail.rejected ? "拒识 → 转 Agent 大脑" : "理解成功，交给执行链路"}</dd></dl>
       <pre>${esc(JSON.stringify(fm.detail.response, null, 2))}</pre></div>`);
   }
-  const se = stepOf(st, "联网搜索 MCP");
+  const se = st.find((s) => s.kind === "search");
   if (se) {
     const d = se.detail;
     const items = (d.items || []).map((it) => `<li>${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>` : esc(it.title)}<div class="hint">${esc(it.snippet)}</div></li>`).join("");
-    out.push(`<div class="panel" style="grid-column:1/-1"><h4>联网搜索 MCP <span class="ms">建立连接 ${fmtMs(d.connect_ms)} · 调用 ${fmtMs(d.call_ms)}</span></h4>
-      <dl class="kv"><dt>搜索词</dt><dd>${esc(d.task)}</dd><dt>工具</dt><dd><code>${esc(d.tool)}</code> · ${esc(d.url)}</dd></dl>
+    const usage = d.usage ? `输入 ${d.usage.input_tokens ?? "-"} / 输出 ${d.usage.output_tokens ?? "-"} token · 搜索 ${d.usage.server_tool_use?.web_search_requests ?? (d.queries || []).length} 次` : "";
+    out.push(`<div class="panel" style="grid-column:1/-1"><h4>${esc(se.name)} <span class="ms">${d.connect_ms ? `建立连接 ${fmtMs(d.connect_ms)} · ` : ""}调用 ${fmtMs(d.call_ms)}</span></h4>
+      <dl class="kv"><dt>问题</dt><dd>${esc(d.task)}</dd>${(d.queries || []).length ? `<dt>模型搜索词</dt><dd>${esc(d.queries.join("；"))}</dd>` : ""}
+      <dt>服务</dt><dd><code>${esc(d.tool)}</code>${d.model ? ` · ${esc(d.model)}` : ""} · ${esc(d.url)}</dd>${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
+      ${d.answer ? `<dt>答案</dt><dd>${esc(d.answer)}</dd>` : ""}</dl>
       ${items ? `<ul>${items}</ul>` : ""}<details><summary class="hint">原始返回</summary><pre>${esc(d.raw)}</pre></details></div>`);
   }
   if (result.brain) {
@@ -394,7 +397,7 @@ function latencySeries() {
     { key: "大模型改写", kind: "llm", vals: [] },
     { key: "大脑单次推理", kind: "llm", vals: [] },
     { key: "能力（子 Agent）", kind: "agent", vals: [] },
-    { key: "联网搜索 MCP", kind: "search", vals: [] },
+    { key: "联网搜索", kind: "search", vals: [] },
     { key: "端到端 · 快思考路径", kind: "fast", vals: [] },
     { key: "端到端 · 大脑路径", kind: "code", vals: [] },
   ];
@@ -408,7 +411,7 @@ function latencySeries() {
       else if (s.name === "大模型改写") by["大模型改写"].vals.push(v);
       else if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) by["大脑单次推理"].vals.push(v);
       else if (s.kind === "agent") by["能力（子 Agent）"].vals.push(v);
-      else if (s.kind === "search") by["联网搜索 MCP"].vals.push(v);
+      else if (s.kind === "search") by["联网搜索"].vals.push(v);
     }
     if (r.timing) by[r.destination === "快思考" ? "端到端 · 快思考路径" : "端到端 · 大脑路径"].vals.push({ ms: r.timing.total_ms, q });
   }
@@ -473,12 +476,12 @@ function renderSettings() {
 function renderInfo() {
   const c = S.config, b = c.backends;
   const pill = (kind, real, mock, absent) => kind === "real" ? `<span class="pill real">${real}</span>` : kind === "mock" ? `<span class="pill mock">${mock}</span>` : `<span class="pill">${absent}</span>`;
-  $("#backends").innerHTML = pill(b.jev, "Jev 真实", "Jev 模拟") + pill(b.llm, "DeepSeek 真实", "DeepSeek 模拟") + pill(b.fast, "快思考已接入", "", "快思考未接入") + pill(b.search, "联网搜索已接入", "", "联网搜索未接入");
+  $("#backends").innerHTML = pill(b.jev, "Jev 真实", "Jev 模拟") + pill(b.llm, "DeepSeek 真实", "DeepSeek 模拟") + pill(b.fast, "快思考已接入", "", "快思考未接入") + pill(b.search, b.search_provider === "deepseek" ? "联网搜索 · DeepSeek" : "联网搜索 · MCP", "", "联网搜索未接入");
   $("#backendInfo").innerHTML = `<dl class="kv">
     <dt>Jev</dt><dd>${esc(b.jev_model)}${b.jev === "mock" ? "（未设置 TYPESAFE_API_KEY，结果由关键词规则产生）" : ""}</dd>
     <dt>大模型</dt><dd>${esc(b.llm_model)}${b.llm === "mock" ? "（未设置 DEEPSEEK_API_KEY，结果由关键词规则产生）" : "，非思考模式"}</dd>
     <dt>快思考</dt><dd>${b.fast === "real" ? "已接入 FAST_MODEL_URL" : "未接入：只记录交给快思考，可在左侧模拟拒识"}</dd>
-    <dt>联网搜索</dt><dd>${b.search === "real" ? "已接入搜索 MCP（DASHSCOPE_API_KEY）：大脑判出“联网搜索”时真实搜索并整理播报" : "未接入：设置 DASHSCOPE_API_KEY 后调用百炼联网搜索 MCP"}</dd>
+    <dt>联网搜索</dt><dd>${b.search !== "real" ? "未接入：设置 DEEPSEEK_API_KEY（DeepSeek 自带联网搜索）或 DASHSCOPE_API_KEY + SEARCH_PROVIDER=mcp" : b.search_provider === "deepseek" ? "DeepSeek 自带联网搜索（Anthropic 兼容接口，一次请求完成搜索和回答）" : "搜索 MCP（DASHSCOPE_API_KEY），搜索后由 DeepSeek 整理播报"}</dd>
     <dt>判据</dt><dd>${esc(c.criteria_version)}</dd></dl>`;
   $("#stage1Info").innerHTML = Object.entries(c.stage1).map(([k, v]) => `<p><code>${esc(k)}</code> ${esc(v)}</p>`).join("");
   $("#abilityInfo").innerHTML = `<table><tbody>${c.abilities.map((a) => `<tr><td><span class="pill label">${esc(a.label)}</span></td><td>${esc(a.desc)}</td></tr>`).join("")}</tbody></table>`;

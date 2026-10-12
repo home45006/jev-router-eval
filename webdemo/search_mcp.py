@@ -36,6 +36,10 @@ class SearchResult:
     connect_ms: float = 0.0
     call_ms: float = 0.0
     is_error: bool = False
+    answer: str | None = None       # 搜索服务直接给出的答案（DeepSeek 自带联网搜索会给）
+    queries: list[str] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)
+    model: str | None = None
 
 
 def _key() -> str | None:
@@ -134,6 +138,7 @@ def _items(text: str) -> list[dict]:
 class SearchMCP:
     def __init__(self) -> None:
         self.kind = "real" if configured() else "absent"
+        self.provider = "mcp"
         env_url = os.environ.get("SEARCH_MCP_URL")
         self.urls = [env_url] if env_url else BAILIAN_URLS
         self.url: str | None = None        # 第一次成功后记住可用的地址
