@@ -115,6 +115,7 @@ class LLMResult:
     reasoning_tokens: int | None = None
     raw_message: dict = field(default_factory=dict)   # 原样放回对话历史用
     cost: dict | None = None                          # 费用明细（pricing.cost 的返回）
+    ttft_ms: float | None = None                      # 首 token 耗时（流式时才有）
 
 
 class RealLLM:
@@ -128,13 +129,15 @@ class RealLLM:
                                    timeout=30)
 
     async def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
-                   temperature: float = 0.0, role: str = "") -> LLMResult:
+                   temperature: float = 0.0, role: str = "", stream: bool = True, on_delta=None) -> LLMResult:
         kw = {"model": self.model, "messages": messages, "temperature": temperature,
               "extra_body": {"thinking": {"type": "disabled"}}}       # 非思考模式；不传时默认是思考模式
         if tools:
             kw["tools"] = tools
         if json_mode:
             kw["response_format"] = {"type": "json_object"}
+        if stream:
+            return await self._stream(kw, on_delta)
         t = time.perf_counter()
         res = await self._client.chat.completions.create(**kw)
         ms = (time.perf_counter() - t) * 1000
@@ -152,6 +155,53 @@ class RealLLM:
                          getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None),
                          (getattr(det, "reasoning_tokens", None) or 0) if det else 0,
                          msg.model_dump(exclude_none=True), cost_openai(res.model or self.model, u))
+
+    async def _stream(self, kw: dict, on_delta) -> LLMResult:
+        """流式调用：记录首 token（第一个正文或工具调用片段）到达的时间，最后一个块带 usage。"""
+        kw = dict(kw, stream=True, stream_options={"include_usage": True})
+        t = time.perf_counter()
+        first, model, usage = None, self.model, None
+        text: list[str] = []
+        calls: dict[int, dict] = {}
+        async for chunk in await self._client.chat.completions.create(**kw):
+            model = chunk.model or model
+            if getattr(chunk, "usage", None):
+                usage = chunk.usage
+            if not chunk.choices:
+                continue
+            d = chunk.choices[0].delta
+            if first is None and (d.content or d.tool_calls):
+                first = (time.perf_counter() - t) * 1000
+            if d.content:
+                text.append(d.content)
+                if on_delta:
+                    await on_delta(d.content)
+            for tc in d.tool_calls or []:
+                e = calls.setdefault(tc.index, {"id": None, "name": "", "args": ""})
+                e["id"] = tc.id or e["id"]
+                if tc.function:
+                    e["name"] += tc.function.name or ""
+                    e["args"] += tc.function.arguments or ""
+        ms = (time.perf_counter() - t) * 1000
+        content = "".join(text)
+        tool_calls, raw_calls = [], []
+        for i in sorted(calls):
+            e = calls[i]
+            try:
+                args = json.loads(e["args"] or "{}")
+            except json.JSONDecodeError:
+                args = {"_raw": e["args"]}
+            tool_calls.append(ToolCall(e["id"] or f"call_{i}", e["name"], args))
+            raw_calls.append({"id": e["id"] or f"call_{i}", "type": "function",
+                              "function": {"name": e["name"], "arguments": e["args"] or "{}"}})
+        raw = {"role": "assistant", "content": content}
+        if raw_calls:
+            raw["tool_calls"] = raw_calls
+        det = getattr(usage, "completion_tokens_details", None) if usage else None
+        return LLMResult(content, tool_calls, ms, model,
+                         getattr(usage, "prompt_tokens", None), getattr(usage, "completion_tokens", None),
+                         (getattr(det, "reasoning_tokens", None) or 0) if det else 0,
+                         raw, cost_openai(model, usage), first)
 
 
 # 模拟大脑：按关键词给出能力标签
@@ -176,7 +226,20 @@ class MockLLM:
     model = "模拟大模型（关键词规则）"
 
     async def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
-                   temperature: float = 0.0, role: str = "") -> LLMResult:
+                   temperature: float = 0.0, role: str = "", stream: bool = True, on_delta=None) -> LLMResult:
+        """模拟流式：总耗时里前约 60% 是等首 token，之后把内容分几段吐出。"""
+        r = await self._chat(messages, tools, json_mode, temperature, role)
+        if stream:
+            r.ttft_ms = round(r.ms * 0.6, 1)
+            if on_delta and r.content:
+                step = max(1, len(r.content) // 4)
+                for i in range(0, len(r.content), step):
+                    await on_delta(r.content[i:i + step])
+                    await asyncio.sleep(0.03)
+        return r
+
+    async def _chat(self, messages: list[dict], tools: list[dict] | None, json_mode: bool,
+                    temperature: float, role: str) -> LLMResult:
         user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
         rnd = random.Random(user + role + str(len(messages)))
         t = time.perf_counter()
