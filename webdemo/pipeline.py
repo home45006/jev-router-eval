@@ -263,6 +263,8 @@ class Pipeline:
             r = await self.llm.chat(msgs, json_mode=True, role="brain")
             out = _parse_json(r.content)
             labels = _clean_labels(out.get("labels"))
+            if not labels and occupied and sess.labels:      # 会话中的确认、补充信息：沿用当前任务的标签
+                labels = list(sess.labels)
             s["detail"].update(raw=r.content, **_llm_detail(r))
             s["summary"] = "、".join(labels) or "未给出有效标签"
         brain = {"labels": labels, "plan": out.get("plan", ""), "status": out.get("status", "end"),
