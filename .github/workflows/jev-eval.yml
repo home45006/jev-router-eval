@@ -102,7 +102,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           set -a; . ./eval-request.env; set +a
-          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK WEBDEMO_CHECK SEARCH_CHECK SKIP_EVAL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
+          for k in DATASET SPLIT PER_LABEL EXTRA_ARGS MODEL EVAL_SCRIPT REWRITE_CHECK WEBDEMO_CHECK SEARCH_CHECK DOCS_FETCH SKIP_EVAL; do echo "$k=${!k}" >> "$GITHUB_ENV"; done
       - name: 检查密钥
         run: |
           if [ -z "$TYPESAFE_API_KEY" ]; then
@@ -141,6 +141,9 @@ jobs:
           pip install openai
           python rewrite_check.py --out runs/rewrite
           cat runs/rewrite/report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: 抓取 DeepSeek 官方文档（DOCS_FETCH=1 时）
+        if: env.DOCS_FETCH == '1'
+        run: python tools/fetch_docs.py
       - name: DeepSeek 联网搜索探测（SEARCH_CHECK=1 时）
         if: env.SEARCH_CHECK == '1'
         run: |
