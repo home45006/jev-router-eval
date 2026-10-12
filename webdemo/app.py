@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .backends import make_backends
+from .search_mcp import SearchMCP
 from .pipeline import ABILITIES, CRITERIA, LABELS, Pipeline, Settings
 
 HERE = Path(__file__).resolve().parent
@@ -42,8 +43,9 @@ state: dict = {}
 async def lifespan(_: FastAPI):
     jev, llm, fast = make_backends()
     await jev.start()
-    state["pipeline"] = Pipeline(jev, llm, fast)
-    state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind,
+    search = SearchMCP()
+    state["pipeline"] = Pipeline(jev, llm, fast, search)
+    state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind, "search": search.kind,
                       "jev_model": jev.model, "llm_model": llm.model}
     yield
     await jev.close()
@@ -82,7 +84,7 @@ async def config():
     s = Settings()
     return {"backends": state["kinds"], "criteria_version": CRITERIA["version"],
             "defaults": {k: getattr(s, k) for k in ("is_fast_t", "rewrite_t", "correction_t", "corrections",
-                                                    "brain_mode", "simulate_fast_reject", "max_iters")},
+                                                    "brain_mode", "simulate_fast_reject", "max_iters", "run_search")},
             "corrections": {k: {"why": v["why"], "route": v["route"], "hint": v.get("hint"),
                                 "instructions": v["instructions"], "status": v["status"]}
                             for k, v in CRITERIA["corrections"].items()},

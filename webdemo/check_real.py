@@ -20,6 +20,8 @@ SINGLE = [
     ("家到公司堵不堵", "label"),
     ("把空调调到二十六度然后导航去我常去的那家商场", "orchestrate"),
     ("打个电话给小李说聚餐地点定在渔人码头然后导航过去", "orchestrate"),
+    ("今天有什么热点新闻", "label"),
+    ("比亚迪最近发布了什么新车", "orchestrate"),
 ]
 DIALOG = ["帮我点份外卖送到公司", "先把空调调低一点", "第二家，要中辣的", "好的就这样下单吧"]
 
@@ -46,10 +48,23 @@ def main():
     head = "| 句子 | 去向 | 大脑标签 | 会话状态 | is_fast | Jev ms | 大模型 ms | 端到端 ms | 各步骤 |\n|---|---|---|---|---|---|---|---|---|"
     with TestClient(app) as c:
         cfg = c.get("/api/config").json()["backends"]
-        L.append(f"- 服务：Jev {cfg['jev']}（{cfg['jev_model']}），大模型 {cfg['llm']}（{cfg['llm_model']}），快思考 {cfg['fast']}\n")
+        L.append(f"- 服务：Jev {cfg['jev']}（{cfg['jev_model']}），大模型 {cfg['llm']}（{cfg['llm_model']}），"
+                 f"快思考 {cfg['fast']}，联网搜索 {cfg.get('search')}\n")
         L += ["## 单句\n", head]
+        searched = []
         for i, (q, mode) in enumerate(SINGLE):
-            L.append(fmt(run(c, q, f"single-{i}", mode)) + f" ({mode})")
+            r = run(c, q, f"single-{i}", mode)
+            L.append(fmt(r) + f" ({mode})")
+            se = next((s for s in r["steps"] if s["name"] == "联网搜索 MCP"), None)
+            if se:
+                searched.append((r, se))
+        if searched:
+            L.append("\n## 联网搜索 MCP\n")
+            for r, se in searched:
+                d = se["detail"]
+                L.append(f"- {r['query']}：工具 {d['tool']}，建立连接 {d['connect_ms']:.0f} ms，调用 {d['call_ms']:.0f} ms，"
+                         f"解析出 {len(d['items'])} 条；播报：{(r.get('brain') or {}).get('speech', '')}")
+                L += [f"  - {it['title']}" for it in d["items"][:5]]
         L += ["\n## 多轮：点外卖途中调空调\n", head]
         for q in DIALOG:
             L.append(fmt(run(c, q, "dialog", "label")))
