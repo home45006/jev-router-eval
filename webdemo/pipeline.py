@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import re
 import time
@@ -320,7 +321,7 @@ class Pipeline:
         if sr.answer:                   # 搜索服务已经写好答案（DeepSeek 自带联网搜索），不再另调大模型
             return sr.answer
         async with tr.step("能力 · 联网搜索（整理结果）", "llm") as s:
-            r = await self.llm.chat([{"role": "system", "content": SEARCH_ANSWER_PROMPT},
+            r = await self.llm.chat([{"role": "system", "content": f"今天是 {datetime.date.today():%Y年%m月%d日}。" + SEARCH_ANSWER_PROMPT},
                                      {"role": "user", "content": f"问题：{task}\n\n搜索结果：\n{sr.text[:6000]}"}],
                                     temperature=0.3, role="ability:联网搜索")
             s["detail"].update(reply=r.content, **_llm_detail(r))

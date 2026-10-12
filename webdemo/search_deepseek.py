@@ -13,6 +13,7 @@ DEEPSEEK_BASE_URL、DEEPSEEK_SEARCH_MAX_USES（默认 2）。
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import os
 import sys
@@ -39,7 +40,7 @@ class DeepSeekSearch:
         return {
             "model": self.model,
             "max_tokens": 1024,
-            "system": ANSWER_SYSTEM,
+            "system": f"今天是 {datetime.date.today():%Y年%m月%d日}。" + ANSWER_SYSTEM,     # 不给日期时模型会按训练年份搜
             "messages": [{"role": "user", "content": query}],
             "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": self.max_uses}],
             "thinking": {"type": "disabled"},          # 非思考模式
