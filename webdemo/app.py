@@ -21,6 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .backends import make_backends
+from .pricing import PRICE_SOURCE, PRICES
+from .pricing import period as price_period
 from .search_deepseek import DeepSeekSearch
 from .pipeline import ABILITIES, CRITERIA, LABELS, Pipeline, Settings
 
@@ -89,7 +91,8 @@ async def config():
                                 "instructions": v["instructions"], "status": v["status"]}
                             for k, v in CRITERIA["corrections"].items()},
             "stage1": {k: v["instructions"] for k, v in CRITERIA["stage1"].items()},
-            "abilities": [{"label": l, "tool": t, "desc": d} for l, t, d in ABILITIES]}
+            "abilities": [{"label": l, "tool": t, "desc": d} for l, t, d in ABILITIES],
+            "pricing": {"source": PRICE_SOURCE, "prices": PRICES, "period_now": price_period()}}
 
 
 def _ndjson(gen):
@@ -154,9 +157,10 @@ async def batch(req: BatchReq):
             sid = f"batch-{uuid.uuid4().hex[:8]}"
             try:
                 res = await state["pipeline"].run(item.query, sid, settings, noop)
-                compact = {k: res.get(k) for k in ("destination", "labels", "jev", "path", "rewritten", "correction", "timing")}
+                compact = {k: res.get(k) for k in ("destination", "labels", "jev", "path", "rewritten", "correction", "timing", "cost")}
                 compact["brain"] = {k: (res.get("brain") or {}).get(k) for k in ("plan", "status", "speech")}
-                compact["steps"] = [{k: s[k] for k in ("name", "kind", "start", "end", "status", "summary")} for s in res["steps"]]
+                compact["steps"] = [{**{k: s[k] for k in ("name", "kind", "start", "end", "status", "summary")},
+                                     "detail": {"cost": (s.get("detail") or {}).get("cost")}} for s in res["steps"]]
                 out = {"type": "item", "index": i, "item": item.model_dump(), "result": compact, "correct": judge(item, res)}
             except Exception as e:
                 out = {"type": "item", "index": i, "item": item.model_dump(), "error": f"{type(e).__name__}: {e}"[:300]}

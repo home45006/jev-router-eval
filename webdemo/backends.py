@@ -17,6 +17,8 @@ import re
 import time
 from dataclasses import dataclass, field
 
+from .pricing import cost_openai
+
 
 # --------------------------------------------------------------------------- #
 # Jev
@@ -112,6 +114,7 @@ class LLMResult:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     raw_message: dict = field(default_factory=dict)   # 原样放回对话历史用
+    cost: dict | None = None                          # 费用明细（pricing.cost 的返回）
 
 
 class RealLLM:
@@ -148,7 +151,7 @@ class RealLLM:
         return LLMResult(msg.content or "", calls, ms, res.model,
                          getattr(u, "prompt_tokens", None), getattr(u, "completion_tokens", None),
                          (getattr(det, "reasoning_tokens", None) or 0) if det else 0,
-                         msg.model_dump(exclude_none=True))
+                         msg.model_dump(exclude_none=True), cost_openai(res.model or self.model, u))
 
 
 # 模拟大脑：按关键词给出能力标签
@@ -160,6 +163,12 @@ MOCK_RULES = [
     ("空调", r"热|冷|闷|空调|通风|加热|除雾"), ("多媒体", r"歌|音乐|电影|电视剧|综艺|听|看"),
     ("记忆", r"记住|记一下|帮我存"), ("闲聊", r"你好|讲个|笑话|诗|几点|哪天|天气|为什么|是谁"),
 ]
+
+
+def _mock_cost(prompt: int, out: int) -> dict:
+    """模拟模式也按 Flash 单价算一个示意费用（一半输入当作命中缓存）。"""
+    from .pricing import cost
+    return cost("deepseek-flash", prompt // 2, prompt - prompt // 2, out)
 
 
 class MockLLM:
@@ -177,9 +186,9 @@ class MockLLM:
             out = user
             for k, v in NICKNAMES.items():
                 out = out.replace(k, v)
-            return LLMResult(out, [], ms, self.model, 120, 8, 0)
+            return LLMResult(out, [], ms, self.model, 120, 8, 0, cost=_mock_cost(120, 8))
         if role.startswith("ability:"):
-            return LLMResult(f"（模拟）{role[8:]}已处理：{user[:40]}", [], ms, self.model, 200, 20, 0)
+            return LLMResult(f"（模拟）{role[8:]}已处理：{user[:40]}", [], ms, self.model, 200, 20, 0, cost=_mock_cost(200, 20))
         query = user.split("\n")[0]
         labels = [name for name, pat in MOCK_RULES if re.search(pat, query)] or ["闲聊"]
         status = "continue" if "美团" in labels else "end"
@@ -196,12 +205,12 @@ class MockLLM:
                        "联网搜索": "web_search", "用车手册": "car_manual", "导航": "navigation", "空调": "climate",
                        "多媒体": "media", "美团": "meituan", "记忆": "memory", "闲聊": "chat"}
             calls = [ToolCall(f"call_{i}", name_of[l], {"task": query}) for i, l in enumerate(labels)]
-            return LLMResult("", calls, ms, self.model, 900, 40, 0,
+            return LLMResult("", calls, ms, self.model, 900, 40, 0, cost=_mock_cost(900, 40), raw_message=
                              {"role": "assistant", "content": "", "tool_calls": [
                                  {"id": c.id, "type": "function",
                                   "function": {"name": c.name, "arguments": json.dumps(c.arguments, ensure_ascii=False)}}
                                  for c in calls]})
-        return LLMResult(json.dumps(final, ensure_ascii=False), [], ms, self.model, 1000, 60, 0)
+        return LLMResult(json.dumps(final, ensure_ascii=False), [], ms, self.model, 1000, 60, 0, cost=_mock_cost(1000, 60))
 
 
 # --------------------------------------------------------------------------- #

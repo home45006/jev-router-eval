@@ -4,6 +4,9 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtMs = (ms) => (ms == null ? "-" : ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : Math.round(ms) + " ms");
+const fmtYuan = (y) => (y == null ? "-" : y === 0 ? "¥0" : y >= 1 ? "¥" + y.toFixed(2) : y >= 0.01 ? "¥" + y.toFixed(3) : "¥" + y.toFixed(5));
+const costOf = (s) => (s && s.detail && s.detail.cost ? s.detail.cost.yuan : null);
+const PERIOD = { peak: "高峰时段", offpeak: "空闲时段" };
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + "%" : "-");
 const quant = (arr, q) => {
   if (!arr.length) return null;
@@ -81,7 +84,7 @@ function niceStep(max) {
 function waterfall(steps) {
   const done = steps.filter((s) => s.start != null);
   const total = Math.max(1, ...done.map((s) => s.end ?? s.start + 1));
-  const W = 900, L = 180, R = 76, row = 26, top = 22;
+  const W = 960, L = 180, R = 150, row = 26, top = 22;
   const H = top + done.length * row + 6;
   const x = (t) => L + (t / total) * (W - L - R);
   const step = niceStep(total);
@@ -94,12 +97,13 @@ function waterfall(steps) {
     const end = s.end ?? s.start;
     const w = Math.max(3, x(end) - x(s.start));
     const dur = s.end != null ? s.end - s.start : null;
-    const tipText = `${s.name}\n${fmtMs(s.start)} → ${s.end != null ? fmtMs(s.end) : "进行中"}，耗时 ${fmtMs(dur)}\n${s.summary || ""}`;
+    const c = costOf(s);
+    const tipText = `${s.name}\n${fmtMs(s.start)} → ${s.end != null ? fmtMs(s.end) : "进行中"}，耗时 ${fmtMs(dur)}${c != null ? `，费用 ${fmtYuan(c)}` : ""}\n${s.summary || ""}`;
     return `<g data-tip="${esc(tipText)}">
       <rect x="0" y="${y}" width="${W}" height="${row}" fill="transparent"/>
       <text x="${L - 10}" y="${y + 17}" text-anchor="end">${esc(s.name)}</text>
       <rect class="bar ${s.status === "running" ? "running" : ""} ${s.status === "error" ? "err" : ""}" x="${x(s.start)}" y="${y + 6}" width="${w}" height="${row - 12}" rx="4" fill="${KIND[s.kind]?.color || "var(--k-code)"}"/>
-      <text class="ms" x="${W - R + 8}" y="${y + 17}">${s.end != null ? fmtMs(dur) : "…"}</text>
+      <text class="ms" x="${W - R + 8}" y="${y + 17}">${s.end != null ? fmtMs(dur) : "…"}${c != null ? `<tspan class="yuan" dx="8">${fmtYuan(c)}</tspan>` : ""}</text>
     </g>`;
   }).join("");
   return `<svg class="wf" viewBox="0 0 ${W} ${H}" role="img" aria-label="各步骤耗时瀑布图"><g class="axis">${ticks}</g>${bars}</svg>`;
@@ -153,7 +157,8 @@ function panels(result) {
   if (rw) {
     out.push(`<div class="panel"><h4>大模型改写 <span class="ms">${fmtMs(rw.end - rw.start)}</span></h4>
       <dl class="kv"><dt>原句</dt><dd>${esc(rw.detail.before)}</dd><dt>改写后</dt><dd><b>${esc(rw.detail.after)}</b></dd>
-      <dt>模型</dt><dd>${esc(rw.detail.model)}</dd><dt>token</dt><dd>输入 ${rw.detail.prompt_tokens ?? "-"} · 输出 ${rw.detail.completion_tokens ?? "-"} · 推理 ${rw.detail.reasoning_tokens ?? "-"}</dd></dl></div>`);
+      <dt>模型</dt><dd>${esc(rw.detail.model)}</dd><dt>token</dt><dd>输入 ${rw.detail.prompt_tokens ?? "-"} · 输出 ${rw.detail.completion_tokens ?? "-"} · 推理 ${rw.detail.reasoning_tokens ?? "-"}</dd>
+      <dt>费用</dt><dd>${fmtYuan(costOf(rw))}</dd></dl></div>`);
   }
   const fm = stepOf(st, "快思考模型");
   if (fm) {
@@ -165,7 +170,7 @@ function panels(result) {
   if (se) {
     const d = se.detail;
     const items = (d.items || []).map((it) => `<li>${it.url ? `<a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>` : esc(it.title)}<div class="hint">${esc(it.snippet)}</div></li>`).join("");
-    const usage = d.usage ? `输入 ${d.usage.input_tokens ?? "-"} / 输出 ${d.usage.output_tokens ?? "-"} token · 搜索 ${d.usage.server_tool_use?.web_search_requests ?? (d.queries || []).length} 次` : "";
+    const usage = d.usage ? `输入 ${d.usage.input_tokens ?? "-"}（另命中缓存 ${d.usage.cache_read_input_tokens ?? 0}）/ 输出 ${d.usage.output_tokens ?? "-"} token · 搜索 ${d.usage.server_tool_use?.web_search_requests ?? (d.queries || []).length} 次 · 费用 ${fmtYuan(costOf(se))}` : "";
     out.push(`<div class="panel" style="grid-column:1/-1"><h4>${esc(se.name)} <span class="ms">调用 ${fmtMs(d.call_ms)}</span></h4>
       <dl class="kv"><dt>问题</dt><dd>${esc(d.task)}</dd>${(d.queries || []).length ? `<dt>模型搜索词</dt><dd>${esc(d.queries.join("；"))}</dd>` : ""}
       <dt>服务</dt><dd>${esc(d.model || "")} · ${esc(d.url)}</dd>${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
@@ -176,13 +181,25 @@ function panels(result) {
     const b = result.brain;
     const calls = st.filter((s) => s.kind === "llm" && s.name.startsWith("Agent 大脑"));
     const tools = (b.tools_called || []).map((t) => `<div class="tool"><span class="pill label">${esc(t.label)}</span> <span class="t">任务：</span>${esc(t.task)}<br><span class="t">结果：</span>${esc(t.result)}</div>`).join("");
-    const callRows = calls.map((c) => `<li>${esc(c.name)}：${fmtMs(c.end - c.start)} · 输入 ${c.detail.prompt_tokens ?? "-"} / 输出 ${c.detail.completion_tokens ?? "-"} / 推理 ${c.detail.reasoning_tokens ?? "-"} token</li>`).join("");
+    const callRows = calls.map((c) => `<li>${esc(c.name)}：${fmtMs(c.end - c.start)} · 输入 ${c.detail.prompt_tokens ?? "-"} / 输出 ${c.detail.completion_tokens ?? "-"} / 推理 ${c.detail.reasoning_tokens ?? "-"} token · ${fmtYuan(costOf(c))}</li>`).join("");
     out.push(`<div class="panel" style="grid-column:1/-1"><h4>Agent 大脑 <span class="pill">${b.mode === "orchestrate" ? "编排模式" : "标签模式"}</span><span class="ms">会话状态：${esc(b.status)}</span></h4>
       <dl class="kv"><dt>能力标签</dt><dd>${(b.labels || []).map((l) => `<span class="pill label">${esc(l)}</span>`).join(" ") || "无"}</dd>
       <dt>计划</dt><dd>${esc(b.plan)}</dd></dl>
       ${tools ? `<h4 style="margin-top:10px">调用的能力</h4>${tools}` : ""}
       <h4 style="margin-top:10px">大模型调用</h4><ul>${callRows}</ul>
       ${b.raw ? `<details><summary class="hint">大脑原始输出</summary><pre>${esc(b.raw)}</pre></details>` : ""}</div>`);
+  }
+  const billed = st.filter((s) => costOf(s) != null);
+  if (billed.length) {
+    const rows = billed.map((s) => {
+      const c = s.detail.cost, k = c.tokens;
+      return `<tr><td>${esc(s.name)}</td><td>${esc(s.detail.model || c.price_model)}</td><td class="num">${k.cache_hit}</td><td class="num">${k.cache_miss}</td><td class="num">${k.output}</td><td class="num">${fmtYuan(c.yuan)}</td></tr>`;
+    }).join("");
+    const total = billed.reduce((a, s) => a + costOf(s), 0);
+    const c0 = billed[0].detail.cost, u = c0.unit_prices;
+    out.push(`<div class="panel" style="grid-column:1/-1"><h4>大模型费用 <span class="ms">合计 ${fmtYuan(total)}</span></h4>
+      <div class="scroll"><table><thead><tr><th>调用</th><th>模型</th><th class="num">输入·命中缓存</th><th class="num">输入·未命中</th><th class="num">输出</th><th class="num">费用</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <p class="hint">按 ${esc(c0.price_model)} ${PERIOD[c0.period] || ""}单价计：输入命中缓存 ${u.cache_hit} 元、未命中 ${u.cache_miss} 元、输出 ${u.output} 元 / 百万 tokens（${esc(S.config.pricing.source)}）。${S.config.backends.llm === "mock" ? "模拟模式下 token 数是假的，费用只作示意。" : ""}</p></div>`);
   }
   return `<div class="details">${out.join("")}</div>`;
 }
@@ -201,6 +218,7 @@ function renderTurn(card, steps, result, error) {
     if (result.suspended) headHtml += `<span class="pill busy">挂起进行中的任务</span>`;
     const t = result.timing;
     headHtml += `<span class="ms" data-tip="${esc(`Jev ${fmtMs(t.jev_ms)} · 大模型 ${fmtMs(t.llm_ms)} · 能力 ${fmtMs(t.agent_ms)} · 搜索 ${fmtMs(t.search_ms)} · 快思考 ${fmtMs(t.fast_ms)} · 大模型调用 ${t.llm_calls} 次`)}">端到端 ${fmtMs(t.total_ms)}</span>`;
+    if (result.cost && result.cost.calls) headHtml += `<span class="pill" data-tip="${esc(`${result.cost.calls} 次大模型调用，按 ${PERIOD[result.cost.period] || ""}单价计`)}">大模型费用 ${fmtYuan(result.cost.yuan)}</span>`;
   } else if (error) {
     headHtml += `<span class="pill no">出错</span>`;
   } else {
@@ -313,6 +331,7 @@ function renderBatch() {
     e2e.push(r.result.timing.total_ms);
   });
   const errs = rows.filter((r) => r.error).length;
+  const costSum = rows.reduce((a, r) => a + ((r.result && r.result.cost && r.result.cost.yuan) || 0), 0);
   $("#batchTiles").innerHTML = [
     ["已完成", `${n} / ${B.items.length}`, errs ? `${errs} 条出错` : "　"],
     ["去向准确率（Jev）", pct(okD, destJ.length), `${okD} / ${destJ.length}`],
@@ -320,6 +339,7 @@ function renderBatch() {
     ["Jev 耗时 p50 / p90", `${fmtMs(quant(jevMs, 0.5))}`, `p90 ${fmtMs(quant(jevMs, 0.9))}`],
     ["大脑单次推理 p50", fmtMs(quant(brainMs, 0.5)), `p90 ${fmtMs(quant(brainMs, 0.9))}`],
     ["端到端 p50", fmtMs(quant(e2e, 0.5)), `p90 ${fmtMs(quant(e2e, 0.9))}`],
+    ["大模型费用合计", fmtYuan(costSum), `平均每句 ${fmtYuan(n ? costSum / n : null)}，每千句约 ${n ? "¥" + (costSum / n * 1000).toFixed(2) : "-"}`],
   ].map(([k, v, s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 
   // 按应有标签
@@ -344,9 +364,9 @@ function renderBatch() {
     return `<tr data-i="${i}"><td class="num">${i + 1}</td><td>${esc(r.item.query)}<div class="hint">${esc(r.item.source || "")}</div></td>
       <td>${esc(r.item.dest || "-")}</td><td>${r.error ? `<span class="mark-no">${esc(r.error)}</span>` : esc(res.destination)} ${mark(r.correct?.dest)}</td>
       <td>${esc((r.item.labels || []).join("、"))}</td><td>${esc((res.labels || []).join("、"))} ${mark(r.correct?.label)}</td>
-      <td class="num">${res.jev ? res.jev.is_fast.toFixed(2) : "-"}</td><td class="num">${fmtMs(res.timing?.total_ms)}</td></tr>`;
+      <td class="num">${res.jev ? res.jev.is_fast.toFixed(2) : "-"}</td><td class="num">${fmtMs(res.timing?.total_ms)}</td><td class="num">${fmtYuan(res.cost?.yuan)}</td></tr>`;
   }).join("");
-  $("#batchTable").innerHTML = `<thead><tr><th class="num">#</th><th>句子</th><th>应去</th><th>实际去向</th><th>应有标签</th><th>大脑标签</th><th class="num">is_fast</th><th class="num">端到端</th></tr></thead><tbody>${body}</tbody>`;
+  $("#batchTable").innerHTML = `<thead><tr><th class="num">#</th><th>句子</th><th>应去</th><th>实际去向</th><th>应有标签</th><th>大脑标签</th><th class="num">is_fast</th><th class="num">端到端</th><th class="num">费用</th></tr></thead><tbody>${body}</tbody>`;
   $$("#batchTable tbody tr[data-i]").forEach((tr) => tr.addEventListener("click", () => toggleBatchRow(tr)));
 }
 
@@ -358,7 +378,7 @@ function toggleBatchRow(tr) {
   const res = r.result;
   const x = document.createElement("tr");
   x.className = "expand";
-  x.innerHTML = `<td></td><td colspan="7">
+  x.innerHTML = `<td></td><td colspan="8">
     <div class="hint">路径：${esc((res.path || []).join(" → "))}${res.rewritten ? ` · 改写：${esc(res.rewritten)}` : ""}${res.brain?.plan ? ` · 计划：${esc(res.brain.plan)}` : ""}</div>
     <div class="hint">Jev：${Object.entries(res.jev || {}).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(" · ")}</div>
     <div class="scroll">${waterfall(res.steps)}</div>${legend([...new Set(res.steps.map((s) => s.kind))])}</td>`;
@@ -418,7 +438,31 @@ function latencySeries() {
   return rows;
 }
 
+function renderCost() {
+  const groups = { "大模型改写": [], "大脑单次推理": [], "能力（子 Agent）": [], "联网搜索": [] };
+  const perTurn = { "快思考路径": [], "大脑路径": [] };
+  for (const r of S.runs) {
+    for (const s of r.steps || []) {
+      const c = costOf(s);
+      if (c == null) continue;
+      if (s.name === "大模型改写") groups["大模型改写"].push(c);
+      else if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) groups["大脑单次推理"].push(c);
+      else if (s.kind === "agent") groups["能力（子 Agent）"].push(c);
+      else if (s.kind === "search") groups["联网搜索"].push(c);
+    }
+    if (r.cost) perTurn[r.destination === "快思考" ? "快思考路径" : "大脑路径"].push(r.cost.yuan);
+  }
+  const row = (k, v, note) => {
+    const sum = v.reduce((a, b) => a + b, 0);
+    return `<tr><td>${esc(k)}</td><td class="num">${v.length}</td><td class="num">${fmtYuan(v.length ? sum / v.length : null)}</td><td class="num">${fmtYuan(quant(v, 0.9))}</td><td class="num">${fmtYuan(v.length ? Math.max(...v) : null)}</td><td class="num">${fmtYuan(sum)}</td><td>${note || ""}</td></tr>`;
+  };
+  $("#costTable").innerHTML = `<thead><tr><th>项目</th><th class="num">次数</th><th class="num">平均</th><th class="num">p90</th><th class="num">最贵</th><th class="num">合计</th><th></th></tr></thead><tbody>` +
+    Object.entries(groups).map(([k, v]) => row(k, v)).join("") +
+    Object.entries(perTurn).map(([k, v]) => row(`每句 · ${k}`, v, k === "快思考路径" ? "只有需要改写时才调用大模型" : "")).join("") + "</tbody>";
+}
+
 function renderLatency() {
+  renderCost();
   const rows = latencySeries();
   const all = rows.flatMap((r) => r.vals.map((v) => v.ms));
   if (!all.length) {

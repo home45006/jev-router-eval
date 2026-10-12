@@ -36,8 +36,8 @@ def run(c, q, sid, mode):
 
 def fmt(r):
     t = r["timing"]
-    steps = "；".join(f"{s['name']} {s['end'] - s['start']:.0f}ms" for s in r["steps"])
-    return (f"| {r['query']} | {r['destination']} | {'、'.join(r['labels'])} | {(r.get('brain') or {}).get('status', '-')} | "
+    steps = "；".join(f"{s['name']} {s['end'] - s['start']:.0f}ms" + (f" ¥{s['detail']['cost']['yuan']:.5f}" if (s.get('detail') or {}).get('cost') else "") for s in r["steps"])
+    return (f"| {r['query']} | {r['destination']} | {'、'.join(r['labels'])} | {(r.get('brain') or {}).get('status', '-')} | ¥{r['cost']['yuan']:.5f} | "
             f"{(r.get('jev') or {}).get('is_fast', float('nan')):.2f} | {t['jev_ms']:.0f} | {t['llm_ms'] + t['agent_ms']:.0f} | {t['total_ms']:.0f} | {steps} |")
 
 
@@ -45,7 +45,7 @@ def main():
     if not (os.environ.get("TYPESAFE_API_KEY") and os.environ.get("DEEPSEEK_API_KEY")):
         sys.exit("需要 TYPESAFE_API_KEY 和 DEEPSEEK_API_KEY")
     L = ["# 演示系统真实调用检查\n"]
-    head = "| 句子 | 去向 | 大脑标签 | 会话状态 | is_fast | Jev ms | 大模型 ms | 端到端 ms | 各步骤 |\n|---|---|---|---|---|---|---|---|---|"
+    head = "| 句子 | 去向 | 大脑标签 | 会话状态 | 大模型费用 | is_fast | Jev ms | 大模型 ms | 端到端 ms | 各步骤 |\n|---|---|---|---|---|---|---|---|---|---|"
     with TestClient(app) as c:
         cfg = c.get("/api/config").json()["backends"]
         L.append(f"- 服务：Jev {cfg['jev']}（{cfg['jev_model']}），大模型 {cfg['llm']}（{cfg['llm_model']}），"
@@ -76,6 +76,8 @@ def main():
         dj = [r for r in rows if r.get("correct", {}).get("dest") is not None]
         lj = [r for r in rows if r.get("correct", {}).get("label") is not None]
         L.append(f"\n## 内置样例 {len(rows)} 句（标签模式）\n")
+        tot = sum((r.get("result") or {}).get("cost", {}).get("yuan", 0) for r in rows)
+        L.append(f"- 大模型费用合计 ¥{tot:.4f}，平均每句 ¥{tot / max(len(rows), 1):.5f}（每千句约 ¥{tot / max(len(rows), 1) * 1000:.2f}）")
         L.append(f"- 去向正确 {sum(r['correct']['dest'] for r in dj)}/{len(dj)}；大脑首选标签正确 {sum(r['correct']['label'] for r in lj)}/{len(lj)}，"
                  f"包含正确答案 {sum(r['correct']['label_any'] for r in lj)}/{len(lj)}；出错 {sum('error' in r for r in rows)}")
         L.append("\n| 句子 | 应去 | 实际 | 应有标签 | 大脑标签 | 端到端 ms |\n|---|---|---|---|---|---|")

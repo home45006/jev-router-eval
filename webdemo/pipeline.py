@@ -153,7 +153,7 @@ def _clean_labels(labels) -> list[str]:
 
 def _llm_detail(r) -> dict:
     return {"model": r.model, "ms": round(r.ms, 1), "prompt_tokens": r.prompt_tokens,
-            "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens}
+            "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens, "cost": r.cost}
 
 
 class Pipeline:
@@ -308,7 +308,7 @@ class Pipeline:
             async with tr.step("联网搜索 · DeepSeek", "search", task=task) as s:
                 sr = await self.search.search(task)
                 s["detail"].update(answer=sr.answer, items=sr.items, queries=sr.queries, usage=sr.usage,
-                                   model=sr.model, url=sr.url, call_ms=round(sr.ms, 1))
+                                   model=sr.model, url=sr.url, call_ms=round(sr.ms, 1), cost=sr.cost)
                 s["summary"] = f"搜索 {len(sr.queries)} 次，来源 {len(sr.items)} 条：{sr.answer[:30]}"
         except Exception as e:          # 搜索失败不影响本轮：记录错误，播报说明没查到
             return f"联网搜索暂时不可用（{str(e)[:120]}）"
@@ -354,7 +354,10 @@ class Pipeline:
             return round(sum(s["end"] - s["start"] for s in steps if s["kind"] == kind and s["end"] is not None), 1)
         result["timing"] = {"total_ms": tr.now(), "jev_ms": total("jev"), "llm_ms": total("llm"),
                             "agent_ms": total("agent"), "fast_ms": total("fast"), "search_ms": total("search"),
-                            "llm_calls": sum(s["kind"] in ("llm", "agent") for s in steps)}
+                            "llm_calls": sum(s["kind"] in ("llm", "agent", "search") for s in steps)}
+        costs = [s["detail"]["cost"] for s in steps if (s.get("detail") or {}).get("cost")]
+        result["cost"] = {"yuan": round(sum(c["yuan"] for c in costs), 6), "calls": len(costs),
+                          "period": costs[0]["period"] if costs else None}
         result["steps"] = steps
         return result
 

@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from .pricing import cost_anthropic
+
 
 @dataclass
 class SearchResult:
@@ -34,6 +36,7 @@ class SearchResult:
     model: str = ""
     url: str = ""
     ms: float = 0.0
+    cost: dict | None = None
 
 ANSWER_SYSTEM = ("你是车载语音助手的联网搜索能力。需要最新信息时先联网搜索，然后用适合语音播报的两三句话回答，"
                  "只说搜到的信息，不要编造；没查到就直说。不要输出链接和 Markdown。")
@@ -90,7 +93,8 @@ class DeepSeekSearch:
                     texts.append(f"（搜索出错：{content.get('error_code')}）")
         usage = data.get("usage") or {}
         return SearchResult(query=query, answer="".join(texts).strip(), items=items[:10], queries=queries,
-                            usage=usage, model=data.get("model", self.model), url=self.url, ms=ms)
+                            usage=usage, model=data.get("model", self.model), url=self.url, ms=ms,
+                            cost=cost_anthropic(data.get("model", self.model), usage))
 
 
 async def _probe(query: str) -> None:
