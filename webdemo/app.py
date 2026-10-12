@@ -21,7 +21,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .backends import make_backends
+from .search_deepseek import DeepSeekSearch
 from .search_mcp import SearchMCP
+
+
+def make_search():
+    """SEARCH_PROVIDER=deepseek | mcp。不设时：有 DEEPSEEK_API_KEY 用 DeepSeek 自带联网搜索，否则看是否配置了搜索 MCP。"""
+    p = os.environ.get("SEARCH_PROVIDER")
+    if p == "mcp" or (not p and not os.environ.get("DEEPSEEK_API_KEY")):
+        return SearchMCP()
+    return DeepSeekSearch()
 from .pipeline import ABILITIES, CRITERIA, LABELS, Pipeline, Settings
 
 HERE = Path(__file__).resolve().parent
@@ -43,9 +52,9 @@ state: dict = {}
 async def lifespan(_: FastAPI):
     jev, llm, fast = make_backends()
     await jev.start()
-    search = SearchMCP()
+    search = make_search()
     state["pipeline"] = Pipeline(jev, llm, fast, search)
-    state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind, "search": search.kind,
+    state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind, "search": search.kind, "search_provider": search.provider,
                       "jev_model": jev.model, "llm_model": llm.model}
     yield
     await jev.close()
