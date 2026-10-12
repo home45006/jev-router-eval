@@ -53,4 +53,4 @@ python eval_jev.py --split dev --per-label 20 --out runs/dev-v0.4               
 ## AgentScope 开发 skill
 
 `.claude/skills/agentscope-cockpit/` 是给 Claude Code 用的开发指南：用 AgentScope 2.0.9 实现 Agent 大脑、子 Agent、会话三态和 Jev 两级分流。
-`examples/` 下的两个示例都能用 `--offline`（假模型）跑通，CI 每次提交都会跑；接真实模型时设置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`，非思考模式）、`TYPESAFE_API_KEY`。
+`examples/` 下的两个示例都能用 `--offline`（假模型）跑通，CI 每次提交都会跑；接真实模型时设置 `DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-flash`，非思考模式）、`TYPESAFE_API_KEY`。

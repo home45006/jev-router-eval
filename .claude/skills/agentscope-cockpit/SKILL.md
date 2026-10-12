@@ -36,10 +36,10 @@ Agent 大脑把快思考、任务大师、条件任务、联网搜索、用车�
    纠错题写在 `criteria_v2.json` 的 `corrections` 里：`status` 为 shadow 时只记日志，为 on 时命中就按 `route` 走，
    `hint` 附在用户原话后交给大脑。新题先 shadow，用 `eval_two_stage.py` 回放看改对、改错各多少，再改成 on。
 6. **DeepSeek 用 V4 Flash 非思考模式。** `DeepSeekChatModel(..., parameters=DeepSeekChatModel.Parameters(thinking_enable=False))`，
-   请求带 `thinking.type=disabled`，不产生推理 token。模型 ID 和地址从环境变量读：`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-v4-flash`）、
+   请求带 `thinking.type=disabled`，不产生推理 token。模型 ID 和地址从环境变量读：`DEEPSEEK_API_KEY`、`DEEPSEEK_MODEL`（默认 `deepseek-flash`）、
    `DEEPSEEK_FALLBACK_MODEL`（可选，经 `ModelConfig(fallback_model=...)` 生效）、`DEEPSEEK_BASE_URL`、`TYPESAFE_API_KEY`。
-   2026-10-11 实测：`/models` 只列出 `deepseek-flash`、`deepseek-v4-pro`，但 `deepseek-v4-flash` 也能调通，服务端返回的模型名是 `deepseek-flash`（同一个模型）。
-   非思考模式下推理 token 为 0，改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房）。
+   官方文档（2026-10）：模型名用 `deepseek-flash`（当前是 DeepSeek-V4.1-Flash）；旧名 `deepseek-v4-flash` 仍可调用，但对应模型已下线，由 V4.1-Flash 提供服务。
+   思考模式默认打开，必须显式关闭。实测非思考模式推理 token 为 0，改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房）。
    不要把 key 写进代码或提交到仓库；CI 里用仓库 Secret。
 7. **控制时延。** 大脑 `ReActConfig(max_iters=6~10)`；用 `reply_stream()` 把 `TextBlockDeltaEvent.delta` 边生成边送 TTS。
 
@@ -69,7 +69,7 @@ brain = Agent(
     model=DeepSeekChatModel(
         credential=DeepSeekCredential(api_key=os.environ["DEEPSEEK_API_KEY"],
                                       base_url=os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")),
-        model=os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+        model=os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"),
         parameters=DeepSeekChatModel.Parameters(thinking_enable=False),   # 非思考模式
     ),
     toolkit=Toolkit(tools=[FunctionTool(fast_think, permission=ALLOW), ...子 Agent 工具]),

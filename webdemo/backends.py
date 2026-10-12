@@ -2,7 +2,7 @@
 
 每个服务有“真实”和“模拟”两种实现。有对应的环境变量就用真实服务，否则用模拟实现：
     TYPESAFE_API_KEY  → Jev（typesafe-sdk，模型 JEV_MODEL，默认 jev-latest）
-    DEEPSEEK_API_KEY  → DeepSeek V4 Flash 非思考模式（DEEPSEEK_MODEL，默认 deepseek-v4-flash）
+    DEEPSEEK_API_KEY  → DeepSeek V4 Flash 非思考模式（DEEPSEEK_MODEL，默认 deepseek-flash）
     FAST_MODEL_URL    → 快思考模型的 HTTP 服务（约定见 README）；不设时只记录“未接入”
 
 模拟实现只用于在没有密钥的环境里看界面和流程，结果由关键词规则产生，不代表模型效果。
@@ -119,7 +119,7 @@ class RealLLM:
 
     def __init__(self) -> None:
         from openai import AsyncOpenAI
-        self.model = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
+        self.model = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
         self._client = AsyncOpenAI(api_key=os.environ["DEEPSEEK_API_KEY"],
                                    base_url=os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com",
                                    timeout=30)
@@ -127,7 +127,7 @@ class RealLLM:
     async def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
                    temperature: float = 0.0, role: str = "") -> LLMResult:
         kw = {"model": self.model, "messages": messages, "temperature": temperature,
-              "extra_body": {"thinking": {"type": "disabled"}}}       # V4 Flash 非思考模式
+              "extra_body": {"thinking": {"type": "disabled"}}}       # 非思考模式；不传时默认是思考模式
         if tools:
             kw["tools"] = tools
         if json_mode:

@@ -5,7 +5,7 @@ DeepSeek 的 Anthropic 兼容接口（{DEEPSEEK_BASE_URL}/anthropic/v1/messages�
 一次请求里完成“搜索 + 写答案”，返回 text 块和 web_search_tool_result 块（来源）。
 OpenAI 兼容接口（/chat/completions）没有这个能力。
 
-环境变量：DEEPSEEK_API_KEY；可选 DEEPSEEK_SEARCH_MODEL（默认同 DEEPSEEK_MODEL，再默认 deepseek-v4-flash）、
+环境变量：DEEPSEEK_API_KEY；可选 DEEPSEEK_SEARCH_MODEL（默认同 DEEPSEEK_MODEL，再默认 deepseek-flash）、
 DEEPSEEK_BASE_URL、DEEPSEEK_SEARCH_MAX_USES（默认 2）。
 
     python -m webdemo.search_deepseek "今天有什么热点新闻"     # 探测：打印原始返回结构
@@ -44,7 +44,7 @@ class DeepSeekSearch:
         self.kind = "real" if os.environ.get("DEEPSEEK_API_KEY") else "absent"
         base = (os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").rstrip("/")
         self.url = base + "/anthropic/v1/messages"
-        self.model = os.environ.get("DEEPSEEK_SEARCH_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash"
+        self.model = os.environ.get("DEEPSEEK_SEARCH_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "deepseek-flash"
         self.max_uses = int(os.environ.get("DEEPSEEK_SEARCH_MAX_USES", "2"))
 
     def _body(self, query: str) -> dict:
@@ -54,7 +54,7 @@ class DeepSeekSearch:
             "system": f"今天是 {datetime.date.today():%Y年%m月%d日}。" + ANSWER_SYSTEM,     # 不给日期时模型会按训练年份搜
             "messages": [{"role": "user", "content": query}],
             "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": self.max_uses}],
-            "thinking": {"type": "disabled"},          # 非思考模式
+            "thinking": {"type": "disabled"},          # 非思考模式（官方文档：思考模式默认打开）
         }
 
     async def raw(self, query: str) -> tuple[dict, float]:

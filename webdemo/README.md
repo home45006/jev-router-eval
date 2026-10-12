@@ -10,7 +10,7 @@
 pip install -r webdemo/requirements.txt
 export TYPESAFE_API_KEY=...        # Jev；不设则用模拟 Jev
 export DEEPSEEK_API_KEY=...        # DeepSeek V4 Flash 非思考模式；不设则用模拟大模型
-# 可选：DEEPSEEK_MODEL（默认 deepseek-v4-flash）、DEEPSEEK_BASE_URL、JEV_MODEL（默认 jev-latest）
+# 可选：DEEPSEEK_MODEL（默认 deepseek-flash，官方文档指定的模型名）、DEEPSEEK_BASE_URL、JEV_MODEL（默认 jev-latest）
 # 可选：FAST_MODEL_URL，快思考服务地址，约定见下
 # 联网搜索用 DeepSeek 自带的（Anthropic 兼容接口，复用 DEEPSEEK_API_KEY）；可选 DEEPSEEK_SEARCH_MAX_USES（默认 2）
 uvicorn webdemo.app:app --port 8000
