@@ -59,13 +59,13 @@ def main():
             if se:
                 searched.append((r, se))
         if searched:
-            L.append(f"\n## 联网搜索（{cfg.get('search_provider')}）\n")
+            L.append("\n## 联网搜索（DeepSeek 自带）\n")
             for r, se in searched:
                 d = se["detail"]
                 if se["status"] == "error":
                     L.append(f"- {r['query']}：失败 {se['summary']}")
                     continue
-                L.append(f"- {r['query']}：{d['tool']}，耗时 {se['end'] - se['start']:.0f} ms，搜索词 {d.get('queries')}，"
+                L.append(f"- {r['query']}：耗时 {se['end'] - se['start']:.0f} ms，搜索词 {d.get('queries')}，"
                          f"来源 {len(d['items'])} 条，用量 {d.get('usage')}；播报：{(r.get('brain') or {}).get('speech', '')}")
                 L += [f"  - {it['title']}" for it in d["items"][:5]]
         L += ["\n## 多轮：点外卖途中调空调\n", head]

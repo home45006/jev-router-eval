@@ -19,9 +19,21 @@ import os
 import sys
 import time
 
+from dataclasses import dataclass, field
+
 import httpx
 
-from .search_mcp import SearchResult
+
+@dataclass
+class SearchResult:
+    query: str
+    answer: str                                        # 模型根据搜索结果写好的播报
+    items: list[dict] = field(default_factory=list)    # 来源：title / url / snippet
+    queries: list[str] = field(default_factory=list)   # 模型实际用的搜索词
+    usage: dict = field(default_factory=dict)
+    model: str = ""
+    url: str = ""
+    ms: float = 0.0
 
 ANSWER_SYSTEM = ("你是车载语音助手的联网搜索能力。需要最新信息时先联网搜索，然后用适合语音播报的两三句话回答，"
                  "只说搜到的信息，不要编造；没查到就直说。不要输出链接和 Markdown。")
@@ -30,7 +42,6 @@ ANSWER_SYSTEM = ("你是车载语音助手的联网搜索能力。需要最新�
 class DeepSeekSearch:
     def __init__(self) -> None:
         self.kind = "real" if os.environ.get("DEEPSEEK_API_KEY") else "absent"
-        self.provider = "deepseek"
         base = (os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com").rstrip("/")
         self.url = base + "/anthropic/v1/messages"
         self.model = os.environ.get("DEEPSEEK_SEARCH_MODEL") or os.environ.get("DEEPSEEK_MODEL") or "deepseek-v4-flash"
@@ -78,14 +89,8 @@ class DeepSeekSearch:
                 elif isinstance(content, dict) and content.get("error_code"):
                     texts.append(f"（搜索出错：{content.get('error_code')}）")
         usage = data.get("usage") or {}
-        res = SearchResult(query=query, tool="DeepSeek web_search", url=self.url,
-                           text=json.dumps({"queries": queries, "usage": usage}, ensure_ascii=False),
-                           items=items[:10], connect_ms=0.0, call_ms=ms, is_error=False)
-        res.answer = "".join(texts).strip()
-        res.queries = queries
-        res.usage = usage
-        res.model = data.get("model", self.model)
-        return res
+        return SearchResult(query=query, answer="".join(texts).strip(), items=items[:10], queries=queries,
+                            usage=usage, model=data.get("model", self.model), url=self.url, ms=ms)
 
 
 async def _probe(query: str) -> None:
