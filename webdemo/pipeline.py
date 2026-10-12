@@ -79,6 +79,7 @@ class Settings:
     corrections: dict[str, str] = field(default_factory=lambda: {k: v["status"] for k, v in CRITERIA["corrections"].items()})
     brain_mode: str = "label"           # label：一次调用出标签；orchestrate：调用能力工具
     simulate_fast_reject: bool = False
+    stream: bool = True                 # 大模型流式输出，记录首 token 耗时
     run_search: bool = True             # 大脑判出“联网搜索”时真的去搜（DeepSeek 自带联网搜索）
     max_iters: int = 6
 
@@ -110,6 +111,20 @@ class Trace:
 
     def now(self) -> float:
         return round((time.perf_counter() - self.t0) * 1000, 1)
+
+    def streamer(self, s: dict, key: str = "stream_text"):
+        """返回 on_delta 回调：把流式增量拼进 s["detail"][key]，并且最多每 80ms 推一次给前端。"""
+        s["detail"][key] = ""
+        last = [0.0]
+
+        async def on_delta(text: str) -> None:
+            if s["detail"].get("first_token_at") is None:
+                s["detail"]["first_token_at"] = self.now()       # 相对本轮开始的时刻，画瀑布图用
+            s["detail"][key] += text
+            if time.perf_counter() - last[0] > 0.08:
+                last[0] = time.perf_counter()
+                await self.emit({"type": "step", "step": s})
+        return on_delta
 
     @asynccontextmanager
     async def step(self, name: str, kind: str, **detail):
@@ -153,7 +168,8 @@ def _clean_labels(labels) -> list[str]:
 
 def _llm_detail(r) -> dict:
     return {"model": r.model, "ms": round(r.ms, 1), "prompt_tokens": r.prompt_tokens,
-            "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens, "cost": r.cost}
+            "completion_tokens": r.completion_tokens, "reasoning_tokens": r.reasoning_tokens, "cost": r.cost,
+            "ttft_ms": round(r.ttft_ms, 1) if r.ttft_ms is not None else None}
 
 
 class Pipeline:
@@ -230,7 +246,8 @@ class Pipeline:
             if rewrite:
                 async with tr.step("大模型改写", "llm") as s:
                     r = await self.llm.chat([{"role": "system", "content": REWRITE_PROMPT},
-                                             {"role": "user", "content": query}], role="rewrite")
+                                             {"role": "user", "content": query}], role="rewrite",
+                                            stream=settings.stream, on_delta=tr.streamer(s))
                     text = r.content.strip() or query
                     s["detail"].update(before=query, after=text, **_llm_detail(r))
                     s["summary"] = f"{query} → {text}"
@@ -260,7 +277,7 @@ class Pipeline:
             return await self._brain_orchestrate(tr, content, history, settings)
         msgs = [{"role": "system", "content": LABEL_MODE_PROMPT}, *history, {"role": "user", "content": content}]
         async with tr.step("Agent 大脑 · 判断能力", "llm", mode="label", occupied=occupied) as s:
-            r = await self.llm.chat(msgs, json_mode=True, role="brain")
+            r = await self.llm.chat(msgs, json_mode=True, role="brain", stream=settings.stream, on_delta=tr.streamer(s))
             out = _parse_json(r.content)
             labels = _clean_labels(out.get("labels"))
             if not labels and occupied and sess.labels:      # 会话中的确认、补充信息：沿用当前任务的标签
@@ -270,7 +287,7 @@ class Pipeline:
         brain = {"labels": labels, "plan": out.get("plan", ""), "status": out.get("status", "end"),
                  "speech": out.get("speech", ""), "tools_called": [], "mode": "label", "raw": r.content}
         if "联网搜索" in labels and self._search_on(settings):
-            answer = await self._web_search(tr, query)
+            answer = await self._web_search(tr, query, settings)
             brain["tools_called"].append({"label": "联网搜索", "task": query, "result": answer})
             brain["speech"] = answer
         return brain
@@ -281,7 +298,7 @@ class Pipeline:
         out: dict = {}
         for i in range(1, settings.max_iters + 1):
             async with tr.step(f"Agent 大脑 · 第 {i} 次推理", "llm", mode="orchestrate") as s:
-                r = await self.llm.chat(msgs, tools=TOOLS, role="brain")
+                r = await self.llm.chat(msgs, tools=TOOLS, role="brain", stream=settings.stream, on_delta=tr.streamer(s))
                 s["detail"].update(content=r.content, tool_calls=[{"name": c.name, "args": c.arguments} for c in r.tool_calls],
                                    **_llm_detail(r))
                 s["summary"] = ("调用 " + "、".join(LABEL_OF_TOOL.get(c.name, c.name) for c in r.tool_calls)) if r.tool_calls else "给出结论"
@@ -300,15 +317,17 @@ class Pipeline:
                 "speech": out.get("speech", ""), "tools_called": called, "mode": "orchestrate"}
 
     def _search_on(self, settings: Settings) -> bool:
-        return bool(self.search and self.search.kind == "real" and settings.run_search)
+        return bool(self.search and self.search.kind in ("real", "mock") and settings.run_search)
 
-    async def _web_search(self, tr: Trace, task: str) -> str:
-        """DeepSeek 自带联网搜索：一次请求完成搜索和写播报。"""
+    async def _web_search(self, tr: Trace, task: str, settings: Settings) -> str:
+        """DeepSeek 自带联网搜索：一次流式请求完成搜索和写播报，答案边生成边推给前端。"""
         try:
             async with tr.step("联网搜索 · DeepSeek", "search", task=task) as s:
-                sr = await self.search.search(task)
+                sr = await self.search.search(task, on_delta=tr.streamer(s))
                 s["detail"].update(answer=sr.answer, items=sr.items, queries=sr.queries, usage=sr.usage,
-                                   model=sr.model, url=sr.url, call_ms=round(sr.ms, 1), cost=sr.cost)
+                                   model=sr.model, url=sr.url, call_ms=round(sr.ms, 1), cost=sr.cost,
+                                   ttft_ms=sr.ttft_ms, first_event_ms=sr.first_event_ms,
+                                   search_done_ms=sr.search_done_ms, answer_first_ms=sr.answer_first_ms)
                 s["summary"] = f"搜索 {len(sr.queries)} 次，来源 {len(sr.items)} 条：{sr.answer[:30]}"
         except Exception as e:          # 搜索失败不影响本轮：记录错误，播报说明没查到
             return f"联网搜索暂时不可用（{str(e)[:120]}）"
@@ -318,7 +337,7 @@ class Pipeline:
         label = LABEL_OF_TOOL.get(call.name, call.name)
         task = call.arguments.get("task", "")
         if call.name == "web_search" and settings is not None and self._search_on(settings):
-            return await self._web_search(tr, task)
+            return await self._web_search(tr, task, settings)
         if call.name == "fast_think":
             async with tr.step("能力 · 快思考", "fast", task=task) as s:
                 fr = await self.fast.run(task, None, False)
@@ -328,7 +347,8 @@ class Pipeline:
         desc = next((d for l, t, d in ABILITIES if t == call.name), "")
         async with tr.step(f"能力 · {label}", "agent", task=task) as s:
             r = await self.llm.chat([{"role": "system", "content": ABILITY_PROMPT.format(label=label, desc=desc)},
-                                     {"role": "user", "content": task}], temperature=0.3, role=f"ability:{label}")
+                                     {"role": "user", "content": task}], temperature=0.3, role=f"ability:{label}",
+                                    stream=settings.stream if settings else True, on_delta=tr.streamer(s))
             s["detail"].update(reply=r.content, **_llm_detail(r))
             s["summary"] = r.content[:40]
         return r.content

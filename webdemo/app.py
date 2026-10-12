@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from .backends import make_backends
 from .pricing import PRICE_SOURCE, PRICES
 from .pricing import period as price_period
-from .search_deepseek import DeepSeekSearch
+from .search_deepseek import DeepSeekSearch, MockSearch
 from .pipeline import ABILITIES, CRITERIA, LABELS, Pipeline, Settings
 
 HERE = Path(__file__).resolve().parent
@@ -45,7 +45,7 @@ state: dict = {}
 async def lifespan(_: FastAPI):
     jev, llm, fast = make_backends()
     await jev.start()
-    search = DeepSeekSearch()
+    search = DeepSeekSearch() if os.environ.get("DEEPSEEK_API_KEY") else MockSearch()
     state["pipeline"] = Pipeline(jev, llm, fast, search)
     state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind, "search": search.kind,
                       "jev_model": jev.model, "llm_model": llm.model}
@@ -86,7 +86,7 @@ async def config():
     s = Settings()
     return {"backends": state["kinds"], "criteria_version": CRITERIA["version"],
             "defaults": {k: getattr(s, k) for k in ("is_fast_t", "rewrite_t", "correction_t", "corrections",
-                                                    "brain_mode", "simulate_fast_reject", "max_iters", "run_search")},
+                                                    "brain_mode", "simulate_fast_reject", "max_iters", "run_search", "stream")},
             "corrections": {k: {"why": v["why"], "route": v["route"], "hint": v.get("hint"),
                                 "instructions": v["instructions"], "status": v["status"]}
                             for k, v in CRITERIA["corrections"].items()},
@@ -160,7 +160,8 @@ async def batch(req: BatchReq):
                 compact = {k: res.get(k) for k in ("destination", "labels", "jev", "path", "rewritten", "correction", "timing", "cost")}
                 compact["brain"] = {k: (res.get("brain") or {}).get(k) for k in ("plan", "status", "speech")}
                 compact["steps"] = [{**{k: s[k] for k in ("name", "kind", "start", "end", "status", "summary")},
-                                     "detail": {"cost": (s.get("detail") or {}).get("cost")}} for s in res["steps"]]
+                                     "detail": {k: (s.get("detail") or {}).get(k) for k in
+                                                ("cost", "ttft_ms", "first_token_at", "search_done_ms")}} for s in res["steps"]]
                 out = {"type": "item", "index": i, "item": item.model_dump(), "result": compact, "correct": judge(item, res)}
             except Exception as e:
                 out = {"type": "item", "index": i, "item": item.model_dump(), "error": f"{type(e).__name__}: {e}"[:300]}

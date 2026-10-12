@@ -5,6 +5,13 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmtMs = (ms) => (ms == null ? "-" : ms >= 1000 ? (ms / 1000).toFixed(2) + " s" : Math.round(ms) + " ms");
 const fmtYuan = (y) => (y == null ? "-" : y === 0 ? "¥0" : y >= 1 ? "¥" + y.toFixed(2) : y >= 0.01 ? "¥" + y.toFixed(3) : "¥" + y.toFixed(5));
+// 首 token：结束后用 ttft_ms（相对调用开始），进行中用 first_token_at（相对本轮开始）
+const ttftOf = (s) => {
+  const d = (s && s.detail) || {};
+  if (d.ttft_ms != null) return d.ttft_ms;
+  if (d.first_token_at != null && s.start != null) return d.first_token_at - s.start;
+  return null;
+};
 const costOf = (s) => (s && s.detail && s.detail.cost ? s.detail.cost.yuan : null);
 const PERIOD = { peak: "高峰时段", offpeak: "空闲时段" };
 const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) + "%" : "-");
@@ -84,7 +91,7 @@ function niceStep(max) {
 function waterfall(steps) {
   const done = steps.filter((s) => s.start != null);
   const total = Math.max(1, ...done.map((s) => s.end ?? s.start + 1));
-  const W = 960, L = 180, R = 150, row = 26, top = 22;
+  const W = 1000, L = 180, R = 210, row = 26, top = 22;
   const H = top + done.length * row + 6;
   const x = (t) => L + (t / total) * (W - L - R);
   const step = niceStep(total);
@@ -98,18 +105,40 @@ function waterfall(steps) {
     const w = Math.max(3, x(end) - x(s.start));
     const dur = s.end != null ? s.end - s.start : null;
     const c = costOf(s);
-    const tipText = `${s.name}\n${fmtMs(s.start)} → ${s.end != null ? fmtMs(s.end) : "进行中"}，耗时 ${fmtMs(dur)}${c != null ? `，费用 ${fmtYuan(c)}` : ""}\n${s.summary || ""}`;
+    const tt = ttftOf(s);
+    const sd = s.detail && s.detail.search_done_ms;
+    const color = KIND[s.kind]?.color || "var(--k-code)";
+    const tipText = `${s.name}\n${fmtMs(s.start)} → ${s.end != null ? fmtMs(s.end) : "进行中"}，耗时 ${fmtMs(dur)}` +
+      (tt != null ? `\n首 token ${fmtMs(tt)}（浅色段为等待首 token，深色段为流式生成）` : "") +
+      (sd != null ? `\n搜索结果到达 ${fmtMs(sd)}` : "") + (c != null ? `\n费用 ${fmtYuan(c)}` : "") + `\n${s.summary || ""}`;
+    // 有首 token 时画成两段：等首 token（浅）+ 流式生成（深）
+    let barSvg;
+    const cls = `bar ${s.status === "running" ? "running" : ""} ${s.status === "error" ? "err" : ""}`;
+    if (tt != null) {
+      const xt = Math.min(x(s.start + tt), x(s.start) + w);
+      barSvg = `<rect class="${cls}" x="${x(s.start)}" y="${y + 6}" width="${w}" height="${row - 12}" rx="4" fill="${color}" fill-opacity=".32"/>` +
+        `<rect class="${cls}" x="${xt}" y="${y + 6}" width="${Math.max(2, x(s.start) + w - xt)}" height="${row - 12}" rx="4" fill="${color}"/>` +
+        `<line class="ttft" x1="${xt}" x2="${xt}" y1="${y + 3}" y2="${y + row - 3}"/>`;
+      if (sd != null) {
+        const xs = x(s.start + sd);
+        barSvg += `<line class="sdone" x1="${xs}" x2="${xs}" y1="${y + 3}" y2="${y + row - 3}"/>`;
+      }
+    } else {
+      barSvg = `<rect class="${cls}" x="${x(s.start)}" y="${y + 6}" width="${w}" height="${row - 12}" rx="4" fill="${color}"/>`;
+    }
     return `<g data-tip="${esc(tipText)}">
       <rect x="0" y="${y}" width="${W}" height="${row}" fill="transparent"/>
       <text x="${L - 10}" y="${y + 17}" text-anchor="end">${esc(s.name)}</text>
-      <rect class="bar ${s.status === "running" ? "running" : ""} ${s.status === "error" ? "err" : ""}" x="${x(s.start)}" y="${y + 6}" width="${w}" height="${row - 12}" rx="4" fill="${KIND[s.kind]?.color || "var(--k-code)"}"/>
-      <text class="ms" x="${W - R + 8}" y="${y + 17}">${s.end != null ? fmtMs(dur) : "…"}${c != null ? `<tspan class="yuan" dx="8">${fmtYuan(c)}</tspan>` : ""}</text>
+      ${barSvg}
+      <text class="ms" x="${W - R + 8}" y="${y + 17}">${s.end != null ? fmtMs(dur) : "…"}${tt != null ? `<tspan class="yuan" dx="8">首 ${fmtMs(tt)}</tspan>` : ""}${c != null ? `<tspan class="yuan" dx="8">${fmtYuan(c)}</tspan>` : ""}</text>
     </g>`;
   }).join("");
   return `<svg class="wf" viewBox="0 0 ${W} ${H}" role="img" aria-label="各步骤耗时瀑布图"><g class="axis">${ticks}</g>${bars}</svg>`;
 }
-function legend(kinds) {
-  return `<div class="legend">${kinds.map((k) => `<span><i style="background:${KIND[k].color}"></i>${KIND[k].name}</span>`).join("")}</div>`;
+function legend(kinds, steps) {
+  const streamed = (steps || []).some((s) => ttftOf(s) != null);
+  return `<div class="legend">${kinds.map((k) => `<span><i style="background:${KIND[k].color}"></i>${KIND[k].name}</span>`).join("")}` +
+    (streamed ? `<span><i style="background:var(--text-3);opacity:.35"></i>浅色：等首 token</span><span><i style="background:var(--text-3)"></i>深色：流式生成（竖线为首 token${(steps || []).some((s) => s.detail && s.detail.search_done_ms != null) ? "，虚线为搜索结果到达" : ""}）</span>` : "") + `</div>`;
 }
 
 // ---------------------------------------------------------------- 单句：一轮的渲染
@@ -158,7 +187,7 @@ function panels(result) {
     out.push(`<div class="panel"><h4>大模型改写 <span class="ms">${fmtMs(rw.end - rw.start)}</span></h4>
       <dl class="kv"><dt>原句</dt><dd>${esc(rw.detail.before)}</dd><dt>改写后</dt><dd><b>${esc(rw.detail.after)}</b></dd>
       <dt>模型</dt><dd>${esc(rw.detail.model)}</dd><dt>token</dt><dd>输入 ${rw.detail.prompt_tokens ?? "-"} · 输出 ${rw.detail.completion_tokens ?? "-"} · 推理 ${rw.detail.reasoning_tokens ?? "-"}</dd>
-      <dt>费用</dt><dd>${fmtYuan(costOf(rw))}</dd></dl></div>`);
+      <dt>首 token</dt><dd>${fmtMs(ttftOf(rw))}</dd><dt>费用</dt><dd>${fmtYuan(costOf(rw))}</dd></dl></div>`);
   }
   const fm = stepOf(st, "快思考模型");
   if (fm) {
@@ -173,7 +202,8 @@ function panels(result) {
     const usage = d.usage ? `输入 ${d.usage.input_tokens ?? "-"}（另命中缓存 ${d.usage.cache_read_input_tokens ?? 0}）/ 输出 ${d.usage.output_tokens ?? "-"} token · 搜索 ${d.usage.server_tool_use?.web_search_requests ?? (d.queries || []).length} 次 · 费用 ${fmtYuan(costOf(se))}` : "";
     out.push(`<div class="panel" style="grid-column:1/-1"><h4>${esc(se.name)} <span class="ms">调用 ${fmtMs(d.call_ms)}</span></h4>
       <dl class="kv"><dt>问题</dt><dd>${esc(d.task)}</dd>${(d.queries || []).length ? `<dt>模型搜索词</dt><dd>${esc(d.queries.join("；"))}</dd>` : ""}
-      <dt>服务</dt><dd>${esc(d.model || "")} · ${esc(d.url)}</dd>${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
+      <dt>服务</dt><dd>${esc(d.model || "")} · ${esc(d.url)}</dd>
+      ${d.ttft_ms != null ? `<dt>时间点</dt><dd>首个事件 ${fmtMs(d.first_event_ms)} → 搜索结果到达 ${fmtMs(d.search_done_ms)} → <b>答案首字 ${fmtMs(d.ttft_ms)}</b> → 结束 ${fmtMs(d.call_ms)}</dd>` : ""}${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
       ${d.answer ? `<dt>答案</dt><dd>${esc(d.answer)}</dd>` : ""}</dl>
       ${items ? `<ul>${items}</ul>` : ""}</div>`);
   }
@@ -181,7 +211,7 @@ function panels(result) {
     const b = result.brain;
     const calls = st.filter((s) => s.kind === "llm" && s.name.startsWith("Agent 大脑"));
     const tools = (b.tools_called || []).map((t) => `<div class="tool"><span class="pill label">${esc(t.label)}</span> <span class="t">任务：</span>${esc(t.task)}<br><span class="t">结果：</span>${esc(t.result)}</div>`).join("");
-    const callRows = calls.map((c) => `<li>${esc(c.name)}：${fmtMs(c.end - c.start)} · 输入 ${c.detail.prompt_tokens ?? "-"} / 输出 ${c.detail.completion_tokens ?? "-"} / 推理 ${c.detail.reasoning_tokens ?? "-"} token · ${fmtYuan(costOf(c))}</li>`).join("");
+    const callRows = calls.map((c) => `<li>${esc(c.name)}：${fmtMs(c.end - c.start)} · 输入 ${c.detail.prompt_tokens ?? "-"} / 输出 ${c.detail.completion_tokens ?? "-"} / 推理 ${c.detail.reasoning_tokens ?? "-"} token · 首 token ${fmtMs(ttftOf(c))} · ${fmtYuan(costOf(c))}</li>`).join("");
     out.push(`<div class="panel" style="grid-column:1/-1"><h4>Agent 大脑 <span class="pill">${b.mode === "orchestrate" ? "编排模式" : "标签模式"}</span><span class="ms">会话状态：${esc(b.status)}</span></h4>
       <dl class="kv"><dt>能力标签</dt><dd>${(b.labels || []).map((l) => `<span class="pill label">${esc(l)}</span>`).join(" ") || "无"}</dd>
       <dt>计划</dt><dd>${esc(b.plan)}</dd></dl>
@@ -228,8 +258,12 @@ function renderTurn(card, steps, result, error) {
   let html = flowNodes(steps, result);
   const speech = result?.brain?.speech;
   if (speech) html += `<div class="speech"><b>播报</b>${esc(speech)}</div>`;
+  else if (!result) {          // 流式生成中：把正在生成的播报边出边显示
+    const live = [...steps].reverse().find((s) => s.status === "running" && (s.kind === "search" || s.kind === "agent") && s.detail && s.detail.stream_text);
+    if (live) html += `<div class="speech"><b>播报（生成中 · 首字 ${fmtMs(ttftOf(live))}）</b>${esc(live.detail.stream_text)}<span class="caret">▍</span></div>`;
+  }
   if (error) html += `<div class="speech" style="color:var(--bad)">${esc(error)}</div>`;
-  html += `<div><div class="scroll">${waterfall(steps)}</div>${legend(kinds)}</div>`;
+  html += `<div><div class="scroll">${waterfall(steps)}</div>${legend(kinds, steps)}</div>`;
   if (result) html += panels(result);
   body.innerHTML = html;
   bindTips(card);
@@ -321,12 +355,16 @@ function renderBatch() {
   const labJ = rows.filter((r) => r.correct && r.correct.label != null);
   const okD = destJ.filter((r) => r.correct.dest).length, okL = labJ.filter((r) => r.correct.label).length;
   const okA = labJ.filter((r) => r.correct.label_any).length;
-  const jevMs = [], e2e = [], brainMs = [];
+  const jevMs = [], e2e = [], brainMs = [], brainTt = [], searchTt = [];
   rows.forEach((r) => {
     if (!r.result) return;
     r.result.steps.forEach((s) => {
       if (s.kind === "jev") jevMs.push(s.end - s.start);
-      if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) brainMs.push(s.end - s.start);
+      if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) {
+        brainMs.push(s.end - s.start);
+        if (ttftOf(s) != null) brainTt.push(ttftOf(s));
+      }
+      if (s.kind === "search" && ttftOf(s) != null) searchTt.push(ttftOf(s));
     });
     e2e.push(r.result.timing.total_ms);
   });
@@ -337,7 +375,8 @@ function renderBatch() {
     ["去向准确率（Jev）", pct(okD, destJ.length), `${okD} / ${destJ.length}`],
     ["大脑首选标签准确率", pct(okL, labJ.length), `${okL} / ${labJ.length}；标签里包含正确答案 ${pct(okA, labJ.length)}`],
     ["Jev 耗时 p50 / p90", `${fmtMs(quant(jevMs, 0.5))}`, `p90 ${fmtMs(quant(jevMs, 0.9))}`],
-    ["大脑单次推理 p50", fmtMs(quant(brainMs, 0.5)), `p90 ${fmtMs(quant(brainMs, 0.9))}`],
+    ["大脑单次推理 p50", fmtMs(quant(brainMs, 0.5)), `p90 ${fmtMs(quant(brainMs, 0.9))}；首 token p50 ${fmtMs(quant(brainTt, 0.5))}`],
+    ["联网搜索首字 p50", fmtMs(quant(searchTt, 0.5)), `p90 ${fmtMs(quant(searchTt, 0.9))}（${searchTt.length} 次搜索）`],
     ["端到端 p50", fmtMs(quant(e2e, 0.5)), `p90 ${fmtMs(quant(e2e, 0.9))}`],
     ["大模型费用合计", fmtYuan(costSum), `平均每句 ${fmtYuan(n ? costSum / n : null)}，每千句约 ${n ? "¥" + (costSum / n * 1000).toFixed(2) : "-"}`],
   ].map(([k, v, s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
@@ -381,7 +420,7 @@ function toggleBatchRow(tr) {
   x.innerHTML = `<td></td><td colspan="8">
     <div class="hint">路径：${esc((res.path || []).join(" → "))}${res.rewritten ? ` · 改写：${esc(res.rewritten)}` : ""}${res.brain?.plan ? ` · 计划：${esc(res.brain.plan)}` : ""}</div>
     <div class="hint">Jev：${Object.entries(res.jev || {}).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(" · ")}</div>
-    <div class="scroll">${waterfall(res.steps)}</div>${legend([...new Set(res.steps.map((s) => s.kind))])}</td>`;
+    <div class="scroll">${waterfall(res.steps)}</div>${legend([...new Set(res.steps.map((s) => s.kind))], res.steps)}</td>`;
   tr.after(x);
   bindTips(x);
 }
@@ -418,6 +457,9 @@ function latencySeries() {
     { key: "大脑单次推理", kind: "llm", vals: [] },
     { key: "能力（子 Agent）", kind: "agent", vals: [] },
     { key: "联网搜索", kind: "search", vals: [] },
+    { key: "首字 · 联网搜索", kind: "search", vals: [] },
+    { key: "首 token · 大脑推理", kind: "llm", vals: [] },
+    { key: "首 token · 改写", kind: "llm", vals: [] },
     { key: "端到端 · 快思考路径", kind: "fast", vals: [] },
     { key: "端到端 · 大脑路径", kind: "code", vals: [] },
   ];
@@ -432,6 +474,13 @@ function latencySeries() {
       else if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) by["大脑单次推理"].vals.push(v);
       else if (s.kind === "agent") by["能力（子 Agent）"].vals.push(v);
       else if (s.kind === "search") by["联网搜索"].vals.push(v);
+      const tt = ttftOf(s);
+      if (tt != null) {
+        const tv = { ms: tt, q };
+        if (s.kind === "search") by["首字 · 联网搜索"].vals.push(tv);
+        else if (s.kind === "llm" && s.name.startsWith("Agent 大脑")) by["首 token · 大脑推理"].vals.push(tv);
+        else if (s.name === "大模型改写") by["首 token · 改写"].vals.push(tv);
+      }
     }
     if (r.timing) by[r.destination === "快思考" ? "端到端 · 快思考路径" : "端到端 · 大脑路径"].vals.push({ ms: r.timing.total_ms, q });
   }
@@ -513,6 +562,7 @@ function renderSettings() {
   $$("#corrSettings select").forEach((sel) => sel.addEventListener("change", () => { s.corrections[sel.dataset.k] = sel.value; saveSettings(); }));
   $("#simReject").checked = s.simulate_fast_reject;
   $("#runSearch").checked = s.run_search;
+  $("#streamOn").checked = s.stream;
   $("#maxIters").value = s.max_iters;
   $$("input[name=mode]").forEach((r) => (r.checked = r.value === s.brain_mode));
 }
@@ -520,12 +570,12 @@ function renderSettings() {
 function renderInfo() {
   const c = S.config, b = c.backends;
   const pill = (kind, real, mock, absent) => kind === "real" ? `<span class="pill real">${real}</span>` : kind === "mock" ? `<span class="pill mock">${mock}</span>` : `<span class="pill">${absent}</span>`;
-  $("#backends").innerHTML = pill(b.jev, "Jev 真实", "Jev 模拟") + pill(b.llm, "DeepSeek 真实", "DeepSeek 模拟") + pill(b.fast, "快思考已接入", "", "快思考未接入") + pill(b.search, "联网搜索 · DeepSeek", "", "联网搜索未接入");
+  $("#backends").innerHTML = pill(b.jev, "Jev 真实", "Jev 模拟") + pill(b.llm, "DeepSeek 真实", "DeepSeek 模拟") + pill(b.fast, "快思考已接入", "", "快思考未接入") + pill(b.search, "联网搜索 · DeepSeek", "联网搜索 模拟", "联网搜索未接入");
   $("#backendInfo").innerHTML = `<dl class="kv">
     <dt>Jev</dt><dd>${esc(b.jev_model)}${b.jev === "mock" ? "（未设置 TYPESAFE_API_KEY，结果由关键词规则产生）" : ""}</dd>
     <dt>大模型</dt><dd>${esc(b.llm_model)}${b.llm === "mock" ? "（未设置 DEEPSEEK_API_KEY，结果由关键词规则产生）" : "，非思考模式"}</dd>
     <dt>快思考</dt><dd>${b.fast === "real" ? "已接入 FAST_MODEL_URL" : "未接入：只记录交给快思考，可在左侧模拟拒识"}</dd>
-    <dt>联网搜索</dt><dd>${b.search === "real" ? "DeepSeek 自带联网搜索（Anthropic 兼容接口，一次请求完成搜索和回答）" : "未接入：设置 DEEPSEEK_API_KEY 后启用"}</dd>
+    <dt>联网搜索</dt><dd>${b.search === "real" ? "DeepSeek 自带联网搜索（Anthropic 兼容接口，流式，一次请求完成搜索和回答）" : "模拟：设置 DEEPSEEK_API_KEY 后改用 DeepSeek 自带联网搜索"}</dd>
     <dt>判据</dt><dd>${esc(c.criteria_version)}</dd></dl>`;
   $("#stage1Info").innerHTML = Object.entries(c.stage1).map(([k, v]) => `<p><code>${esc(k)}</code> ${esc(v)}</p>`).join("");
   $("#abilityInfo").innerHTML = `<table><tbody>${c.abilities.map((a) => `<tr><td><span class="pill label">${esc(a.label)}</span></td><td>${esc(a.desc)}</td></tr>`).join("")}</tbody></table>`;
@@ -576,6 +626,7 @@ async function init() {
   $$("input[name=mode]").forEach((r) => r.addEventListener("change", () => { S.settings.brain_mode = r.value; saveSettings(); }));
   $("#simReject").addEventListener("change", (e) => { S.settings.simulate_fast_reject = e.target.checked; saveSettings(); });
   $("#runSearch").addEventListener("change", (e) => { S.settings.run_search = e.target.checked; saveSettings(); });
+  $("#streamOn").addEventListener("change", (e) => { S.settings.stream = e.target.checked; saveSettings(); });
   $("#maxIters").addEventListener("change", (e) => { S.settings.max_iters = +e.target.value || 6; saveSettings(); });
   $("#restoreBtn").addEventListener("click", () => { S.settings = structuredClone(S.config.defaults); saveSettings(); renderSettings(); });
   $("#batchSource").addEventListener("change", (e) => $("#batchCustom").classList.toggle("hidden", e.target.value !== "custom"));

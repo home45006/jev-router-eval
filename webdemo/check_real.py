@@ -36,7 +36,9 @@ def run(c, q, sid, mode):
 
 def fmt(r):
     t = r["timing"]
-    steps = "；".join(f"{s['name']} {s['end'] - s['start']:.0f}ms" + (f" ¥{s['detail']['cost']['yuan']:.5f}" if (s.get('detail') or {}).get('cost') else "") for s in r["steps"])
+    steps = "；".join(f"{s['name']} {s['end'] - s['start']:.0f}ms"
+                     + (f"（首 {s['detail']['ttft_ms']:.0f}ms）" if (s.get('detail') or {}).get('ttft_ms') is not None else "")
+                     + (f" ¥{s['detail']['cost']['yuan']:.5f}" if (s.get('detail') or {}).get('cost') else "") for s in r["steps"])
     return (f"| {r['query']} | {r['destination']} | {'、'.join(r['labels'])} | {(r.get('brain') or {}).get('status', '-')} | ¥{r['cost']['yuan']:.5f} | "
             f"{(r.get('jev') or {}).get('is_fast', float('nan')):.2f} | {t['jev_ms']:.0f} | {t['llm_ms'] + t['agent_ms']:.0f} | {t['total_ms']:.0f} | {steps} |")
 
@@ -65,7 +67,8 @@ def main():
                 if se["status"] == "error":
                     L.append(f"- {r['query']}：失败 {se['summary']}")
                     continue
-                L.append(f"- {r['query']}：耗时 {se['end'] - se['start']:.0f} ms，搜索词 {d.get('queries')}，"
+                L.append(f"- {r['query']}：耗时 {se['end'] - se['start']:.0f} ms（首个事件 {d.get('first_event_ms')} ms，"
+                         f"搜索结果到达 {d.get('search_done_ms')} ms，答案首字 {d.get('ttft_ms')} ms），搜索词 {d.get('queries')}，"
                          f"来源 {len(d['items'])} 条，用量 {d.get('usage')}；播报：{(r.get('brain') or {}).get('speech', '')}")
                 L += [f"  - {it['title']}" for it in d["items"][:5]]
         L += ["\n## 多轮：点外卖途中调空调\n", head]
