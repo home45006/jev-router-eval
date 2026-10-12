@@ -305,11 +305,14 @@ class Pipeline:
 
     async def _web_search(self, tr: Trace, task: str) -> str:
         """真实联网搜索：搜索 MCP 一步，再让大模型根据结果写一句播报。"""
-        async with tr.step("联网搜索 MCP", "search", task=task) as s:
-            sr = await self.search.search(task)
-            s["detail"].update(tool=sr.tool, url=sr.url, connect_ms=round(sr.connect_ms, 1), call_ms=round(sr.call_ms, 1),
-                               items=sr.items, raw=sr.text[:3000], is_error=sr.is_error)
-            s["summary"] = f"{sr.tool} 返回 {len(sr.items) or '未解析出'} 条" + ("（工具报错）" if sr.is_error else "")
+        try:
+            async with tr.step("联网搜索 MCP", "search", task=task) as s:
+                sr = await self.search.search(task)
+                s["detail"].update(tool=sr.tool, url=sr.url, connect_ms=round(sr.connect_ms, 1), call_ms=round(sr.call_ms, 1),
+                                   items=sr.items, raw=sr.text[:3000], is_error=sr.is_error)
+                s["summary"] = f"{sr.tool} 返回 {len(sr.items) or '未解析出'} 条" + ("（工具报错）" if sr.is_error else "")
+        except Exception as e:          # 搜索失败不影响本轮：记录错误，播报说明没查到
+            return f"联网搜索暂时不可用（{str(e)[:120]}）"
         async with tr.step("能力 · 联网搜索（整理结果）", "llm") as s:
             r = await self.llm.chat([{"role": "system", "content": SEARCH_ANSWER_PROMPT},
                                      {"role": "user", "content": f"问题：{task}\n\n搜索结果：\n{sr.text[:6000]}"}],
