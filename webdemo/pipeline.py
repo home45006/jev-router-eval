@@ -62,9 +62,6 @@ ORCH_MODE_PROMPT = BRAIN_RULES + """
 全部完成后不要再调用工具，只输出一个 JSON 对象：
 {"labels": [实际需要的能力标签，按顺序], "plan": "一句话说明做了什么", "status": "continue | suspend | end", "speech": "播报给用户的一句话"}"""
 
-SEARCH_ANSWER_PROMPT = ("你是车载语音助手的联网搜索能力。根据给出的搜索结果，用适合语音播报的两三句话回答用户的问题，"
-                        "只用搜索结果里有的信息，不要编造；结果里没有答案就直说没查到。")
-
 ABILITY_PROMPT = ("你是座舱里的“{label}”能力（{desc}）。这是演示环境，没有接入真实服务："
                   "请给出你会怎么处理和一个合理的模拟结果，两三句话，开头标注“模拟”。")
 
@@ -82,7 +79,7 @@ class Settings:
     corrections: dict[str, str] = field(default_factory=lambda: {k: v["status"] for k, v in CRITERIA["corrections"].items()})
     brain_mode: str = "label"           # label：一次调用出标签；orchestrate：调用能力工具
     simulate_fast_reject: bool = False
-    run_search: bool = True             # 大脑判出“联网搜索”时真的去搜（需要接入搜索 MCP）
+    run_search: bool = True             # 大脑判出“联网搜索”时真的去搜（DeepSeek 自带联网搜索）
     max_iters: int = 6
 
     @classmethod
@@ -304,28 +301,16 @@ class Pipeline:
         return bool(self.search and self.search.kind == "real" and settings.run_search)
 
     async def _web_search(self, tr: Trace, task: str) -> str:
-        """真实联网搜索：搜索 MCP 一步，再让大模型根据结果写一句播报。"""
-        name = "联网搜索 · DeepSeek" if getattr(self.search, "provider", "") == "deepseek" else "联网搜索 MCP"
+        """DeepSeek 自带联网搜索：一次请求完成搜索和写播报。"""
         try:
-            async with tr.step(name, "search", task=task) as s:
+            async with tr.step("联网搜索 · DeepSeek", "search", task=task) as s:
                 sr = await self.search.search(task)
-                s["detail"].update(tool=sr.tool, url=sr.url, connect_ms=round(sr.connect_ms, 1), call_ms=round(sr.call_ms, 1),
-                                   items=sr.items, raw=sr.text[:3000], is_error=sr.is_error)
-                s["summary"] = f"{sr.tool} 返回 {len(sr.items) or '未解析出'} 条" + ("（工具报错）" if sr.is_error else "")
-                if sr.answer is not None:
-                    s["detail"].update(answer=sr.answer, queries=sr.queries, usage=sr.usage, model=sr.model)
-                    s["summary"] = f"搜索 {len(sr.queries)} 次，来源 {len(sr.items)} 条：{sr.answer[:30]}"
+                s["detail"].update(answer=sr.answer, items=sr.items, queries=sr.queries, usage=sr.usage,
+                                   model=sr.model, url=sr.url, call_ms=round(sr.ms, 1))
+                s["summary"] = f"搜索 {len(sr.queries)} 次，来源 {len(sr.items)} 条：{sr.answer[:30]}"
         except Exception as e:          # 搜索失败不影响本轮：记录错误，播报说明没查到
             return f"联网搜索暂时不可用（{str(e)[:120]}）"
-        if sr.answer:                   # 搜索服务已经写好答案（DeepSeek 自带联网搜索），不再另调大模型
-            return sr.answer
-        async with tr.step("能力 · 联网搜索（整理结果）", "llm") as s:
-            r = await self.llm.chat([{"role": "system", "content": SEARCH_ANSWER_PROMPT},
-                                     {"role": "user", "content": f"问题：{task}\n\n搜索结果：\n{sr.text[:6000]}"}],
-                                    temperature=0.3, role="ability:联网搜索")
-            s["detail"].update(reply=r.content, **_llm_detail(r))
-            s["summary"] = r.content[:40]
-        return r.content
+        return sr.answer or "没有查到相关信息。"
 
     async def _ability(self, tr: Trace, call, settings: Settings | None = None) -> str:
         label = LABEL_OF_TOOL.get(call.name, call.name)

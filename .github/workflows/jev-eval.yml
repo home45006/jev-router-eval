@@ -87,7 +87,6 @@ jobs:
     env:
       TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
       DATASET: ${{ inputs.dataset }}
       SPLIT: ${{ inputs.split }}
       PER_LABEL: ${{ inputs.per_label }}
@@ -142,12 +141,11 @@ jobs:
           pip install openai
           python rewrite_check.py --out runs/rewrite
           cat runs/rewrite/report.md >> "$GITHUB_STEP_SUMMARY"
-      - name: 联网搜索探测：DeepSeek 自带 / 搜索 MCP（SEARCH_CHECK=1 时）
+      - name: DeepSeek 联网搜索探测（SEARCH_CHECK=1 时）
         if: env.SEARCH_CHECK == '1'
         run: |
           pip install -r webdemo/requirements.txt
           python -m webdemo.search_deepseek "智能座舱最新进展" | tee -a "$GITHUB_STEP_SUMMARY"
-          if [ -n "$DASHSCOPE_API_KEY" ]; then python -m webdemo.search_mcp "智能座舱最新进展" | tee -a "$GITHUB_STEP_SUMMARY" || true; fi
       - name: 演示系统真实调用检查（WEBDEMO_CHECK=1 时）
         if: env.WEBDEMO_CHECK == '1'
         run: |

@@ -12,9 +12,7 @@ export TYPESAFE_API_KEY=...        # Jev；不设则用模拟 Jev
 export DEEPSEEK_API_KEY=...        # DeepSeek V4 Flash 非思考模式；不设则用模拟大模型
 # 可选：DEEPSEEK_MODEL（默认 deepseek-v4-flash）、DEEPSEEK_BASE_URL、JEV_MODEL（默认 jev-latest）
 # 可选：FAST_MODEL_URL，快思考服务地址，约定见下
-# 联网搜索默认用 DeepSeek 自带的（Anthropic 兼容接口，复用 DEEPSEEK_API_KEY）；
-# 改用百炼搜索 MCP：SEARCH_PROVIDER=mcp DASHSCOPE_API_KEY=...
-# 可选：SEARCH_MCP_URL（换别家的搜索 MCP）、SEARCH_MCP_TOOL（指定工具名）
+# 联网搜索用 DeepSeek 自带的（Anthropic 兼容接口，复用 DEEPSEEK_API_KEY）；可选 DEEPSEEK_SEARCH_MAX_USES（默认 2）
 uvicorn webdemo.app:app --port 8000
 ```
 
@@ -31,12 +29,12 @@ uvicorn webdemo.app:app --port 8000
 | 耗时统计 | 本页面跑过的所有请求，按 Jev、改写、大脑单次推理、能力调用、端到端（分快思考和大脑两条路径）画分布图，给出 p50 / p90。 |
 | 设置与判据 | 调 is_fast、needs_rewrite、纠错题的阈值；把每道纠错题切换为 off / shadow / on；模拟快思考拒识；编排模式的推理轮数上限。设置存在浏览器里。 |
 
-## 联网搜索 MCP
+## 联网搜索
 
-`webdemo/search_mcp.py` 是一个 MCP 客户端，默认连接阿里云百炼的联网搜索 MCP（依次尝试 streamable HTTP 和 SSE 地址），
-用 `Authorization: Bearer $DASHSCOPE_API_KEY` 鉴权，自动从工具列表里选名字带 search 的工具、按它的参数说明填搜索词。
-大脑判出“联网搜索”后先调搜索 MCP，再让 DeepSeek 根据结果写播报；瀑布图里搜索单独一条，并拆分“建立连接”和“调用”两段耗时。
-换成腾讯云、Tavily 等其他搜索 MCP 时只改 `SEARCH_MCP_URL` / `SEARCH_MCP_KEY`。探测：`python -m webdemo.search_mcp "测试问题"`。
+`webdemo/search_deepseek.py` 调用 DeepSeek 自带的联网搜索：走 Anthropic 兼容接口 `/anthropic/v1/messages`，
+带服务端执行的 `web_search` 工具、关闭思考模式，一次请求里模型自己决定搜什么、搜几次，并写好播报（OpenAI 兼容接口没有这个能力）。
+大脑判出“联网搜索”后调用它；瀑布图里单独一条，详情里有模型用的搜索词、来源、token 用量和答案。
+探测：`python -m webdemo.search_deepseek "测试问题"`。实测（GitHub 美国机房）一次 2.5–3 秒。
 
 ## 快思考服务约定（FAST_MODEL_URL）
 
