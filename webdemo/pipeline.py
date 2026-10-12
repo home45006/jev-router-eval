@@ -327,7 +327,8 @@ class Pipeline:
                 s["detail"].update(answer=sr.answer, items=sr.items, queries=sr.queries, usage=sr.usage,
                                    model=sr.model, url=sr.url, call_ms=round(sr.ms, 1), cost=sr.cost,
                                    ttft_ms=sr.ttft_ms, first_event_ms=sr.first_event_ms,
-                                   search_done_ms=sr.search_done_ms, answer_first_ms=sr.answer_first_ms)
+                                   search_done_ms=sr.search_done_ms, answer_first_ms=sr.answer_first_ms,
+                                   preamble=sr.preamble, preamble_ms=sr.preamble_ms)
                 s["summary"] = f"搜索 {len(sr.queries)} 次，来源 {len(sr.items)} 条：{sr.answer[:30]}"
         except Exception as e:          # 搜索失败不影响本轮：记录错误，播报说明没查到
             return f"联网搜索暂时不可用（{str(e)[:120]}）"

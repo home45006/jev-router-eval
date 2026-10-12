@@ -203,7 +203,8 @@ function panels(result) {
     out.push(`<div class="panel" style="grid-column:1/-1"><h4>${esc(se.name)} <span class="ms">调用 ${fmtMs(d.call_ms)}</span></h4>
       <dl class="kv"><dt>问题</dt><dd>${esc(d.task)}</dd>${(d.queries || []).length ? `<dt>模型搜索词</dt><dd>${esc(d.queries.join("；"))}</dd>` : ""}
       <dt>服务</dt><dd>${esc(d.model || "")} · ${esc(d.url)}</dd>
-      ${d.ttft_ms != null ? `<dt>时间点</dt><dd>首个事件 ${fmtMs(d.first_event_ms)} → 搜索结果到达 ${fmtMs(d.search_done_ms)} → <b>答案首字 ${fmtMs(d.ttft_ms)}</b> → 结束 ${fmtMs(d.call_ms)}</dd>` : ""}${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
+      ${d.ttft_ms != null ? `<dt>时间点</dt><dd>首个事件 ${fmtMs(d.first_event_ms)} → 搜索结果到达 ${fmtMs(d.search_done_ms)} → <b>答案首字 ${fmtMs(d.ttft_ms)}</b> → 结束 ${fmtMs(d.call_ms)}</dd>` : ""}
+      ${d.preamble ? `<dt>开场白</dt><dd>${esc(d.preamble)}<span class="hint">（搜索前模型说的话，${fmtMs(d.preamble_ms)}，不进播报）</span></dd>` : ""}${usage ? `<dt>用量</dt><dd>${esc(usage)}</dd>` : ""}
       ${d.answer ? `<dt>答案</dt><dd>${esc(d.answer)}</dd>` : ""}</dl>
       ${items ? `<ul>${items}</ul>` : ""}</div>`);
   }
