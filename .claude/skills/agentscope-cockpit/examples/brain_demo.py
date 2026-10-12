@@ -12,8 +12,8 @@
         python brain_demo.py --offline
     接真实模型：
         export DEEPSEEK_API_KEY=...
-        export DEEPSEEK_MODEL=deepseek-v4-flash      # 不设时用这个；以 rewrite_check.py 探测出的可用 ID 为准
-        export DEEPSEEK_FALLBACK_MODEL=deepseek-flash # 可选，主模型调用失败时改用
+        export DEEPSEEK_MODEL=deepseek-flash         # 不设时用这个（官方文档指定的模型名）
+        export DEEPSEEK_FALLBACK_MODEL=deepseek-v4-pro # 可选，主模型调用失败时改用
         export DEEPSEEK_BASE_URL=https://api.deepseek.com   # 走代理时改成代理地址
         python brain_demo.py
 """
@@ -206,7 +206,7 @@ def deepseek(model_id: str) -> DeepSeekChatModel:
 
 
 def real_model_factory(agent_name: str) -> ChatModelBase:
-    return deepseek(os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"))
+    return deepseek(os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"))
 
 
 def fallback_config() -> ModelConfig | None:

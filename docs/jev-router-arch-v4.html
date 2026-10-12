@@ -395,7 +395,7 @@ ul.plain{padding-left:1.2em;display:flex;flex-direction:column;gap:6px;max-width
       <li>两道题的例句和收窄用的反例都取自 val，所以 val 的数字偏乐观；dev 上同样是净改对，说明收窄后的写法能推广。两道题仍为 shadow，启用前还要在线上灰度。</li>
       <li>val 上剩下的错误：问某个功能现在的状态（天窗当前状态是什么、语音助手是开启的吗）被交给快思考，最多；其次是还有几句两地距离（家到目的地还有多远）。前者可以作为下一道纠错题的候选。</li>
       <li>该去大脑却给了快思考的句子，快思考还能拒识兜底；该给快思考却去了大脑的句子，大脑可以调用快思考工具完成，只是更慢。</li>
-      <li><strong>DeepSeek V4 Flash 非思考模式：</strong>模型 ID <code>deepseek-v4-flash</code> 可用（服务端返回 <code>deepseek-flash</code>），推理 token 为 0；改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房测得，车端另测）。人工构造的 20 条里 12 条模糊指代全部改对，8 条无指代的没有误改。</li>
+      <li><strong>DeepSeek Flash 非思考模式：</strong>按官方文档使用模型名 <code>deepseek-flash</code>（当前为 DeepSeek-V4.1-Flash；旧名 <code>deepseek-v4-flash</code> 已映射到同一模型），推理 token 为 0；改写一句中位 0.97 秒、最慢 1.54 秒（GitHub 美国机房测得，车端另测）。人工构造的 20 条里 12 条模糊指代全部改对，8 条无指代的没有误改。</li>
     </ul>
   </section>
 

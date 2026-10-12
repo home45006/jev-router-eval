@@ -2,7 +2,7 @@
 """用 DeepSeek V4 Flash 非思考模式把模糊指代改写成标准名称，检查 fixtures/fuzzy_refs.jsonl 里的样本。
 
     export DEEPSEEK_API_KEY=...
-    export DEEPSEEK_MODEL=...          # 不设时依次试 deepseek-v4-flash、deepseek-flash，用第一个能调通的
+    export DEEPSEEK_MODEL=...          # 不设时用 deepseek-flash（官方文档指定的模型名）
     export DEEPSEEK_BASE_URL=...       # 默认 https://api.deepseek.com
     python rewrite_check.py --out runs/rewrite
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from openai import AsyncOpenAI
 
-CANDIDATES = ["deepseek-v4-flash", "deepseek-flash"]
+CANDIDATES = ["deepseek-flash"]
 NO_THINKING = {"thinking": {"type": "disabled"}}
 PROMPT = (
     "你是车载语音助手的改写模块。用户的话里如果有俗称、外号、简称、昵称指代某个地点、人物或作品，"
