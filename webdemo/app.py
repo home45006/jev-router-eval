@@ -25,6 +25,7 @@ from .pricing import PRICE_SOURCE, PRICES
 from .pricing import period as price_period
 from .search_deepseek import DeepSeekSearch, MockSearch
 from .pipeline import ABILITIES, CRITERIA, LABELS, Pipeline, Settings
+from . import v5
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
@@ -49,12 +50,15 @@ async def lifespan(_: FastAPI):
     state["pipeline"] = Pipeline(jev, llm, fast, search)
     state["kinds"] = {"jev": jev.kind, "llm": llm.kind, "fast": fast.kind, "search": search.kind,
                       "jev_model": jev.model, "llm_model": llm.model}
+    await v5.start(llm)
     yield
+    await v5.stop()
     await jev.close()
 
 
 app = FastAPI(title="座舱前置分流演示", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+app.include_router(v5.router)
 
 
 class RunReq(BaseModel):

@@ -69,3 +69,21 @@ def cost_anthropic(model: str | None, usage: dict | None) -> dict | None:
     hit = usage.get("cache_read_input_tokens") or 0
     miss = (usage.get("input_tokens") or 0) + (usage.get("cache_creation_input_tokens") or 0)
     return cost(model, hit, miss, usage.get("output_tokens") or 0)
+
+
+# ---------------------------------------------------------------- Jev（TypeSafe）
+# 来源：https://docs.typesafe.ai/models.md（2026-10-29 读取）：只按输入 token 计费，输出 token 免费；
+# jev-1.14.0、jev-1.13.0 均为 $42 / 十亿 tokens，即 $0.042 / 百万 tokens。价格变动时改这里。
+JEV_PRICES_USD_PER_M = {"jev-1.14.0": 0.042, "jev-1.13.0": 0.042}
+JEV_PRICE_SOURCE = "TypeSafe Models 页（2026-10-29）：只计输入 token，$0.042 / 百万 tokens，输出免费"
+USD_CNY = float(os.environ.get("USD_CNY", "7.1"))   # 换算汇率，可用环境变量覆盖；仅用于展示
+
+
+def jev_cost(model: str | None, input_tokens: int | None, output_tokens: int | None = None) -> dict | None:
+    if input_tokens is None:
+        return None
+    price = JEV_PRICES_USD_PER_M.get(model or "", JEV_PRICES_USD_PER_M["jev-1.14.0"])
+    usd = input_tokens * price / 1e6
+    return {"usd": round(usd, 8), "yuan": round(usd * USD_CNY, 8), "fx": USD_CNY,
+            "tokens": {"input": input_tokens, "output": output_tokens or 0},
+            "unit_price_usd_per_m": price, "price_model": model}
