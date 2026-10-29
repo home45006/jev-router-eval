@@ -1,0 +1,582 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Jev 分流融合架构</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* 版式：梧桐白底橙标，沿用云端大脑图的分层（接入 → 分发 → 大脑 → 仲裁 → Command）。页头结论 → 分层主图 → Jev 一次请求 → 45 域去向 → 交界域 → 示例 → 待确认 */
+  :root {
+    --bg: #FFFFFF;
+    --surface: #FFFFFF;
+    --lane: #F6F5F2;
+    --third: #ECECE7;
+    --label: #3F3F3F;
+    --fg: #141414;
+    --muted: #545454;
+    --line: #E0E0DC;
+    --line-strong: #ACACA1;
+    --accent: #EB6118;
+    --accent-soft: #FDEEE5;
+    --on-accent: #FFFFFF;
+    --blue: #2457A2;
+    --red: #AE231C;
+    --font-body: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1D1D1C; --surface: #2A2A2A; --lane: #242423; --third: #343432; --label: #4A4A47; --fg: #F2F1EE; --muted: #B9B9B0;
+      --line: #3F3F3F; --line-strong: #77776E; --accent: #F27A3B; --accent-soft: #3D2516;
+      --on-accent: #FFFFFF; --blue: #8DB1E8; --red: #EB7B72; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1D1D1C; --surface: #2A2A2A; --lane: #242423; --third: #343432; --label: #4A4A47; --fg: #F2F1EE; --muted: #B9B9B0;
+    --line: #3F3F3F; --line-strong: #77776E; --accent: #F27A3B; --accent-soft: #3D2516;
+    --on-accent: #FFFFFF; --blue: #8DB1E8; --red: #EB7B72; color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+  .page { max-width: 1480px; margin-inline: auto; padding-inline: 24px; padding-block: 36px 56px; display: flex; flex-direction: column; gap: 36px; }
+  @media (max-width: 600px) { .page { padding-inline: 16px; padding-block: 24px 40px; gap: 28px; } }
+
+  .head { display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; border-bottom: 2px solid var(--accent); }
+  .eyebrow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; letter-spacing: .08em; }
+  .eyebrow i { width: 10px; height: 10px; background: var(--accent); display: inline-block; }
+  h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); line-height: 1.2; font-weight: 700; color: var(--accent); text-wrap: balance; }
+  .lede { margin: 0; max-width: 50em; font-size: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .meta span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line); padding: 2px 8px; border-radius: 2px; }
+
+  h2 { margin: 0 0 14px; font-size: 19px; font-weight: 700; display: flex; align-items: baseline; gap: 10px; }
+  h2::before { content: ""; width: 6px; height: 16px; background: var(--accent); align-self: center; flex: none; }
+  .note { margin: 12px 0 0; color: var(--muted); font-size: 13.5px; max-width: 64em; }
+  .note b { color: var(--fg); font-weight: 600; }
+
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  .scroll svg { display: block; width: 100%; min-width: 1240px; height: auto; font-family: var(--font-body); }
+  figcaption { margin-top: 12px; color: var(--muted); font-size: 13.5px; max-width: 68em; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+
+  .d-box   { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+  .d-plan  { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .d-third { fill: var(--third); stroke: var(--line-strong); stroke-width: 1.2; }
+  .d-tplan { fill: var(--third); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .d-band  { fill: var(--lane); stroke: var(--line); stroke-width: 1; }
+  .d-lane  { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+  .d-lane-k{ fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+  .d-label { fill: var(--label); }
+  .d-label-k { fill: var(--accent); }
+  .d-jev   { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .d-jband { fill: var(--accent); }
+  .d-sep   { stroke: var(--accent); stroke-width: 1; stroke-opacity: .35; fill: none; }
+  .d-key   { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+  .d-audbox{ fill: var(--surface); stroke: var(--blue); stroke-width: 1.6; }
+  .d-gate  { fill: var(--surface); stroke: var(--blue); stroke-width: 2; }
+  .d-tag   { fill: var(--surface); stroke: var(--accent); stroke-width: 1.2; }
+  .d-dot   { fill: var(--fg); }
+  .d-flow  { stroke: var(--fg); stroke-width: 1.5; fill: none; }
+  .d-audio { stroke: var(--blue); stroke-width: 2; fill: none; }
+  .d-ctrl  { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  .d-pflow { stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+  .m-fg { fill: var(--fg); } .m-blue { fill: var(--blue); } .m-acc { fill: var(--accent); } .m-plan { fill: var(--line-strong); }
+  .t-L   { fill: var(--on-accent); font-size: 15px; font-weight: 700; }
+  .t-Le  { fill: var(--on-accent); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; opacity: .85; }
+  .t-h   { fill: var(--fg); font-size: 14px; font-weight: 600; }
+  .t-hk  { fill: var(--accent); font-size: 14px; font-weight: 700; }
+  .t-s   { fill: var(--muted); font-size: 12px; }
+  .t-b   { fill: var(--fg); font-size: 12.5px; }
+  .t-r   { fill: var(--fg); font-size: 12px; }
+  .t-xs  { fill: var(--fg); font-size: 11px; }
+  .t-lane{ fill: var(--fg); font-size: 15.5px; font-weight: 700; }
+  .t-lanek{ fill: var(--accent); font-size: 15.5px; font-weight: 700; }
+  .t-tag { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; }
+  .t-cfg { fill: var(--accent); font-size: 10.5px; font-weight: 600; }
+  .t-m   { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .t-mf  { fill: var(--fg); font-family: var(--font-mono); font-size: 11px; }
+  .t-id  { fill: var(--fg); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+  .t-jev { fill: var(--on-accent); font-size: 15px; font-weight: 700; }
+  .t-aud { fill: var(--blue); font-size: 12px; }
+  .t-acc { fill: var(--accent); font-size: 12px; font-weight: 600; }
+
+  .tscroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+  th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); letter-spacing: .06em; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:last-child, th:last-child { padding-right: 0; }
+  .br { font-weight: 700; white-space: nowrap; }
+  .br small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .nw { white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  code { font-family: var(--font-mono); font-size: 12.5px; background: var(--lane); padding: 1px 5px; border-radius: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px 6px; }
+  .chips code { font-size: 12px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 2px; border: 1px solid currentColor; white-space: nowrap; }
+  .pill.nlu { color: var(--accent); } .pill.agent { color: var(--accent); background: var(--accent-soft); }
+  .pill.slow { color: var(--red); } .pill.chat { color: var(--blue); } .pill.rw { color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .q { max-width: 24em; }
+  .ctx { color: var(--muted); white-space: nowrap; }
+  .muted { color: var(--muted); }
+
+  .open { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; border-top: 1px solid var(--line-strong); }
+  @media (max-width: 1000px) { .open { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .open { grid-template-columns: minmax(0, 1fr); } }
+  .open > div { padding: 16px 0 18px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .open h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+  .open p { margin: 0; font-size: 14px; color: var(--muted); }
+  .open p b { color: var(--fg); font-weight: 600; }
+
+  .src { color: var(--muted); font-size: 12.5px; margin: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="page">
+
+  <header class="head">
+    <div class="eyebrow"><i></i>梧桐 · 智能座舱语音交互 Agent 平台</div>
+    <h1>Jev 分流融合架构</h1>
+    <p class="lede">保留传统 NLU 分发体系作为底座，只在选定场景切入 Agentic Loop 完成任务闭环。Jev 在分发层用一次请求判定四个去向：NLU 直达、Agent 直达、慢思考、闲聊。前两者合称快思考，单轮一次命中，不经规划；慢思考进入 Loop，规划后复用快思考的业务技能执行。</p>
+    <div class="meta"><span>V1.0 草案</span><span>2026-10-26</span><span>快思考能力范围：NLU3.0 v13 · 45 域</span></div>
+  </header>
+
+  <section>
+    <h2>分层架构</h2>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 1500 956" role="img" aria-label="五层架构：接入层把文本和状态送入分发层；分发层先查干预表，未命中由 Jev 一次请求判定去向、domain、Agent 标签、拆分和改写，经 Query 整理和分发策略后分到 Agent 大脑的四个去向：NLU 直达和 Agent 直达组成快思考，慢思考是 Planner、Executor、Reflector 组成的 Agentic Loop 并复用快思考技能，闲聊由音频闸门放行原始音频到端到端语音。快慢思考的结果经仲裁层汇总，统一由梧桐语音 Command 协议下发，闲聊音频直出端侧。">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-fg"/></marker>
+            <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-blue"/></marker>
+            <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-acc"/></marker>
+            <marker id="ah-plan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-plan"/></marker>
+          </defs>
+
+          <!-- 图例 -->
+          <rect x="160" y="13" width="26" height="15" rx="2" class="d-box"/><text x="194" y="25" class="t-s">自研</text>
+          <rect x="240" y="13" width="26" height="15" rx="2" class="d-third"/><text x="274" y="25" class="t-s">三方 / 供应商</text>
+          <rect x="370" y="13" width="26" height="15" rx="2" class="d-key"/><text x="404" y="25" class="t-s">关键节点</text>
+          <rect x="474" y="13" width="26" height="15" rx="2" class="d-plan"/><text x="508" y="25" class="t-s">规划中，本期未接入</text>
+          <line x1="640" y1="20" x2="672" y2="20" class="d-flow"/><text x="680" y="25" class="t-s">文本 / 结构化数据</text>
+          <line x1="800" y1="20" x2="832" y2="20" class="d-audio"/><text x="840" y="25" class="t-s">音频流</text>
+          <line x1="900" y1="20" x2="932" y2="20" class="d-ctrl"/><text x="940" y="25" class="t-s">控制信号</text>
+          <rect x="1010" y="12" width="38" height="17" rx="3" class="d-tag"/><text x="1029" y="24.5" text-anchor="middle" class="t-cfg">配置</text>
+          <text x="1056" y="25" class="t-s">云端配置，可热更新</text>
+
+          <!-- ================= 接入层 ================= -->
+          <rect x="20" y="44" width="124" height="80" rx="3" class="d-label"/>
+          <text x="82" y="82" text-anchor="middle" class="t-L">接入层</text>
+          <text x="82" y="101" text-anchor="middle" class="t-Le">ACCESS</text>
+          <rect x="160" y="44" width="1320" height="80" rx="3" class="d-band"/>
+
+          <rect x="176" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="284" y="80" text-anchor="middle" class="t-h">Gateway</text>
+          <text x="284" y="99" text-anchor="middle" class="t-s">鉴权 · 路由 · 灰度</text>
+          <rect x="408" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="516" y="80" text-anchor="middle" class="t-h">ASR Proxy</text>
+          <text x="516" y="99" text-anchor="middle" class="t-s">语音转文本 · 标点 · 情感</text>
+          <rect x="640" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="748" y="80" text-anchor="middle" class="t-h">会话管理</text>
+          <text x="748" y="99" text-anchor="middle" class="t-s">多轮上下文 · 上轮分支</text>
+          <rect x="872" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="980" y="80" text-anchor="middle" class="t-h">车辆状态接入</text>
+          <text x="980" y="99" text-anchor="middle" class="t-s">车速 · 导航态 · 播放态</text>
+          <rect x="1248" y="56" width="216" height="56" rx="4" class="d-audbox"/>
+          <text x="1356" y="80" text-anchor="middle" class="t-h">音频缓存</text>
+          <text x="1356" y="99" text-anchor="middle" class="t-s">本轮语音 · 环形缓冲</text>
+
+          <line x1="560" y1="124" x2="560" y2="154" class="d-flow" marker-end="url(#ah)"/>
+          <text x="570" y="143" class="t-mf">query + state</text>
+
+          <!-- ================= 分发层 ================= -->
+          <rect x="20" y="154" width="124" height="210" rx="3" class="d-label-k"/>
+          <text x="82" y="250" text-anchor="middle" class="t-L">分发层</text>
+          <text x="82" y="269" text-anchor="middle" class="t-Le">DISPATCH</text>
+          <rect x="160" y="154" width="1320" height="210" rx="3" class="d-band"/>
+
+          <!-- 干预表 -->
+          <rect x="176" y="200" width="140" height="70" rx="4" class="d-box"/>
+          <text x="246" y="229" text-anchor="middle" class="t-h">干预表</text>
+          <text x="246" y="249" text-anchor="middle" class="t-s">命中直接定去向</text>
+          <rect x="274" y="192" width="38" height="17" rx="3" class="d-tag"/><text x="293" y="204.5" text-anchor="middle" class="t-cfg">配置</text>
+          <line x1="316" y1="235" x2="356" y2="235" class="d-flow" marker-end="url(#ah)"/>
+          <text x="336" y="226" text-anchor="middle" class="t-xs">未命中</text>
+
+          <!-- Jev -->
+          <rect x="356" y="170" width="430" height="170" rx="4" class="d-jev"/>
+          <rect x="356" y="170" width="430" height="36" rx="4" class="d-jband"/>
+          <rect x="356" y="190" width="430" height="16" class="d-jband"/>
+          <text x="372" y="194" class="t-jev">Jev 前置分流 · 一次请求并行判定</text>
+          <rect x="738" y="179" width="38" height="17" rx="3" class="d-tag"/><text x="757" y="191.5" text-anchor="middle" class="t-cfg">配置</text>
+
+          <text x="372" y="228" class="t-id">route</text>
+          <text x="372" y="246" class="t-r">NLU 直达 / Agent 直达 / 慢思考 / 闲聊</text>
+          <text x="372" y="272" class="t-id">domain</text>
+          <text x="372" y="290" class="t-r">45 个 NLU 域 + none</text>
+          <text x="372" y="316" class="t-id">agent_label</text>
+          <text x="372" y="334" class="t-r" dy="-4">Agent 标签 + none</text>
+          <line x1="590" y1="214" x2="590" y2="332" class="d-sep"/>
+          <text x="604" y="228" class="t-id">segment_role[i]</text>
+          <text x="604" y="246" class="t-r">拆分：独立 / 有依赖 / 残片</text>
+          <text x="604" y="272" class="t-id">needs_rewrite</text>
+          <text x="604" y="290" class="t-r">是否依赖上文才能理解</text>
+          <text x="604" y="316" class="t-id">referent</text>
+          <text x="604" y="330" class="t-r">指代对象：上文候选 + none</text>
+
+          <!-- Query 整理 -->
+          <line x1="786" y1="232" x2="816" y2="232" class="d-flow" marker-end="url(#ah)"/>
+          <rect x="816" y="170" width="200" height="126" rx="4" class="d-box"/>
+          <text x="916" y="194" text-anchor="middle" class="t-h">Query 整理</text>
+          <text x="830" y="216" class="t-r">改写：拼回指代对象</text>
+          <text x="830" y="236" class="t-r">拆分：按片段角色分组</text>
+          <rect x="826" y="250" width="180" height="36" rx="3" class="d-plan"/>
+          <text x="916" y="265" text-anchor="middle" class="t-xs">生成式模型兜底 · 待选型</text>
+          <text x="916" y="280" text-anchor="middle" class="t-xs">结果回 Jev 重判</text>
+          <line x1="1016" y1="232" x2="1046" y2="232" class="d-flow" marker-end="url(#ah)"/>
+
+          <line x1="786" y1="318" x2="1046" y2="318" class="d-flow" marker-end="url(#ah)"/>
+          <text x="916" y="312" text-anchor="middle" class="t-r">单条且完整</text>
+
+          <!-- 分发策略 -->
+          <rect x="1046" y="170" width="360" height="170" rx="4" class="d-box"/>
+          <text x="1062" y="194" class="t-h">分发策略（代码）</text>
+          <rect x="1358" y="179" width="38" height="17" rx="3" class="d-tag"/><text x="1377" y="191.5" text-anchor="middle" class="t-cfg">配置</text>
+          <text x="1062" y="218" class="t-r">干预命中 → 按表分发</text>
+          <text x="1062" y="240" class="t-r">独立片段 → 快思考，有依赖片段 → 慢思考</text>
+          <text x="1062" y="262" class="t-r">上轮闲聊且是追问 → 跟随闲聊</text>
+          <text x="1062" y="284" class="t-r">route 置信低 → NLU 落域兜底</text>
+          <text x="1062" y="306" class="t-s">按 route 读 domain 或 agent_label，其余答案丢弃</text>
+
+          <!-- 干预命中旁路 -->
+          <polyline points="246,270 246,352 1226,352 1226,340" class="d-flow" marker-end="url(#ah)"/>
+          <text x="254" y="300" class="t-xs">干预命中</text><text x="254" y="315" class="t-xs">跳过 Jev</text>
+
+          <!-- 音频旁路 + 闸门 -->
+          <line x1="1440" y1="112" x2="1440" y2="498" class="d-audio" marker-end="url(#ah-blue)"/>
+          <circle cx="1440" cy="255" r="11" class="d-gate"/>
+          <line x1="1406" y1="255" x2="1427" y2="255" class="d-ctrl" marker-end="url(#ah-acc)"/>
+          <text x="1416" y="282" text-anchor="middle" class="t-acc">开闸</text>
+
+          <!-- 分发总线 -->
+          <polyline points="1300,340 1300,382 330,382" class="d-flow"/>
+          <circle cx="1002" cy="382" r="3" class="d-dot"/>
+          <circle cx="622" cy="382" r="3" class="d-dot"/>
+          <line x1="330" y1="382" x2="330" y2="412" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="622" y1="382" x2="622" y2="412" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1002" y1="382" x2="1002" y2="412" class="d-flow" marker-end="url(#ah)"/>
+          <text x="338" y="377" class="t-mf">NLU 直达 · domain</text>
+          <text x="630" y="377" class="t-mf">Agent 直达 · label</text>
+          <text x="1010" y="377" class="t-mf">slow</text>
+          <text x="1448" y="377" class="t-aud">chat</text>
+
+          <!-- ================= Agent 大脑 ================= -->
+          <rect x="20" y="400" width="124" height="330" rx="3" class="d-label"/>
+          <text x="82" y="555" text-anchor="middle" class="t-L">Agent 大脑</text>
+          <text x="82" y="574" text-anchor="middle" class="t-Le">TASK PLANNER</text>
+          <rect x="160" y="400" width="1320" height="330" rx="3" class="d-band"/>
+
+          <!-- 快思考 -->
+          <rect x="176" y="412" width="600" height="306" rx="4" class="d-lane-k"/>
+          <text x="192" y="440" class="t-lanek">快思考 · 单轮精准命中</text>
+          <text x="760" y="440" text-anchor="end" class="t-s">一次执行 · 不经规划 · 目标 ≤ 800ms</text>
+
+          <text x="192" y="468" class="t-hk">NLU 精准落域</text>
+          <text x="192" y="486" class="t-s">输出 domain → intent / slots</text>
+          <rect x="192" y="498" width="276" height="42" rx="4" class="d-box"/>
+          <text x="330" y="515" text-anchor="middle" class="t-b">现有 NLU 落域</text>
+          <text x="330" y="532" text-anchor="middle" class="t-s">本期在用</text>
+          <rect x="192" y="550" width="276" height="42" rx="4" class="d-plan"/>
+          <text x="330" y="567" text-anchor="middle" class="t-b">NLU3.0 大模型 · 45 域</text>
+          <text x="330" y="584" text-anchor="middle" class="t-s">NLU 数据微调 · 接入后替换</text>
+          <line x1="330" y1="592" x2="330" y2="618" class="d-flow" marker-end="url(#ah)"/>
+          <rect x="192" y="618" width="276" height="54" rx="4" class="d-box"/>
+          <text x="330" y="641" text-anchor="middle" class="t-h">Workflow 快速执行</text>
+          <text x="330" y="660" text-anchor="middle" class="t-s">固定流程 · 多条指令逐条执行</text>
+
+          <line x1="476" y1="458" x2="476" y2="700" class="d-sep"/>
+
+          <text x="484" y="468" class="t-hk">Agent 精准直达</text>
+          <text x="484" y="486" class="t-s">输出 label → 单 Agent 一次执行</text>
+          <rect x="484" y="498" width="276" height="42" rx="4" class="d-box"/>
+          <text x="622" y="515" text-anchor="middle" class="t-b">Agent Hub 路由</text>
+          <text x="622" y="532" text-anchor="middle" class="t-s">label → Agent / Tool 注册表</text>
+          <line x1="622" y1="540" x2="622" y2="560" class="d-flow" marker-end="url(#ah)"/>
+          <rect x="484" y="560" width="133" height="44" rx="4" class="d-box"/>
+          <text x="550" y="580" text-anchor="middle" class="t-b">用车 Agent</text>
+          <text x="550" y="596" text-anchor="middle" class="t-s">用车专家</text>
+          <rect x="627" y="560" width="133" height="44" rx="4" class="d-box"/>
+          <text x="693" y="580" text-anchor="middle" class="t-b">400 客服 Agent</text>
+          <text x="693" y="596" text-anchor="middle" class="t-s">服务咨询</text>
+          <rect x="484" y="614" width="133" height="44" rx="4" class="d-third"/>
+          <text x="550" y="634" text-anchor="middle" class="t-b">联网查询</text>
+          <text x="550" y="650" text-anchor="middle" class="t-s">Tool · MCP</text>
+          <rect x="627" y="614" width="133" height="44" rx="4" class="d-third"/>
+          <text x="693" y="634" text-anchor="middle" class="t-b">三方生态 Agent</text>
+          <text x="693" y="650" text-anchor="middle" class="t-s">A2A / HTTP</text>
+          <text x="622" y="682" text-anchor="middle" class="t-s">label 全集以“大模型 agent”标注表为准</text>
+
+          <!-- 慢思考 -->
+          <rect x="792" y="412" width="420" height="306" rx="4" class="d-lane"/>
+          <text x="808" y="440" class="t-lane">慢思考 · Agentic Loop</text>
+          <text x="1196" y="440" text-anchor="end" class="t-s">多步 · 多 Agent · 可后台</text>
+
+          <text x="1002" y="476" text-anchor="middle" class="t-s">失败重规划</text>
+          <polyline points="1137,506 1137,488 867,488 867,506" class="d-pflow" marker-end="url(#ah-plan)"/>
+          <rect x="808" y="506" width="118" height="52" rx="4" class="d-plan"/>
+          <text x="867" y="528" text-anchor="middle" class="t-h">Planner</text>
+          <text x="867" y="546" text-anchor="middle" class="t-s">任务拆解 DAG</text>
+          <rect x="943" y="506" width="118" height="52" rx="4" class="d-plan"/>
+          <text x="1002" y="528" text-anchor="middle" class="t-h">Executor</text>
+          <text x="1002" y="546" text-anchor="middle" class="t-s">编排 · 重试</text>
+          <rect x="1078" y="506" width="118" height="52" rx="4" class="d-plan"/>
+          <text x="1137" y="528" text-anchor="middle" class="t-h">Reflector</text>
+          <text x="1137" y="546" text-anchor="middle" class="t-s">结果校验</text>
+          <line x1="926" y1="532" x2="943" y2="532" class="d-pflow" marker-end="url(#ah-plan)"/>
+          <line x1="1061" y1="532" x2="1078" y2="532" class="d-pflow" marker-end="url(#ah-plan)"/>
+
+          <line x1="1002" y1="558" x2="1002" y2="578" class="d-pflow" marker-end="url(#ah-plan)"/>
+          <rect x="808" y="578" width="388" height="36" rx="4" class="d-key"/>
+          <text x="1002" y="601" text-anchor="middle" class="t-b">业务技能执行：复用快思考的 NLU 技能与 Agent</text>
+          <line x1="808" y1="596" x2="778" y2="596" class="d-ctrl" marker-end="url(#ah-acc)"/>
+
+          <rect x="808" y="626" width="388" height="40" rx="4" class="d-tplan"/>
+          <text x="1002" y="643" text-anchor="middle" class="t-b">DeepSeek V4 Flash · AgentScope</text>
+          <text x="1002" y="659" text-anchor="middle" class="t-s">规划与工具选择</text>
+          <rect x="808" y="676" width="388" height="32" rx="4" class="d-box"/>
+          <text x="1002" y="697" text-anchor="middle" class="t-b">本期：只输出 route = slow 标签和片段组</text>
+
+          <!-- 闲聊 -->
+          <rect x="1228" y="412" width="236" height="306" rx="4" class="d-lane"/>
+          <text x="1244" y="440" class="t-lane">闲聊</text>
+          <text x="1244" y="460" class="t-s">开放域对话 · 不落域 · 不整理</text>
+          <rect x="1244" y="498" width="220" height="56" rx="4" class="d-third"/>
+          <text x="1342" y="522" text-anchor="middle" class="t-h">S2S 端到端语音</text>
+          <text x="1342" y="541" text-anchor="middle" class="t-s">音频流进 · 音频流出</text>
+          <rect x="1244" y="574" width="180" height="58" rx="4" class="d-box"/>
+          <text x="1334" y="598" text-anchor="middle" class="t-b">追问一律跟随上一轮</text>
+          <text x="1334" y="617" text-anchor="middle" class="t-s">由分发策略按上轮分支判</text>
+          <text x="1244" y="660" class="t-s">原始音频直进，不经 ASR 文本</text>
+          <line x1="1440" y1="554" x2="1440" y2="882" class="d-audio" marker-end="url(#ah-blue)"/>
+
+          <line x1="476" y1="718" x2="476" y2="760" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1002" y1="718" x2="1002" y2="760" class="d-flow" marker-end="url(#ah)"/>
+          <text x="486" y="744" class="t-xs">执行结果</text>
+          <text x="1012" y="744" class="t-xs">执行结果 · 进度</text>
+
+          <!-- ================= 仲裁层 ================= -->
+          <rect x="20" y="760" width="124" height="80" rx="3" class="d-label"/>
+          <text x="82" y="797" text-anchor="middle" class="t-L">仲裁层</text>
+          <text x="82" y="816" text-anchor="middle" class="t-Le">ARBITER</text>
+          <rect x="160" y="760" width="1320" height="80" rx="3" class="d-band"/>
+          <rect x="176" y="772" width="300" height="56" rx="4" class="d-box"/>
+          <text x="326" y="796" text-anchor="middle" class="t-h">优先级仲裁</text>
+          <text x="326" y="815" text-anchor="middle" class="t-s">安全 &gt; 车控 &gt; 导航 &gt; 媒体</text>
+          <rect x="492" y="772" width="300" height="56" rx="4" class="d-key"/>
+          <text x="642" y="796" text-anchor="middle" class="t-h">domain 一致性校验</text>
+          <text x="642" y="815" text-anchor="middle" class="t-s">Jev domain 与 NLU domain 不一致时裁决</text>
+          <rect x="808" y="772" width="300" height="56" rx="4" class="d-box"/>
+          <text x="958" y="796" text-anchor="middle" class="t-h">端云仲裁协同</text>
+          <text x="958" y="815" text-anchor="middle" class="t-s">云优先 · 端兜底 · 超时</text>
+          <rect x="1124" y="772" width="300" height="56" rx="4" class="d-box"/>
+          <text x="1274" y="796" text-anchor="middle" class="t-h">响应聚合</text>
+          <text x="1274" y="815" text-anchor="middle" class="t-s">多指令合并播报 · 快慢两段播报</text>
+
+          <line x1="690" y1="840" x2="690" y2="870" class="d-flow" marker-end="url(#ah)"/>
+
+          <!-- ================= Command ================= -->
+          <rect x="20" y="870" width="124" height="70" rx="3" class="d-label"/>
+          <text x="82" y="900" text-anchor="middle" class="t-L">Command</text>
+          <text x="82" y="919" text-anchor="middle" class="t-Le">端云协议</text>
+          <rect x="160" y="870" width="1320" height="70" rx="3" class="d-band"/>
+          <rect x="176" y="882" width="1032" height="46" rx="4" class="d-box"/>
+          <text x="192" y="910" class="t-h">梧桐语音 Command 协议 V1.1.4</text>
+          <text x="420" y="910" class="t-s">Command://Tinnove.* 控制指令 · Native://Tinnove.* 端侧查询 · domain + intent 映射 · 执行状态码驱动回复语</text>
+          <rect x="1224" y="882" width="240" height="46" rx="4" class="d-audbox"/>
+          <text x="1330" y="910" text-anchor="middle" class="t-h">音频直出 · 端侧播放</text>
+        </svg>
+      </div>
+      <figcaption>两张参考图的思路落在两处：分层沿用云端大脑图，接入、分发、大脑、仲裁、Command 自上而下；融合方式沿用 Agentic Loop 融合型，<b>传统分发是底座，Loop 只接有依赖的多步任务，并通过“业务技能执行”复用快思考已有的 NLU 技能和 Agent</b>，不另建一套执行能力。干预表、domain 一致性校验和快慢两段播报沿用 V0.4 分流方案的设计，待评审确认。</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>Jev 的一次请求</h2>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>问题</th><th>类型</th><th>问什么</th><th>代码怎么用</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>route</code></td><td class="nw">Choice · 4 选 1</td>
+            <td>NLU 直达：45 域能接住的单轮指令或查询。Agent 直达：意图明确、交给一个 Agent 一次就能答的请求，如用车专家、联网搜索。慢思考：子任务有依赖或跨任务约束。闲聊：没有任务目标。</td>
+            <td>读 <code>choice</code> 和 <code>confidence</code>。4 个选项时 confidence =（最高概率 − 1/4）÷（3/4）。</td>
+          </tr>
+          <tr>
+            <td><code>domain</code></td><td class="nw">Choice · 45 + none</td>
+            <td>这句话属于哪个 NLU 域，取值即“语义”标注表的预期 domain，全部小写。</td>
+            <td>只在 route = NLU 直达时读取。交给 NLU 做 intent / slots，并与 NLU 自己的 domain 做一致性校验。</td>
+          </tr>
+          <tr>
+            <td><code>agent_label</code></td><td class="nw">Choice · N + none</td>
+            <td>该交给哪个 Agent，取值即“大模型 agent”标注表的 label 列。</td>
+            <td>只在 route = Agent 直达时读取，交给 Agent Hub 按注册表路由。</td>
+          </tr>
+          <tr>
+            <td><code>segment_role[i]</code></td><td class="nw">Choice × 片段数</td>
+            <td>代码预切出的每个片段：独立、有依赖、残片。</td>
+            <td>独立片段逐条走快思考，有依赖的合成一组走慢思考，残片并入前一段。</td>
+          </tr>
+          <tr>
+            <td><code>needs_rewrite</code><br><code>referent</code></td><td class="nw">Noul + Choice</td>
+            <td>是否依赖上文才能理解；指代对象是上文候选中的哪一个。</td>
+            <td>选中则代码拼回 query；<code>none</code> 交生成式模型改写后回 Jev 重判。上轮是闲聊时，追问一律跟随闲聊。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">官方文档建议把系统需要的问题放进同一次请求，由代码只读与去向相关的答案：同一请求里的问题并行判定，多加问题对时延影响很小。<b>所以 domain 和 agent_label 不必等 route 出结果再问</b>，一次请求就能拿到快思考需要的全部标签。</p>
+  </section>
+
+  <section>
+    <h2>45 个 NLU 域的去向</h2>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>去向</th><th>domain</th><th class="nw">数量</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="br">NLU 直达<small>控制 · 播放 · 通讯</small></td>
+            <td><div class="chips"><code>intelligent_car_control</code><code>intelligent_car_scenario</code><code>global_control</code><code>app_control</code><code>music</code><code>fm</code><code>video</code><code>short_video</code><code>audio_book</code><code>changba</code><code>KTV</code><code>phone_call</code><code>wechat_on_car</code><code>navigation</code><code>home_agent</code><code>reminder</code><code>app_call</code><code>wallpaper</code><code>theme_gen</code></div></td>
+            <td class="num">19</td>
+            <td>动作明确、槽位固定，NLU 一次落准即可执行。<code>reminder</code> 即日程提醒，按约定由传统 NLU 理解。</td>
+          </tr>
+          <tr>
+            <td class="br">NLU 直达<small>查询 · 问答 · 生成</small></td>
+            <td><div class="chips"><code>intelligent_car_info</code><code>weather_xf</code><code>stock</code><code>datetime_info</code><code>news</code><code>flight</code><code>train</code><code>traffic_restriction</code><code>calculator</code><code>outgoing_eta</code><code>life_suggestion</code><code>music_qa</code><code>video_qa</code><code>poi_recommend</code><code>view_poi_recommend</code><code>view_poi_introduction</code><code>similar_poi</code><code>outside_qa</code><code>painting</code></div></td>
+            <td class="num">19</td>
+            <td>单轮一问一答，域内技能自己完成检索或生成。和导航串联时（“到了目的地附近再推荐”）转慢思考。</td>
+          </tr>
+          <tr>
+            <td class="br">交界域<small>需要定归属</small></td>
+            <td><div class="chips"><code>help</code><code>task_setting</code><code>agent_task</code><code>app_agent</code><code>travel_plan</code></div></td>
+            <td class="num">5</td>
+            <td>NLU 能识别，但执行偏 Agent。见下一节。</td>
+          </tr>
+          <tr>
+            <td class="br">闲聊</td>
+            <td><div class="chips"><code>chat</code></div></td>
+            <td class="num">1</td>
+            <td>Jev 判为闲聊后直接放行音频到端到端语音，不再经 NLU。NLU 的 <code>chat</code> 域只在兜底时用到。</td>
+          </tr>
+          <tr>
+            <td class="br">先改写</td>
+            <td><div class="chips"><code>other</code></div></td>
+            <td class="num">1</td>
+            <td>多为承接上文的短句，如“呀呀仪表再调亮一些”。由 Jev 判需要改写，补全后再分流，不该直接落到 <code>other</code>。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">分组依据是清单 v13 的一句话介绍和例句，是建议划分，需要和 NLU 团队对一遍。</p>
+  </section>
+
+  <section>
+    <h2>交界域怎么分</h2>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>交界</th><th>建议</th><th>例</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="br"><code>help</code> · <code>intelligent_car_info</code><br>对 用车 Agent</td>
+            <td>查一个数值或状态走 NLU；要解释原因、给处理建议走 Agent 直达到用车 Agent。</td>
+            <td class="muted">“还剩多少油”→ NLU；“胎压灯亮了怎么办”→ 用车 Agent</td>
+          </tr>
+          <tr>
+            <td class="br"><code>task_setting</code><br>对 条件任务 / 任务大师</td>
+            <td>按已有定义，一次性的条件任务和周期性的任务大师都由大模型 Agent 理解，云端大脑图把两者放在慢思考。建议 Jev 把这类 query 判给慢思考，<code>task_setting</code> 不再作为入口。</td>
+            <td class="muted">“上车后自动开启空调”→ 慢思考</td>
+          </tr>
+          <tr>
+            <td class="br"><code>agent_task</code> · <code>app_agent</code></td>
+            <td>单个明确的代办或应用内操作走 Agent 直达；带多个约束或要串联其他任务时走慢思考。</td>
+            <td class="muted">“帮我点两杯瑞幸凉少糖美式”→ Agent 直达</td>
+          </tr>
+          <tr>
+            <td class="br"><code>travel_plan</code></td>
+            <td>多日行程规划天然是多步任务，建议走慢思考。若 NLU 域内技能已能一次产出行程，可暂留 NLU 直达。</td>
+            <td class="muted">“帮我规划北京四天的行程”→ 慢思考</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>分流示例</h2>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>上一轮</th><th>本轮 query</th><th>Jev 判定</th><th>去向</th></tr></thead>
+        <tbody>
+          <tr><td class="ctx">无</td><td class="q">关闭前挡风玻璃加热</td>
+            <td><div class="pills"><span class="pill nlu">NLU 直达</span><span class="pill rw">intelligent_car_control</span></div></td>
+            <td>NLU 出 intent / slots，Workflow 执行，Command 下发</td></tr>
+          <tr><td class="ctx">无</td><td class="q">胎压报警灯亮了是怎么回事</td>
+            <td><div class="pills"><span class="pill agent">Agent 直达</span><span class="pill rw">用车专家</span></div></td>
+            <td>Agent Hub 路由到用车 Agent，一次作答</td></tr>
+          <tr><td class="ctx">无</td><td class="q">打开空调，关闭车窗，导航到天安门，播放周杰伦的歌</td>
+            <td><div class="pills"><span class="pill nlu">NLU 直达</span><span class="pill rw">4 个片段都独立</span></div></td>
+            <td>逐条落域，按说出的顺序执行，合并成一次播报</td></tr>
+          <tr><td class="ctx">无</td><td class="q">打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td>
+            <td><div class="pills"><span class="pill nlu">第 1 段独立</span><span class="pill slow">后 2 段有依赖</span></div></td>
+            <td>“打开空调”立刻执行并播报；后两段合成一组进 Agentic Loop，本期只出标签</td></tr>
+          <tr><td class="ctx">无</td><td class="q">每周一早上八点提醒我交周报</td>
+            <td><div class="pills"><span class="pill slow">慢思考</span><span class="pill rw">任务大师</span></div></td>
+            <td>周期性任务，按定义归任务大师，由大模型 Agent 理解</td></tr>
+          <tr><td class="ctx">无</td><td class="q">明天下午三点提醒我去取快递</td>
+            <td><div class="pills"><span class="pill nlu">NLU 直达</span><span class="pill rw">reminder</span></div></td>
+            <td>日程提醒，传统 NLU 理解，速度快</td></tr>
+          <tr><td class="ctx">空调调到 24 度</td><td class="q">再高一点</td>
+            <td><div class="pills"><span class="pill rw">需改写</span><span class="pill rw">referent = 空调温度</span></div></td>
+            <td>拼回“空调温度再调高一点”，NLU 直达</td></tr>
+          <tr><td class="ctx">闲聊中</td><td class="q">那后来呢</td>
+            <td><div class="pills"><span class="pill chat">闲聊</span><span class="pill rw">追问</span></div></td>
+            <td>跟随上一轮，音频直通端到端语音</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">例句部分取自 NLU 清单 v13，判定结果是期望行为，尚未实测。</p>
+  </section>
+
+  <section>
+    <h2>需要先确认的六点</h2>
+    <div class="open">
+      <div>
+        <h3>Agent 标签全集</h3>
+        <p>图里的用车 Agent、400 客服、联网查询、三方 Agent 只是示例。<b>agent_label 的选项需要按“大模型 agent”标注表定稿</b>，每个标签对应 Agent Hub 里一个已注册的 Agent 或 Tool，另加 none。</p>
+      </div>
+      <div>
+        <h3>45 选 1 的准确率</h3>
+        <p>一个 Choice 最多支持 255 个选项，45 个没问题，但官方提示模型偏向排在前面的选项，中文准确率也偏低。<b>如果实测不够，改成两层：先判五个大组，再判组内 domain</b>，两问仍放在同一次请求里。</p>
+      </div>
+      <div>
+        <h3>两个 domain 谁说了算</h3>
+        <p>Jev 和 NLU 各给一个 domain。建议一致时直接执行；不一致时以置信更高的为准，或车控类以 NLU 为准。<b>不一致率本身是监控指标</b>，能最早发现 Jev 或 NLU 哪边漂了。</p>
+      </div>
+      <div>
+        <h3>800ms 的预算</h3>
+        <p>快思考的路径是 ASR、Jev、NLU、执行串行。<b>可以让 NLU 和 Jev 同时起跑</b>，route 不是 NLU 直达时丢弃 NLU 结果，大部分流量就省掉一次等待。代价是 NLU 调用量增加，需要实测 Jev 在车上的时延再定。</p>
+      </div>
+      <div>
+        <h3>条件任务的归属</h3>
+        <p>云端大脑图把条件任务和任务大师放在慢思考，NLU 清单里又有 <code>task_setting</code>。<b>两边要统一</b>：本稿按慢思考画，如果标注表里它们是 Agent 直达的 label，就移到快思考。</p>
+      </div>
+      <div>
+        <h3>部署与修复通道</h3>
+        <p>官方只提供云端 API，没有提到端侧或私有化部署，量产前要确认网络、时延和合规。干预表、问题定义和阈值都放云端配置中心，<b>判错时分钟级止血、小时级根治</b>，详见 V0.4 分流方案。</p>
+      </div>
+    </div>
+  </section>
+
+  <p class="src">快思考能力范围取自《车机 NLU3.0 大模型支持 Domain 清单（v13）》。Jev 的并行问题、选项上限和已知不足引自 TypeSafe 官方文档：<a href="https://docs.typesafe.ai/patterns/fan-out">Speculative fan-out</a>、<a href="https://docs.typesafe.ai/api">HTTP API</a>、<a href="https://docs.typesafe.ai/confidence">Confidence</a>、<a href="https://docs.typesafe.ai/model-jaggedness/jev-1.13">Jev 1.13 jaggedness</a>。</p>
+
+</div>
+
+</body></html>

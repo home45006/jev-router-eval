@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev 分流详细设计</title>
+<style>
+:root{
+  --bg:#f7f7f5; --card:#ffffff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e3e3df;
+  --nlu:#2463eb; --nlu-bg:#e8efff;
+  --agent:#0f8a6a; --agent-bg:#e2f5ee;
+  --slow:#b4541a; --slow-bg:#fbeee4;
+  --chat:#7a4bc2; --chat-bg:#f1eafb;
+  --warn:#a8131f; --warn-bg:#fdecee;
+  --code-bg:#f1f1ee;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141416; --card:#1d1d20; --ink:#ececee; --muted:#9a9aa2; --line:#33333a;
+    --nlu:#7ea6ff; --nlu-bg:#1c2640;
+    --agent:#4fd1a8; --agent-bg:#14302a;
+    --slow:#f0a56e; --slow-bg:#3a2518;
+    --chat:#c4a3f5; --chat-bg:#2a2140;
+    --warn:#ff8a92; --warn-bg:#3a1a1e;
+    --code-bg:#26262a;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141416; --card:#1d1d20; --ink:#ececee; --muted:#9a9aa2; --line:#33333a;
+  --nlu:#7ea6ff; --nlu-bg:#1c2640;
+  --agent:#4fd1a8; --agent-bg:#14302a;
+  --slow:#f0a56e; --slow-bg:#3a2518;
+  --chat:#c4a3f5; --chat-bg:#2a2140;
+  --warn:#ff8a92; --warn-bg:#3a1a1e;
+  --code-bg:#26262a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:32px 16px 80px}
+header h1{font-size:28px;margin:0 0 4px}
+header .sub{color:var(--muted);margin:0 0 12px}
+.meta{display:flex;flex-wrap:wrap;gap:8px;font-size:13px}
+.meta span{border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--card)}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 18px;margin:20px 0}
+nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px}
+nav.toc a{color:var(--ink);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:18px 0}
+h2{font-size:20px;margin:0 0 12px;display:flex;align-items:baseline;gap:10px}
+h2 .no{color:var(--muted);font-weight:500;font-size:15px}
+h3{font-size:16px;margin:20px 0 8px}
+p{margin:8px 0}
+.lead{font-size:16px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+th{font-weight:600;background:var(--code-bg)}
+.tablewrap{overflow-x:auto}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px}
+code{background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:auto;line-height:1.55;margin:8px 0}
+.tag{display:inline-block;border-radius:6px;padding:0 8px;font-size:13px;font-weight:600;white-space:nowrap}
+.t-nlu{color:var(--nlu);background:var(--nlu-bg)}
+.t-agent{color:var(--agent);background:var(--agent-bg)}
+.t-slow{color:var(--slow);background:var(--slow-bg)}
+.t-chat{color:var(--chat);background:var(--chat-bg)}
+.t-warn{color:var(--warn);background:var(--warn-bg)}
+.callout{border-left:4px solid var(--nlu);background:var(--nlu-bg);padding:10px 14px;border-radius:6px;margin:12px 0}
+.callout.warn{border-color:var(--warn);background:var(--warn-bg)}
+.callout.slow{border-color:var(--slow);background:var(--slow-bg)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.box{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.box h4{margin:0 0 6px;font-size:15px}
+.box.nlu{border-top:4px solid var(--nlu)} .box.agent{border-top:4px solid var(--agent)}
+.box.slow{border-top:4px solid var(--slow)} .box.chat{border-top:4px solid var(--chat)}
+.box ul{margin:4px 0;padding-left:18px}
+/* 流程 */
+.flow{display:flex;flex-direction:column;gap:0;margin:8px 0}
+.step{display:grid;grid-template-columns:44px 1fr;gap:12px;align-items:start}
+.step .dot{width:32px;height:32px;border-radius:50%;background:var(--ink);color:var(--card);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-top:6px}
+.step .body{border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:6px}
+.step .body b{display:block;margin-bottom:2px}
+.arrow{margin-left:15px;border-left:2px dashed var(--line);height:14px}
+.out{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.review{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:start}
+.qa{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0}
+.qa .q{font-weight:600}
+.qa .rec{margin-top:6px}
+.qa .rec::before{content:"建议：";font-weight:600;color:var(--agent)}
+.qa .alt{color:var(--muted);font-size:14px}
+.qa .alt::before{content:"备选：";font-weight:600}
+@media (max-width:760px){
+  nav.toc ol{columns:1}
+  .grid3,.grid4{grid-template-columns:1fr}
+  h1{font-size:23px}
+}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>Jev 分流详细设计</h1>
+  <p class="sub">基于《Jev 分流融合架构 V1.0（v5）》· 快思考加入 Agent 直达 · 单轮精准直达 · NLU3.0 接不住的走慢思考</p>
+  <div class="meta">
+    <span>评审稿 v2</span><span>2026-10-29</span><span>判据版本：criteria v3（待生成）</span><span>状态：待评审</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <ol>
+    <li><a href="#s1">本次要定的事</a></li>
+    <li><a href="#s2">四个去向和准入条件</a></li>
+    <li><a href="#s3">分流总流程</a></li>
+    <li><a href="#s4">Jev 一次请求的问题</a></li>
+    <li><a href="#s5">分发策略（代码规则）</a></li>
+    <li><a href="#s6">Agent 精准直达</a></li>
+    <li><a href="#s7">NLU3.0 接不住 → 慢思考</a></li>
+    <li><a href="#s8">多指令、改写和多轮</a></li>
+    <li><a href="#s9">时延预算</a></li>
+    <li><a href="#s10">阈值、配置与止血</a></li>
+    <li><a href="#s11">评测与验收</a></li>
+    <li><a href="#s12">待评审决策</a></li>
+    <li><a href="#s13">实施改动范围</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="s1">
+  <h2><span class="no">01</span>本次要定的事</h2>
+  <p class="lead">第 14 版的 Jev 只判一件事：交给快思考（NLU）还是交给 Agent 大脑。v5 架构把去向改成四个，本设计要把这四个去向落成可实现、可评测的规则。</p>
+  <div class="tablewrap"><table>
+    <tr><th style="width:22%">变化</th><th>第 14 版（现状）</th><th>本设计（v5）</th></tr>
+    <tr><td>去向</td><td>快思考 / Agent 大脑，两个</td><td><span class="tag t-nlu">NLU 直达</span> <span class="tag t-agent">Agent 直达</span> <span class="tag t-slow">慢思考</span> <span class="tag t-chat">闲聊</span>，四个。前两个合称快思考</td></tr>
+    <tr><td>Agent 直达</td><td>没有。联网搜索、用车手册都要先进大脑，由大脑判出标签再调用</td><td>单轮、只需一个 Agent 一次答完的请求，由 Jev 直接给出 agent_label，<b>跳过大脑规划</b></td></tr>
+    <tr><td>慢思考的范围</td><td>“快思考接不住的”都给大脑，范围很宽（闲聊、天气、找歌都进大脑）</td><td><b>只收 NLU3.0 接不住、也不是单个 Agent 能直达的请求</b>：跨多个能力、彼此有依赖的多步任务，以及 NLU3.0 接不住的句子（条件任务、长期规则、行程、记忆调用都改由对应 Agent 直达）</td></tr>
+    <tr><td>Jev 的问题</td><td><code>is_fast</code>、<code>needs_rewrite</code> 加两道 shadow 纠错题，都是 Noul</td><td><code>is_unsafe</code>、<code>route</code>、<code>domain</code>、<code>agent_label</code>、<code>needs_context</code>、<code>has_nickname</code>、<code>segment_role[i]</code>，一次请求并行判定</td></tr>
+    <tr><td>NLU</td><td>现有 NLU 落域</td><td>NLU3.0 大模型（清单 v13，45 域，其中 19 个作为入口），与 Jev 并行起跑，结果用于一致性校验、拒识兜底和非入口域回流</td></tr>
+  </table></div>
+  <div class="callout">
+    <b>设计原则：精准优先，错了往慢思考兜。</b>Agent 直达和 NLU 直达都是“一次执行、不经规划”，判错了用户直接听到错误结果；慢思考能复用全部 NLU 技能和 Agent，判进去最多是慢一点。所以两条直达路径都设准入门槛，<b>拿不准就进慢思考</b>，而不是反过来。
+  </div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+  <h2><span class="no">02</span>四个去向和准入条件</h2>
+  <div class="grid4">
+    <div class="box nlu">
+      <h4><span class="tag t-nlu">NLU 直达</span></h4>
+      <ul class="small">
+        <li>说清楚的指令（含无标点多意图、同功能多参数），落在 NLU3.0 的 19 个入口域（第 06 节）</li>
+        <li>NLU3.0 自己也接住：domain 不是 <code>other</code>，intent 不为空、必填槽位齐全（NLU3.0 不输出置信度，只看结构）</li>
+        <li>Jev 与 NLU 的 domain 一致（或在可接受的近邻对里）</li>
+      </ul>
+      <p class="small muted">例：关闭前挡风玻璃加热、导航到天安门、放一首稻香、给张三打电话</p>
+    </div>
+    <div class="box agent">
+      <h4><span class="tag t-agent">Agent 直达</span></h4>
+      <ul class="small">
+        <li>单轮、单个意图，交给 <b>一个</b> Agent 一次就能答完</li>
+        <li><code>agent_label</code> 不是 none，且 route 和 label 两个置信都过门槛</li>
+        <li>不依赖未解析的上文指代，不和别的任务串联</li>
+      </ul>
+      <p class="small muted">例：最新的科技新闻（新闻）、今天星期几（联网搜索）、胎压报警灯亮了是怎么回事（用车专家）、每周一早上八点提醒我交周报（任务大师）</p>
+    </div>
+    <div class="box slow">
+      <h4><span class="tag t-slow">慢思考</span></h4>
+      <ul class="small">
+        <li>片段之间有依赖、跨任务约束、需要规划</li>
+        <li>一句话里多个任务分属不同能力且有依赖（导航过去再在附近找餐馆、打电话说地点再导航过去）</li>
+        <li><b>兜底</b>：NLU3.0 落到 other 或解析不完整、Jev 与 NLU 的 domain 对不上、两条直达路径置信都不够</li>
+      </ul>
+      <p class="small muted">例：打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆；打个电话给小李说聚餐地点定在渔人码头然后导航过去</p>
+    </div>
+    <div class="box chat">
+      <h4><span class="tag t-chat">闲聊</span></h4>
+      <ul class="small">
+        <li>没有任务目标的开放对话：讲故事、陪聊、情绪表达、写诗写文案（知识问答不归闲聊，见第 06 节）</li>
+        <li>上一轮是闲聊且本轮是追问，代码直接跟随</li>
+        <li>音频直通 S2S 端到端语音，不经 NLU、不改写</li>
+      </ul>
+      <p class="small muted">例：给甜甜讲首故事、（闲聊中）那后来呢</p>
+    </div>
+  </div>
+  <p class="small muted">慢思考是“剩余类”：不是闲聊，又进不了两条直达路径的，都进慢思考。这样定义保证每句话都有去处，且直达路径的精确率可以单独调高。</p>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+  <h2><span class="no">03</span>分流总流程</h2>
+  <div class="flow">
+    <div class="step"><div class="dot">0</div><div class="body"><b>会话检查（代码）</b>
+      ① 慢思考有进行中的任务（大脑返回 <code>continue</code>）→ 交慢思考；② 上一轮 Agent 直达且该 Agent 返回 <code>continue</code>（还在等用户确认、补信息）→ 交回同一个 Agent；③ 上一轮是闲聊且本轮是追问 → 跟随闲聊。上一轮 Agent 已结束、本轮依赖上文的，在第 5 步按 R1 处理。
+      <div class="out"><span class="tag t-slow">占用会话 → 慢思考</span><span class="tag t-agent">Agent 会话 → 同一 Agent</span><span class="tag t-chat">闲聊追问 → 闲聊</span></div></div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">1</div><div class="body"><b>干预表（云端配置，精确匹配 + 规则 + 敏感词）</b>
+      命中直接定去向（含 domain 或 agent_label），跳过 Jev。用于线上止血、高频确定句；敏感词命中直接交安全拒答。
+      <div class="out"><span class="tag t-warn">命中 → 按表分发 / 安全拒答</span></div></div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">2</div><div class="body"><b>预切分（代码）+ 并行起跑</b>
+      只按强分隔切：标点和“然后、再、之后、顺便”等连接词，最多 4 段，<b>只给 Jev 判片段角色用</b>。<b>同时</b>发出 Jev 请求和 NLU3.0 请求（整句），两者互不等待。NLU3.0 能识别无标点的多意图（打开座椅通风座椅按摩）和同功能多参数，所以 NLU 始终拿整句，不按切分结果拆开调用。</div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">3</div><div class="body"><b>Jev 一次请求</b>
+      并行回答 <code>is_unsafe</code> / <code>route</code> / <code>domain</code> / <code>agent_label</code> / <code>needs_context</code> / <code>has_nickname</code> / <code>segment_role[i]</code>（多段时才问）。见第 04 节。</div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">4</div><div class="body"><b>Query 整理（按需）</b>
+      <code>has_nickname</code> 为真：交 DeepSeek 把俗称还原成标准名称；<code>needs_context</code> 为真且不跟随上一轮（闲聊或 Agent）时：先用上文候选拼回指代对象，拼不回交 DeepSeek 改写。<b>改写后回 Jev 重判一次</b>（重判不再改写，防止循环）。</div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">5</div><div class="body"><b>分发策略（代码，规则按顺序匹配）</b>
+      读 Jev 答案 + NLU3.0 结果，按第 05 节的规则得出去向。只读与去向相关的答案，其余丢弃但记日志。
+      <div class="out"><span class="tag t-nlu">NLU 直达</span><span class="tag t-agent">Agent 直达</span><span class="tag t-slow">慢思考</span><span class="tag t-chat">闲聊</span><span class="tag t-warn">安全拒答</span></div></div></div>
+    <div class="arrow"></div>
+    <div class="step"><div class="dot">6</div><div class="body"><b>快思考落域失败 → 慢思考（R7）</b>
+      落域前失败（R3 门槛不过、R4 检查不过、other 改写重判后仍接不住）在第 5 步已直接落慢思考；落域后被拒——业务侧回传“不支持该 intent”或 Agent 判定“不归我”——由分发把这一句改落慢思考一次（带原落域结果和被拒原因），不再回分流，避免来回弹。业务内部的执行故障（服务超时等）由业务侧处理，不算落域失败。</div></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+  <h2><span class="no">04</span>Jev 一次请求的问题</h2>
+  <div class="tablewrap"><table>
+    <tr><th>问题</th><th>类型</th><th>问什么</th><th>代码怎么用</th></tr>
+    <tr><td><code>is_unsafe</code></td><td>Noul</td><td>是否在求助违法犯罪、暴力伤害、毒品、自残等有害内容</td><td>≥ <code>T_UNSAFE</code> 直接交安全拒答，优先于所有去向</td></tr>
+    <tr><td><code>route</code></td><td>Choice · 4 选 1</td><td>NLU 直达 / Agent 直达 / 慢思考 / 闲聊</td><td>取最高概率项和置信（4 选项：<code>conf = (p_max − 1/4) ÷ (3/4)</code>）。也读第二名，用于“NLU 直达 vs 慢思考”拿不准时的兜底判断</td></tr>
+    <tr><td><code>domain</code></td><td>Choice · 19 + 非入口</td><td>属于第 06 节的 19 个 NLU 入口域中的哪一个；都不是选“非入口”</td><td>走 NLU 直达时和 NLU3.0 的 domain 做一致性校验；选项从 46 个减到 20 个，降时延、减轻偏向前排选项</td></tr>
+    <tr><td><code>agent_label</code></td><td>Choice · N + none</td><td>该交给哪个可直达的 Agent（第 06 节清单）</td><td>走 Agent 直达时读；NLU3.0 落到非入口域需要回流时，也读对应 Agent 的概率</td></tr>
+    <tr><td><code>needs_context</code></td><td>Noul</td><td>是否要靠上一轮才能理解：追问、指代、省略（那喝水呢、再高一点、钢琴博物馆不去了）</td><td>真 → 跟随上一轮（闲聊或 Agent）或进 Query 整理拼回指代</td></tr>
+    <tr><td><code>has_nickname</code></td><td>Noul</td><td>是否有要靠常识还原的俗称、外号、简称（大裤衩、周董）</td><td>真 → DeepSeek 还原后重判；<b>不触发会话跟随</b>，避免带俗称的新请求被误交回上一个 Agent</td></tr>
+    <tr><td><code>segment_role_i</code></td><td>Choice × 片段数</td><td>第 i 段是：有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片（兜底的“有依赖”放第一）</td><td>只在预切出 ≥2 段时加进请求。见第 08 节</td></tr>
+  </table></div>
+
+  <h3>请求结构示意</h3>
+<pre>state = {
+  "query": "人工智能最近有哪些最新进展",
+  "previous_turn": {"query": "...", "route": "agent", "agent": "新闻", "status": "end"} | null,
+  "segments": ["..."],                 // 预切分结果，单段时省略
+  "vehicle": {"navigating": true, "playing": "music"}   // 只放影响判断的少量状态
+}
+questions = {
+  "is_unsafe":     Noul(instructions=..., criteria={"true": ..., "false": ...}),
+  "route":         Choice(options=ROUTE_4,  instructions=..., criteria=...),
+  "domain":        Choice(options=NLU_ENTRY_19 + ["非入口"], ...),
+  "agent_label":   Choice(options=AGENT_LABELS + ["none"], ...),
+  "needs_context": Noul(instructions=..., criteria={"true": ..., "false": ...}),
+  "has_nickname":  Noul(instructions=..., criteria={"true": ..., "false": ...}),
+  "segment_role_0": Choice(options=["有依赖","同一任务","独立指令","独立Agent类","残片"], ...)   // 多段时才有
+}</pre>
+  <div class="callout warn">
+    <b>需要先验证：</b>现在仓库（<code>webdemo/backends.py</code>、<code>eval_two_stage.py</code>）只用过 Noul。Choice 的调用方式、选项上限（v5 引用官方为 255）和“偏向前排选项”的问题要先用 50 句冒烟确认。若 Choice 不可用或不稳，备选方案是每个 route 选项一道 Noul（4 道），domain 改成“先判 5 大组、再判组内域”的两道 Choice，仍放在同一次请求里。
+  </div>
+  <h3>route 的判据要点（写进 criteria v3）</h3>
+  <div class="tablewrap"><table>
+    <tr><th>选项</th><th>判为它</th><th>不判为它</th></tr>
+    <tr><td><span class="tag t-nlu">NLU 直达</span></td><td>一条或连着几条说清楚的指令，落在 19 个入口域：车控、按名或按风格点播和播放控制、电话微信、导航去说得出名字的地点和导航控制、车家互联、壁纸主题绘画、计算；同一功能带多个参数也算</td><td>新闻（→ 新闻）；天气（→ 天气）；股票、航班火车、限行、日期等即时信息和通用知识问答（→ 联网搜索）；用车相关（→ 用车专家）；条件任务、提醒、长期规则（→ 任务大师）；按描述找歌找片（→ 音乐 / 影视）；找店找景点、行程（→ 出行导航）；只说感受（→ 自适应车控）；记住或调用个人信息（→ 记忆）；打开新闻应用这类应用开关仍是 NLU</td></tr>
+    <tr><td><span class="tag t-agent">Agent 直达</span></td><td>单个意图，一个 Agent 一次答完：新闻；天气；与新闻无关的即时信息和知识问答；用车相关；条件任务、提醒和长期规则；记住或调用个人信息；按描述找歌找片；找店找景点和行程；只说感受的车控；一个明确的代办单</td><td>需要串联别的能力；违法有害请求</td></tr>
+    <tr><td><span class="tag t-slow">慢思考</span></td><td>多个任务分属不同能力且有依赖、跨任务约束；NLU3.0 接不住、又没有 Agent 能直达的请求</td><td>几条互不依赖的普通指令（那是 NLU 直达）</td></tr>
+    <tr><td><span class="tag t-chat">闲聊</span></td><td>没有任务目标：讲故事、陪聊、情绪表达、写诗写文案；饿、渴、困、累这类车控满足不了的诉求</td><td>只说感受但隐含车控（“好热”→ 自适应车控）；有标准答案的知识问答（→ 联网搜索）</td></tr>
+  </table></div>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+  <h2><span class="no">05</span>分发策略（代码规则）</h2>
+  <p>规则从上到下匹配，命中即停。阈值是初值，全部放配置中心，在 val 上标定（第 10 节）。</p>
+<pre>NLU_ENTRY = {19 个入口域}                       # 第 06 节
+DOMAIN_TO_AGENT = {"weather_xf": "天气", "life_suggestion": "天气", "news": "新闻",
+                   "stock|flight|train|traffic_restriction|datetime_info": "联网搜索",
+                   "help|intelligent_car_info": "用车专家", "music_qa": "音乐", "video_qa": "影视",
+                   "poi_recommend|view_poi_*|similar_poi|outgoing_eta|travel_plan": "出行导航",
+                   "intelligent_car_scenario": "自适应车控", "reminder|task_setting": "任务大师",
+                   "agent_task|app_agent": "代办点单",      # shadow 期间等同进慢思考
+                   "chat": CHAT, "outside_qa": SLOW}       # chat 交闲聊；车外问答本期进慢思考
+
+def dispatch(jev, nlu, sess, segs):
+    # R0 安全
+    if jev.is_unsafe >= T_UNSAFE:                       return SAFE_REFUSE()
+    # R1 会话（第 03 节第 0 步已处理 continue 的情况，这里处理“上一轮已结束、本轮依赖上文”）
+    if sess.last_route == "chat"  and jev.needs_context: return CHAT(reason="闲聊追问")
+    if sess.last_route == "agent" and jev.needs_context \
+       and jev.route.top != "nlu":                       return AGENT(sess.last_agent, reason="Agent 追问")
+    # R2 多段（整句本身是同一个 Agent 的请求时先直达，如“先去 A 再去 B”）
+    if len(segs) >= 2 and agent_ok(jev):              return AGENT(resolve(jev.agent_label.top))
+    if len(segs) >= 2:
+        roles = merge_fragments(jev.segment_role)        # 残片并入前一段，“同一任务”与相邻片段合并
+        if len(roles) == 1:  return dispatch_single(jev, nlu, sess)   # 合并后只剩一组：按单句走 R3–R6
+        inst  = [s for s, r in roles if r == "独立指令"]
+        rest  = [s for s, r in roles if r != "独立指令"]   # 独立 Agent 类 + 有依赖
+        if not rest:   return nlu_path(jev, nlu)         # 全是指令：整句交 NLU3.0（它自己拆多意图）
+        if not inst:   return SLOW(reason="多段含 Agent 类或依赖", hint=jev.agent_label.top)
+        return SPLIT(nlu=nlu_path(jev, NLU3(join(inst))), slow=rest)   # 本期不做多 Agent 并发
+    # R3 Agent 直达（精准门槛）
+    if jev.route.top == "agent":
+        if agent_ok(jev):                                # route.conf ≥ T_AGENT_ROUTE 且 label ≠ none 且 label.conf ≥ T_AGENT_LABEL[label]
+            return AGENT(resolve(jev.agent_label.top))   # 回退表：新闻 / 天气 off → 联网搜索；shadow → 慢思考
+        return SLOW(reason="Agent 直达置信不足", hint=jev.agent_label.top)
+    # R4 NLU 直达（需要 NLU3.0 也接住）
+    if jev.route.top == "nlu" or (jev.route.top == "slow" and jev.route.second == "nlu"
+                                  and jev.route.conf &lt; T_SLOW_SURE):
+        return nlu_path(jev, nlu)
+    # R5 闲聊
+    if jev.route.top == "chat" and jev.route.conf >= T_CHAT: return CHAT()
+    # R6 剩余（R7 落域后被拒在业务侧回传后触发，见第 03 节第 6 步）
+    return SLOW(reason="剩余类", hint=jev.agent_label.top)
+
+def nlu_path(jev, nlu):
+    # nlu.intents 可能有多个（多意图）；每个都要过下面的检查
+    if jev.domain.top == "非入口":                      # 信号 2
+        return SLOW(reason="Jev 认为不在入口域", hint=jev.agent_label.top)
+    for it in nlu.intents:
+        if it.domain not in NLU_ENTRY:                   # 落到非入口域：回流对应 Agent
+            agent = DOMAIN_TO_AGENT.get(it.domain)
+            if len(nlu.intents) == 1 and agent and is_on(agent) \
+               and jev.agent_label.prob[agent] >= T_REFLOW:
+                return AGENT(resolve(agent), reason="NLU 落非入口域，回流")
+            return SLOW(reason="NLU 含非入口域", hint=agent)
+        if it.domain == "other" and not rewritten:         # 信号 3：先改写重判一次
+            return REWRITE_AND_REJUDGE()
+        if it.domain == "other" or not it.intent or missing_required_slots(it):   # 信号 3、4
+            return SLOW(reason="NLU3.0 接不住")
+        if not (consistent(jev.domain.top, it.domain) or jev.domain.prob[it.domain] >= T_DOMAIN_AGREE):
+            return SLOW(reason="domain 不一致")
+    return NLU(nlu.intents)</pre>
+  <h3>几处取舍</h3>
+  <ul>
+    <li><b>NLU 入口白名单</b>：NLU3.0 仍会对“明天苏州天气”输出 <code>weather_xf</code>。只有 19 个入口域可以直达执行；落到其他域时按 <code>DOMAIN_TO_AGENT</code> 回流给对应 Agent，前提是 Jev 也给了该 Agent 一定概率（≥ <code>T_REFLOW</code>），否则带提示进慢思考。这样即使 Jev 的 route 判错成 NLU，也不会绕过已定的 Agent 归属。</li>
+    <li><b>route 置信低时，v5 原稿写“NLU 落域兜底”。</b>本设计改成：Jev 在 NLU 和慢思考之间拿不准时，看 NLU3.0 自己接不接得住——接得住且 domain 一致就直达执行，接不住就慢思考。</li>
+    <li><b>domain 一致性</b>：<code>consistent()</code> 认同一域，也认入口域之间的近邻对（如 <code>intelligent_car_control</code>↔<code>global_control</code>、<code>music</code>↔<code>audio_book</code>），近邻时以 NLU 的为准。NLU3.0 不输出置信度，用 Jev 的 domain 分布代替：Jev 给 NLU 选的域的概率 ≥ <code>T_DOMAIN_AGREE</code> 就按 NLU 执行。不一致率作为监控指标。</li>
+    <li><b>多指令整句交 NLU3.0</b>：NLU3.0 能识别无标点多意图和同功能多参数，所以全是指令时不按预切分拆开调用，避免把“打开空调并把温度调到 26 度风量三档”拆错。只有混了 Agent 类或有依赖片段时，才把独立指令片段拼起来另调一次 NLU3.0。</li>
+    <li><b>同一 Agent 的多段句</b>：“先去长沙橘子洲头，再去岳麓书院”会被“再”切成两段，但整句是出行导航一个 Agent 能完成的，R2 先按整句判 Agent 直达；只有跨能力的多段才拆分。</li>
+    <li><b>Agent 追问</b>：上一轮是 Agent 直达、本轮依赖上文（<code>needs_context</code>）（那喝水呢、时间改成三天两夜吧、钢琴博物馆不去了），直接交回同一 Agent，由 Agent 用自己的上下文理解，不做改写。若本轮其实是一条新指令（route 判为 NLU），不跟随。</li>
+    <li><b>Agent 直达置信不足时带 hint 进慢思考</b>：大脑拿到“前置分流提示：联网搜索”，大多数情况一次就会调同一个 Agent，只多一次规划的耗时。</li>
+  </ul>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+  <h2><span class="no">06</span>Agent 精准直达</h2>
+  <div class="callout"><b>归属规则（2026-10-28 已定）</b>：和新闻相关的走新闻 Agent；和新闻无关的即时信息查询走联网搜索；知识问答和用车相关的走用车专家，和用车无关的走联网搜索；条件任务归任务大师。新闻 Agent 未接入或关闭时，新闻类请求由联网搜索处理。用车专家是 Agent，用车相关的问题（包括状态询问）都由它处理，不走 NLU。</div>
+  <p>只有“一句话、一个 Agent、一次答完”的才进清单。每个 label 对应 Agent Hub 注册表里的一个 Agent 或 Tool，各自有独立的置信门槛，可以单独 on / shadow / off。</p>
+  <div class="tablewrap"><table>
+    <tr><th>agent_label</th><th>收什么</th><th>不收（去向）</th><th>本期</th></tr>
+    <tr><td><b>新闻</b><br><span class="small muted">News Agent</span></td>
+      <td>和新闻相关的都收：最近的新闻、最新的科技新闻、今天有什么热点、某领域资讯、某事件的最新进展和各方反应、播放新闻</td>
+      <td>和导航等串联 → 慢思考。NLU3.0 的 <code>news</code> 域不再作为入口，只在兜底时用到</td>
+      <td><span class="tag t-agent">on</span><br><span class="small muted">未接入或 off 时回退到联网搜索</span></td></tr>
+    <tr><td><b>天气</b><br><span class="small muted">Weather Agent，2026-10-29 新增</span></td>
+      <td>天气查询：今天、明天、未来几天的天气，温度，下不下雨，空气质量，以及靠天气判断的生活指数（洗车、穿衣、紫外线、适不适合骑行露营）</td>
+      <td>天气和别的任务串联（明天下雨的话提醒我带伞 → 任务大师；导航过去顺便看看那边天气 → 慢思考）；车外环境感受（外面好冷）→ 自适应车控</td>
+      <td><span class="tag t-agent">on</span><br><span class="small muted">未接入或 off 时回退到联网搜索</span></td></tr>
+    <tr><td><b>联网搜索</b><br><span class="small muted">DeepSeek 自带 web_search</span></td>
+      <td>和新闻无关的即时信息查询，以及和用车无关的知识问答。指令里大多不带“新闻”二字：今天几号、今天星期几、北汽蓝谷股价、去三亚的航班、明天限行尾号、某品牌最新车型、李冰冰得过哪些奖</td>
+      <td>和新闻相关 → 新闻；天气 → 天气；和用车相关 → 用车专家</td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>用车专家</b><br><span class="small muted">用车 Agent</span></td>
+      <td>和用车相关的问题都收：本车功能是什么、怎么用、在哪设置；故障、异响、报警的原因和处理建议；部件或功能的状态询问（后备箱关好了吗、无线充电打开了吗）；某种路况天气下该怎么设置；与本车无关的汽车常识</td>
+      <td>直接让车执行动作 → NLU 车控。NLU3.0 的 <code>help</code> 域不作入口；<code>intelligent_car_info</code> 与它重叠，见下方重叠表</td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>任务大师</b></td>
+      <td>条件任务（一次性的定时、延时动作：后天两点导航到火车站、十分钟后关车窗）和长期规则（每天、每周、每当……时自动执行）</td>
+      <td>除定时动作外还有别的马上要做的任务 → 慢思考。只提醒用户做事（明天三点提醒我取快递）也归任务大师；NLU3.0 的 <code>task_setting</code>、<code>reminder</code> 不作为入口</td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>记忆</b></td>
+      <td>让系统记住一条个人信息、喜好、常去地点、停车位置；查询记住的内容；按记忆去执行（播放我常听的专辑、导航去上次去的电影院）</td>
+      <td>带时间触发 → 任务大师</td>
+      <td><span class="tag t-agent">on</span><span class="small muted"> 业务标签 1,325 句</span></td></tr>
+    <tr><td><b>音乐</b></td>
+      <td>需要理解和检索的音乐请求：按氛围、场景、心情找歌，相似推荐，凭歌词找歌，歌曲和歌手问答</td>
+      <td>说出歌名、歌手、专辑、歌单的直接点播和播放控制 → NLU <code>music</code></td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>影视</b></td>
+      <td>影视推荐和查找：按题材、人群、评分、相似作品推荐，凭剧情找片，演员作品，画面问答</td>
+      <td>说出片名的直接点播和播放控制 → NLU <code>video</code></td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>出行导航</b></td>
+      <td>找店找景点、按条件推荐 POI、地点问答、靠描述找地点、一次去多个地点、行程规划（含多日）、出发时间推算</td>
+      <td>导航去说得出名字的地点、回家、去公司、导航过程控制 → NLU <code>navigation</code>；串联其他能力 → 慢思考</td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>自适应车控</b></td>
+      <td>只说出感受或环境、需要推断怎么调车（好冷啊、车里像烤箱、空气味道真怪、雨下得让人心烦）</td>
+      <td>已说出具体指令 → NLU 车控；饿、渴、困、累这类车控满足不了的诉求 → 闲聊</td>
+      <td><span class="tag t-agent">on</span></td></tr>
+    <tr><td><b>代办点单</b><br><span class="small muted">对应 agent_task / app_agent</span></td>
+      <td>单个明确的下单、点单、订房，或应用内一个具体操作（帮我点两杯瑞幸凉少糖美式、微信扫一扫给我打开）</td>
+      <td>多约束、要比价或串联导航 → 慢思考</td>
+      <td><span class="tag t-warn">shadow</span><span class="small muted"> 等 Agent 接入</span></td></tr>
+    <tr><td><b>400 客服</b></td>
+      <td>预约保养、道路救援、投诉、服务网点咨询</td>
+      <td>本车功能怎么用 → 用车专家</td>
+      <td><span class="tag t-warn">待定</span><span class="small muted"> 无标注数据</span></td></tr>
+    <tr><td><b>三方生态 Agent</b></td><td>A2A / HTTP 接入的三方 Agent</td><td>—</td><td><span class="tag t-warn">off</span></td></tr>
+  </table></div>
+
+  <h3>旧 Agent 标签在 v5 下的归属</h3>
+  <p class="small muted">按业务标签（data/一阶分发业务labels）定稿：大模型 agent 标签都走 Agent 直达，NLU3.0 里对应的域只在兜底时用到。</p>
+  <div class="tablewrap"><table>
+    <tr><th>旧标签</th><th>v5 去向</th><th>说明</th></tr>
+    <tr><td>新闻agent</td><td><span class="tag t-agent">Agent 直达 · 新闻</span></td><td>新闻相关全部归新闻 Agent，包括播放新闻</td></tr>
+    <tr><td>用车agent</td><td><span class="tag t-agent">Agent 直达 · 用车专家</span></td><td>全部归用车专家，包括状态询问</td></tr>
+    <tr><td>记忆agent</td><td><span class="tag t-agent">Agent 直达 · 记忆</span></td><td>含记忆调用（按记忆播放、导航）</td></tr>
+    <tr><td>有情知音</td><td>同闲聊</td><td>按闲聊处理：知识问答 → 联网搜索，观点陪聊 → 闲聊</td></tr>
+    <tr><td>车控agent模糊意图</td><td><span class="tag t-agent">Agent 直达 · 自适应车控</span></td><td>NLU <code>intelligent_car_scenario</code> 不作入口</td></tr>
+    <tr><td>音乐agent / 影视agent</td><td><span class="tag t-agent">Agent 直达 · 音乐 / 影视</span></td><td>“他在春晚上唱的那一首”这类承接上文的先改写再判</td></tr>
+    <tr><td>复杂导航agent / 出行Agent</td><td><span class="tag t-agent">Agent 直达 · 出行导航</span></td><td>多地点、行程也由出行导航 Agent 一次完成，不进慢思考</td></tr>
+    <tr><td>条件任务 / 任务大师</td><td><span class="tag t-agent">Agent 直达 · 任务大师</span></td><td>两类合并到任务大师 Agent；<code>task_setting</code> 不作为入口。v5 原稿画在慢思考，已在 docs/Jev 分流融合架构-v6.html 更新</td></tr>
+    <tr><td>中枢简单任务</td><td><span class="tag t-nlu">整句 NLU 直达</span></td><td>NLU3.0 自己识别多意图</td></tr>
+    <tr><td>中枢复杂多任务</td><td><span class="tag t-slow">慢思考</span>（独立段先执行）</td><td></td></tr>
+    <tr><td>闲聊</td><td>知识问答、即时信息 <span class="tag t-agent">Agent 直达 · 联网搜索</span>（用车相关的归用车专家）；其余 <span class="tag t-chat">闲聊</span></td><td>百科、事实、日期时间这类有标准答案的问题不再归闲聊；讲故事、陪聊、写诗留在闲聊</td></tr>
+  </table></div>
+  <h3>NLU3.0 直达范围（2026-10-29 定稿）</h3>
+  <p>原则：<b>说清楚的指令</b>走 NLU3.0 直达；查询、问答、推荐、需要推断的都交给 Agent。以下 19 个域作为入口（其余 26 个域不作入口，落到时按第 05 节回流）：</p>
+  <div class="tablewrap"><table>
+    <tr><th>类别</th><th>NLU3.0 域</th><th>例句</th></tr>
+    <tr><td>车控</td><td><code>intelligent_car_control</code> <code>global_control</code> <code>app_control</code></td><td>关闭前挡风玻璃加热、音量调大、打开蓝牙</td></tr>
+    <tr><td>媒体点播和播放控制</td><td><code>music</code> <code>video</code> <code>fm</code> <code>audio_book</code> <code>short_video</code> <code>changba</code> <code>KTV</code></td><td>放一首稻香、播放调频交通广播、下一集（说出名字或风格的点播；按描述找歌找片归音乐 / 影视 Agent）</td></tr>
+    <tr><td>通讯</td><td><code>phone_call</code> <code>wechat_on_car</code> <code>app_call</code></td><td>给张三打电话、用微信给李四发消息</td></tr>
+    <tr><td>导航</td><td><code>navigation</code></td><td>导航到天安门、回家、走高速优先、取消导航（去说得出名字的地点和导航控制；找店找景点归出行导航 Agent）</td></tr>
+    <tr><td>车家互联</td><td><code>home_agent</code></td><td>关闭主卧的窗帘</td></tr>
+    <tr><td>生成和个性化</td><td><code>wallpaper</code> <code>theme_gen</code> <code>painting</code></td><td>换壁纸、给我弄成黑夜主题、画一个宝马七系</td></tr>
+    <tr><td>计算</td><td><code>calculator</code></td><td>3×200 等于多少</td></tr>
+  </table></div>
+  <p class="small muted">另外：一语多意图、中枢简单任务、同功能多参数（空调 22 度风量 2 挡）都整句交 NLU3.0 直达。<code>outside_qa</code>（车外问答，需要车外画面）本期进慢思考；车况纯读数（还剩多少油）暂归用车专家，也可留 <code>intelligent_car_info</code>。</p>
+  <h3>与 NLU3.0 域重叠</h3>
+  <div class="tablewrap"><table>
+    <tr><th>NLU3.0 域</th><th>本稿处理</th><th>理由</th></tr>
+    <tr><td><code>news</code></td><td>新闻 Agent（未接入时联网搜索），NLU 不作入口</td><td>已定：问新闻都走新闻 Agent</td></tr>
+    <tr><td><code>help</code> <code>intelligent_car_info</code></td><td>用车专家（Agent）</td><td>已定：用车专家是 Agent。<b>待确认</b>：基础车控里原标“简单”的纯读数（还剩多少油、续航多少公里）是否也改给用车专家，本稿暂按用车专家处理，NLU car_info 只做兜底</td></tr>
+    <tr><td><code>datetime_info</code></td><td>联网搜索</td><td>已定：今天几号、星期几按即时信息查询处理</td></tr>
+    <tr><td><code>task_setting</code></td><td>任务大师，NLU 不作入口</td><td>已定：条件任务归任务大师</td></tr>
+    <tr><td><code>weather_xf</code> <code>life_suggestion</code></td><td>天气 Agent，NLU 不作入口</td><td>已定（2026-10-29）：新增天气 Agent</td></tr>
+    <tr><td><code>stock</code> <code>flight</code> <code>train</code> <code>traffic_restriction</code></td><td>联网搜索，NLU 不作入口</td><td>已定（2026-10-29）：即时信息查询走联网搜索。原来 NLU 的股价等卡片需要由联网搜索结果另行生成，或放弃卡片</td></tr>
+    <tr><td><code>music_qa</code> <code>video_qa</code> <code>poi_recommend</code> <code>view_poi_*</code> <code>similar_poi</code> <code>outgoing_eta</code> <code>travel_plan</code> <code>intelligent_car_scenario</code> <code>reminder</code></td><td>对应 Agent（音乐、影视、出行导航、自适应车控、任务大师），NLU 不作入口</td><td>已定（2026-10-28）：大模型 agent 标签走 Agent 直达</td></tr>
+  </table></div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+  <h2><span class="no">07</span>NLU3.0 接不住 → 慢思考</h2>
+  <p>“识别不了”需要可观测的信号，不能只靠 Jev 猜。本设计用六个信号，任意一个成立就不走 NLU 直达：</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>信号</th><th>来源</th><th>说明</th></tr>
+    <tr><td>1</td><td>Jev <code>route</code> = 慢思考且置信达标</td><td>Jev</td><td>前置判断，最快，不必等 NLU</td></tr>
+    <tr><td>2</td><td>Jev <code>domain</code> = 非入口</td><td>Jev</td><td>Jev 判为 NLU 直达却认为不在入口域，自相矛盾，按接不住处理</td></tr>
+    <tr><td>3</td><td>NLU3.0 的 domain = <code>other</code></td><td>NLU3.0</td><td><code>other</code> 多为承接上文的短句，先走改写；改写重判后仍是 other 才进慢思考</td></tr>
+    <tr><td>4</td><td>NLU3.0 解析不完整：intent 为空，或该 intent 的必填槽位缺失（如导航没有目的地）</td><td>NLU3.0</td><td><b>NLU3.0 不输出置信度</b>，用结构检查代替。必填槽位表按 intent 配置，需要 NLU 团队提供</td></tr>
+    <tr><td>5</td><td>Jev 与 NLU 的 domain 不一致：不在近邻对表里，且 Jev 给 NLU 那个域的概率 &lt; <code>T_DOMAIN_AGREE</code></td><td>两者</td><td>两边说法不同，交给大脑看全句</td></tr>
+    <tr><td>6</td><td>NLU3.0 落到非入口域（天气、新闻、POI 推荐等）</td><td>NLU3.0</td><td>不执行，按 <code>DOMAIN_TO_AGENT</code> 回流给对应 Agent；Jev 不支持该 Agent 时进慢思考</td></tr>
+  </table></div>
+  <div class="callout slow">
+    <b>时延代价：</b>信号 3–6 要等 NLU3.0 结果，所以 Jev 和 NLU 必须并行起跑，否则这条兜底路径会多出一整次 NLU 的串行等待。进慢思考时把 NLU 的结果作为提示带给大脑，大脑可以直接复用 intent/slots。
+  </div>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+  <h2><span class="no">08</span>多指令、改写和多轮</h2>
+  <h3>多指令（segment_role）</h3>
+  <div class="tablewrap"><table>
+    <tr><th>query</th><th>预切分</th><th>Jev 片段角色</th><th>去向</th></tr>
+    <tr><td>打开座椅通风座椅按摩</td><td>未切开（无标点、无连接词）</td><td>—</td><td>单段；整句交 NLU3.0，它识别出两个 intent，<span class="tag t-nlu">NLU 直达</span>逐条执行</td></tr>
+    <tr><td>打开空调并把温度调到 26 度风量三档</td><td>未切开（“并”不是强分隔）</td><td>—</td><td>同功能多参数，整句 <span class="tag t-nlu">NLU 直达</span>，不拆</td></tr>
+    <tr><td>打开空调，关闭车窗，导航到天安门，播放周杰伦的歌</td><td>4 段</td><td>独立指令 ×4</td><td>全是指令 → 整句交 NLU3.0，<span class="tag t-nlu">NLU 直达</span>，按说的顺序执行，合并成一次播报</td></tr>
+    <tr><td>打开空调，今天天气怎么样</td><td>2 段</td><td>独立指令、独立 Agent 类</td><td>“打开空调”另调 NLU3.0 立即执行；第 2 段进 <span class="tag t-slow">慢思考</span>（带提示：天气）。本期不做 NLU 与 Agent 并发直达</td></tr>
+    <tr><td>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td><td>3 段</td><td>独立指令、独立指令、有依赖</td><td>前两段 NLU 直达立即执行；第 3 段依赖第 2 段的目的地 → 带上第 2 段结果进 <span class="tag t-slow">慢思考</span></td></tr>
+    <tr><td>打开那边窗户，十五分钟后都给我关上</td><td>2 段</td><td>独立指令、有依赖</td><td>第 1 段 NLU 直达；第 2 段（定时、依赖第 1 段）进慢思考</td></tr>
+  </table></div>
+  <p class="small muted">“有依赖”：这一段要用到前面某段的执行结果（目的地、联系人、搜索结果），或者要读记忆、要推断指代。“独立 Agent 类”：自己完整、但属于某个 Agent 的请求（天气、新闻、找歌）。残片（“然后”“还有”）并入前一段。</p>
+
+  <h3>改写</h3>
+  <ul>
+    <li>上文指代（再高一点、换成第二个）：优先用 <code>previous_turn</code> 的结构化结果由代码拼回（空调温度再调高一点），拼不回再交 DeepSeek。</li>
+    <li>俗称（大裤衩、周董）：沿用第 14 版的 DeepSeek 改写提示词。</li>
+    <li>改写结果回 Jev 重判一次；重判仍需改写则直接进慢思考。</li>
+  </ul>
+
+  <h3>多轮会话</h3>
+  <div class="tablewrap"><table>
+    <tr><th>上一轮</th><th>本轮</th><th>处理</th></tr>
+    <tr><td>慢思考，大脑返回 continue</td><td>任意</td><td>直接交慢思考；大脑判 suspend 时本句回到正常分流，任务保留</td></tr>
+    <tr><td>闲聊</td><td>追问（那后来呢）</td><td>跟随闲聊</td></tr>
+    <tr><td>NLU 直达（导航中）</td><td>走高速优先、还有多久到</td><td>正常分流，previous_turn 进 Jev 和 NLU，按 NLU 直达执行</td></tr>
+    <tr><td>Agent 直达，Agent 返回 continue（出行导航在等用户选目的地）</td><td>第二个、就去那家</td><td>第 0 步直接交回出行导航 Agent</td></tr>
+    <tr><td>Agent 直达，已结束（新闻）</td><td>那它对股市有什么影响</td><td>needs_context 为真 → R1 交回新闻 Agent，不改写</td></tr>
+    <tr><td>Agent 直达，已结束（联网搜索：四大名著有哪些）</td><td>那喝水呢、那这句话的法语翻译你知道吗</td><td>同上，交回联网搜索</td></tr>
+    <tr><td>Agent 直达，已结束（出行导航：规划了一条多点路线）</td><td>钢琴博物馆不去了、时间改成三天两夜吧</td><td>同上，交回出行导航</td></tr>
+    <tr><td>Agent 直达（音乐）</td><td>打开空调</td><td>needs_context 为假 → 正常分流，NLU 直达，不被上一轮带偏</td></tr>
+  </table></div>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+  <h2><span class="no">09</span>时延预算</h2>
+  <div class="tablewrap"><table>
+    <tr><th>路径</th><th>串行环节</th><th>目标</th><th>备注</th></tr>
+    <tr><td><span class="tag t-nlu">NLU 直达</span></td><td>max(Jev, NLU3.0) → 执行</td><td>分流完成 ≤ 800ms（v5 目标）</td><td>并行后分流耗时取两者较慢的一个，不是相加</td></tr>
+    <tr><td><span class="tag t-agent">Agent 直达</span></td><td>Jev → Agent</td><td>首字 ≤ 1.5s</td><td>比现在少一次大脑推理。联网搜索自身较慢：webdemo 实测（GitHub 美国机房）一次 2.5–3 秒，要用流式首字和“正在查”提示语遮住</td></tr>
+    <tr><td><span class="tag t-slow">慢思考</span></td><td>Jev（+ NLU 并行）→ 大脑规划 → 执行</td><td>首段播报 ≤ 2s</td><td>快慢两段播报：独立段先播报</td></tr>
+    <tr><td><span class="tag t-chat">闲聊</span></td><td>Jev → S2S</td><td>—</td><td>音频直通</td></tr>
+  </table></div>
+  <p class="small muted">Jev 在车上的真实时延还没有测（webdemo 跑的是公网）。加入 is_unsafe、domain（20 选项）和 agent_label 后请求变大，需要实测 input_tokens 和耗时，若超预算，优先把 domain 改成“先判 5 大组、再判组内域”的两层，而不是删掉：NLU3.0 没有置信度，domain 题是校验 NLU 结果的唯一依据。</p>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+  <h2><span class="no">10</span>阈值、配置与止血</h2>
+  <div class="tablewrap"><table>
+    <tr><th>参数</th><th>初值</th><th>含义</th><th>标定方法</th></tr>
+    <tr><td><code>T_AGENT_ROUTE</code></td><td>0.7</td><td>route=Agent 直达的置信门槛</td><td>val 上让 Agent 直达精确率 ≥ 97% 的最低值</td></tr>
+    <tr><td><code>T_AGENT_LABEL[label]</code></td><td>0.7</td><td>每个 label 单独的门槛</td><td>同上，按 label 分别标定</td></tr>
+    <tr><td><code>T_SLOW_SURE</code></td><td>0.6</td><td>Jev 判慢思考有多确定才不看 NLU</td><td>看 val 上慢思考判错的分布</td></tr>
+    <tr><td><code>T_DOMAIN_AGREE</code></td><td>0.2</td><td>两边 domain 不一致时，Jev 给 NLU 所选域的概率达到多少仍按 NLU 执行（替代 NLU 置信度）</td><td>val 上看不一致样本里 NLU 对错与该概率的关系</td></tr>
+    <tr><td><code>T_UNSAFE</code></td><td>0.5</td><td>is_unsafe 达到即安全拒答</td><td>宁可多拦：val 上违法有害请求漏拦为 0 的最高值</td></tr>
+    <tr><td><code>T_REFLOW</code></td><td>0.2</td><td>NLU 落非入口域时，Jev 给对应 Agent 的概率达到多少才回流直达</td><td>val 上看回流样本的精确率</td></tr>
+    <tr><td><code>T_CHAT</code></td><td>0.6</td><td>闲聊直通门槛</td><td>闲聊误判任务的代价高（任务丢失），宁可低召回</td></tr>
+    <tr><td><code>T_CONTEXT</code> / <code>T_NICKNAME</code></td><td>0.5 / 0.5</td><td>needs_context / has_nickname</td><td>T_NICKNAME 沿用第 14 版 needs_rewrite；T_CONTEXT 在多轮集上标定</td></tr>
+    <tr><td>label 回退表</td><td>新闻 → 联网搜索<br>天气 → 联网搜索</td><td>某个 Agent 未接入或 off 时改交给哪个 Agent；Jev 的选项不变，只改代码映射</td><td>对应 Agent 上线后去掉该条即可，判据不用改</td></tr>
+    <tr><td><code>NLU_ENTRY</code> / <code>DOMAIN_TO_AGENT</code></td><td>见第 05、06 节</td><td>NLU 入口白名单和非入口域回流表</td><td>归属调整时改配置，不改代码</td></tr>
+    <tr><td>每个 agent_label 的状态</td><td>见第 06 节</td><td>on / shadow / off</td><td>shadow：照常进慢思考，只记录 Jev 想直达的 label，用来积累上线依据</td></tr>
+  </table></div>
+  <p><b>止血链路</b>（沿用 V0.4 方案）：分钟级——干预表加一条精确匹配，或把某个 agent_label 切到 shadow；小时级——改 criteria、在 val 回放、灰度发布。问题定义、阈值、干预表全部放云端配置中心，热更新。</p>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+  <h2><span class="no">11</span>评测与验收</h2>
+  <p>数据、标注、映射、切分、测试项和验收指标以《Jev 分流测试方案》为准：主数据为 data/一阶分发业务labels（17 个业务标签，去重后 25,827 句），data/快思考测试集补充 NLU 侧和多轮；每句保留业务标签，用 <code>route_map.yaml</code> 换算去向。下表列出测试方案里的必须项和它们依赖的设计点。</p>
+  <div class="tablewrap"><table>
+    <tr><th>必须项</th><th>目标</th><th>依赖的设计</th></tr>
+    <tr><td>Agent 直达精确率（每个 label）</td><td>≥ 97%</td><td>R3 门槛、回退表、R4 回流门槛</td></tr>
+    <tr><td>慢思考漏判率</td><td>≤ 3%</td><td>segment_role 五类、R2</td></tr>
+    <tr><td>NLU 直达精确率</td><td>≥ 97%</td><td>NLU 入口白名单、六个兜底信号</td></tr>
+    <tr><td>违法有害请求进联网搜索</td><td>0</td><td>is_unsafe、R0、干预表敏感词</td></tr>
+    <tr><td>闲聊误判</td><td>≤ 1%</td><td>T_CHAT、R5</td></tr>
+    <tr><td>分流耗时 p90</td><td>≤ 800ms</td><td>Jev 与 NLU3.0 并行；domain 题 20 选项</td></tr>
+  </table></div>
+  <p class="small muted">目标项：Agent / NLU 直达召回、多指令 ≥ 95%（依赖 NLU3.0 多意图识别）、多轮切换不带偏 ≥ 95%（依赖 R1 Agent 追问）、去向翻转率。落域后被拒（第 03 节第 6 步）用模拟的被拒回传测试。</p>
+</section>
+
+<!-- 12 -->
+<section id="s12">
+  <h2><span class="no">12</span>待评审决策</h2>
+  <div class="qa"><div class="q">Q1 · Agent 直达本期上线哪些 label？</div>
+    <div class="rec">新闻、天气（两者未接入时回退联网搜索）、联网搜索、用车专家、任务大师、记忆、音乐、影视、出行导航、自适应车控十个 on；代办点单 shadow；400 客服、三方 Agent 等接入后再加。</div>
+    <div class="alt">先上新闻和联网搜索，其余 shadow 一轮再定。</div></div>
+  <div class="qa"><div class="q">Q2 · route 拿不准（NLU 和慢思考之间）时听谁的？</div>
+    <div class="rec">看 NLU3.0 是否接住：接住且 domain 一致就直达，否则慢思考（第 05 节 R4）。</div>
+    <div class="alt">按 v5 原稿一律 NLU 落域兜底，NLU 执行失败再转慢思考（快，但错误会先执行）。</div></div>
+  <div class="qa"><div class="q">Q3 · Jev 要不要问 domain（19 个入口域 + 非入口）？</div>
+    <div class="rec">要。NLU3.0 不输出置信度，Jev 的 domain 分布是判断“NLU 落得对不对”的唯一依据，同时用来监控 NLU 漂移。</div>
+    <div class="alt">不问，完全信 NLU3.0 的 domain，只靠 other 和槽位检查兜底（省时延，但 NLU 落错域时无法发现）。</div></div>
+  <div class="qa"><div class="q">Q4 · 新闻和联网搜索的边界 <span class="tag t-agent">已定</span></div>
+    <div class="rec">和新闻相关的走新闻 Agent（最近的新闻、最新的科技新闻）；和新闻无关的即时信息查询走联网搜索（今天几号、今天星期几）。新闻 Agent 未接入或关闭时，Jev 仍判出“新闻”标签，由代码回退给联网搜索。</div></div>
+  <div class="qa"><div class="q">Q5 · 知识问答归属 <span class="tag t-agent">已定</span></div>
+    <div class="rec">和用车相关的走用车专家；和用车无关的走联网搜索。闲聊只留没有任务目标的对话。</div></div>
+  <div class="qa"><div class="q">Q6 · 条件任务归属 <span class="tag t-agent">已定</span></div>
+    <div class="rec">条件任务（含只提醒用户的）和长期规则都归任务大师 Agent，Agent 直达。</div></div>
+  <div class="qa"><div class="q">Q6c · 音乐、影视、出行导航、车控模糊意图；有情知音；记忆调用 <span class="tag t-agent">已定</span></div>
+    <div class="rec">前四类都走 Agent 直达；有情知音按闲聊处理；记忆调用按业务归记忆 Agent。</div></div>
+  <div class="qa"><div class="q">Q6b · 天气、股票、航班火车、限行 <span class="tag t-agent">已定</span></div>
+    <div class="rec">天气归新增的天气 Agent（未接入时回退联网搜索）；股票、航班火车、限行归联网搜索；NLU 对应域只做兜底。注意：这些查询原来有 NLU 的结构化卡片，改走联网搜索后要确认端侧展示怎么处理。</div></div>
+  <div class="qa"><div class="q">Q7 · NLU3.0 不输出置信度，“接不住”怎么判？</div>
+    <div class="rec">只用结构信号：domain = other、intent 为空、必填槽位缺失；对错由 Jev 的 domain 分布校验（第 07 节信号 3–5）。需要 NLU 团队确认两件事：接不住时是否固定落 other；能否提供各 intent 的必填槽位表。</div>
+    <div class="alt">让 NLU3.0 增加一个显式的拒识输出（如 domain = none），比靠 other 判断更干净。</div></div>
+  <div class="qa"><div class="q">Q8 · 新测试集的改标规则谁来定？</div>
+    <div class="rec">保留业务标签，用映射表换算去向，见《Jev 分流测试方案》第 03、04 节。</div></div>
+  <div class="qa"><div class="q">Q9 · 对照测试方案审阅后的架构补充 <span class="tag t-agent">已定（10-29）</span></div>
+    <div class="rec">① NLU 入口白名单 + 非入口域回流 Agent（R4、信号 6）；② Agent 会话跟随：Agent 返回 continue 时交回同一 Agent，Agent 已结束而本轮依赖上文的也交回（第 0 步、R1）；③ 安全拦截：Jev 加 is_unsafe，干预表加敏感词（R0）；④ 片段角色扩为五类（10-29 冒烟后加“同一任务”），全是指令时整句交 NLU3.0（它能识别无标点多意图和同功能多参数）；⑤ domain 题改为 19 个入口域 + 非入口。</div></div>
+</section>
+
+<!-- 13 -->
+<section id="s13">
+  <h2><span class="no">13</span>实施改动范围</h2>
+  <p class="small muted">评审通过后再动，下面是预计改动。</p>
+  <div class="tablewrap"><table>
+    <tr><th>文件</th><th>改动</th></tr>
+    <tr><td><code>make_criteria_v3.py</code> → <code>criteria_v3.json</code>（新）</td><td>is_unsafe / route / domain（19 + 非入口）/ agent_label / needs_context / has_nickname / segment_role（五类）的判据；domain 选项取自 <code>docs/NLU3.0大模型_domain清单.md</code> 的入口域</td></tr>
+    <tr><td><code>route_config.yaml</code>（新）</td><td>NLU_ENTRY、DOMAIN_TO_AGENT、label 回退表、各 label 的 on / shadow / off、全部阈值；线上放配置中心</td></tr>
+    <tr><td><code>build_dataset_v5.py</code> + <code>route_map.yaml</code>（新）</td><td>合并业务标签和快思考测试集、清洗去重、按映射表生成 gold、按模板分组切分，见测试方案第 03–07 节</td></tr>
+    <tr><td><code>eval_v5.py</code>（新）</td><td>调用并缓存 Jev 和 NLU3.0 结果，按第 05 节规则回放；改映射表、阈值、配置只回放不重调；输出测试方案第 09 节指标</td></tr>
+    <tr><td><code>webdemo/backends.py</code></td><td>Jev 支持 Choice；新增 NLU3.0 客户端（未接入时用模拟，支持多 intent）；Agent 直达的 Agent 调用（联网搜索复用 search_deepseek.py）</td></tr>
+    <tr><td><code>webdemo/pipeline.py</code></td><td>按第 03、05 节重写分流；Jev 与 NLU 并行；会话里记录上一轮去向、Agent 和 continue 状态；瀑布图加 Agent 直达和 NLU 两条泳道</td></tr>
+    <tr><td><code>webdemo/static</code></td><td>设置页加各阈值和 agent_label 的 on / shadow / off</td></tr>
+  </table></div>
+</section>
+
+<p class="small muted" style="text-align:center">依据：docs/Jev 分流融合架构-v5.html（架构图已按本稿更新为 v6）、docs/NLU3.0大模型_domain清单.md（v13）、criteria_v2.json（v2.5）、data/一阶分发业务labels、data/快思考测试集、design/Jev 分流测试方案-v1.html。阈值和目标值为建议初值，均未实测。</p>
+</main>
+</body>
+</html>

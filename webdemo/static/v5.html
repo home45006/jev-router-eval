@@ -1,0 +1,901 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v5 分流测试</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%23eb6118%22/%3E%3C/svg%3E">
+<script src="/static/vendor/json-formatter-2.5.18.umd.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f6f4; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc; --text:#121212; --text-2:#4f4e4a; --text-3:#7a7974;
+  --acc:#eb6118;
+  --c-nlu:#2a6fd6; --c-agent:#6a4fd6; --c-slow:#c8611a; --c-chat:#138a7a; --c-safe:#c62828; --c-split:#6b6a64;
+  --c-jev:#eb6118; --c-nlu3:#2a6fd6; --c-llm:#8a6d00;
+  --good:#1a7f37; --good-bg:#e6f4ea; --bad:#c62828; --bad-bg:#fdecea; --warn:#9a6700; --warn-bg:#fff4d6;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#121211; --surface:#1b1b1a; --surface-2:#252523; --line:#35352f; --text:#f0efec; --text-2:#c3c2b7; --text-3:#8f8e86;
+    --acc:#f27a3b; --c-nlu:#6ea2ff; --c-agent:#a08cff; --c-slow:#f0a56e; --c-chat:#4fd1bf; --c-safe:#ff8a80; --c-split:#a3a29c;
+    --c-jev:#f27a3b; --c-nlu3:#6ea2ff; --c-llm:#e3b341;
+    --good:#6fcf8a; --good-bg:#1d3324; --bad:#ff8a80; --bad-bg:#3a1f1d; --warn:#e3b341; --warn-bg:#3a3017;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121211; --surface:#1b1b1a; --surface-2:#252523; --line:#35352f; --text:#f0efec; --text-2:#c3c2b7; --text-3:#8f8e86;
+  --acc:#f27a3b; --c-nlu:#6ea2ff; --c-agent:#a08cff; --c-slow:#f0a56e; --c-chat:#4fd1bf; --c-safe:#ff8a80; --c-split:#a3a29c;
+  --c-jev:#f27a3b; --c-nlu3:#6ea2ff; --c-llm:#e3b341;
+  --good:#6fcf8a; --good-bg:#1d3324; --bad:#ff8a80; --bad-bg:#3a1f1d; --warn:#e3b341; --warn-bg:#3a3017;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+code,.mono{font-family:var(--mono);font-size:12.5px}
+button{font:inherit;cursor:pointer;border:1px solid var(--acc);background:var(--acc);color:#fff;border-radius:8px;padding:7px 14px}
+button:disabled{opacity:.5;cursor:default}
+button.ghost{background:transparent;color:var(--text-2);border-color:var(--line)}
+button.ghost:hover{color:var(--text);border-color:var(--text-3)}
+button.sm{padding:3px 10px;font-size:12.5px}
+input,select,textarea{font:inherit;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+textarea{width:100%;font-family:var(--mono);font-size:12.5px}
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:14px 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+.top h1{margin:0;font-size:18px;color:var(--acc)}
+.top .sub{color:var(--text-3);font-size:12.5px}
+.badges{display:flex;gap:6px;flex-wrap:wrap}
+.badge{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--text-2)}
+.badge.real{border-color:var(--good);color:var(--good)} .badge.mock{border-color:var(--warn);color:var(--warn)}
+.spacer{flex:1}
+nav.tabs{display:flex;gap:4px;padding:0 20px;background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{background:none;border:none;border-bottom:2px solid transparent;color:var(--text-2);border-radius:0;padding:10px 14px;white-space:nowrap}
+nav.tabs button.on{color:var(--text);border-bottom-color:var(--acc);font-weight:600}
+main{max-width:1280px;margin:0 auto;padding:18px 16px 60px}
+.tab{display:none} .tab.on{display:block}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint{color:var(--text-3);font-size:12.5px;margin:6px 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12.5px;color:var(--text-2);background:var(--surface-2);cursor:pointer}
+.chip:hover{border-color:var(--acc);color:var(--text)}
+.qin{flex:1;min-width:240px;font-size:15px;padding:9px 12px}
+.turn{display:flex;align-items:center;gap:8px;margin:18px 0 6px;color:var(--text-3);font-size:12.5px}
+.turn b{color:var(--acc);font-size:13px}
+.turn::after{content:"";flex:1;height:1px;background:var(--line)}
+.event{margin:6px 0 10px;padding:6px 10px;border-left:3px solid var(--acc);background:var(--surface);border-radius:4px;font-size:13px;color:var(--text-2)}
+.sess{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;font-size:13px;color:var(--text-2)}
+.sess .last{padding:2px 8px;border-radius:6px;background:var(--surface-2)}
+
+.route{display:inline-block;font-weight:700;border-radius:6px;padding:2px 10px;color:#fff;white-space:nowrap}
+.r-nlu{background:var(--c-nlu)} .r-agent{background:var(--c-agent)} .r-slow{background:var(--c-slow)} .r-chat{background:var(--c-chat)} .r-safe{background:var(--c-safe)} .r-split{background:var(--c-split)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:14px;overflow:hidden}
+.card-h{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.card-h .q{font-size:16px;font-weight:600}
+.card-h .why{color:var(--text-2);font-size:13px}
+.card-h .ms{margin-left:auto;color:var(--text-3);font-size:12.5px}
+.card-b{padding:12px 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}
+.j{border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.j .t{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.j .t code{font-weight:700;color:var(--acc)}
+.j .t span{font-size:12px;color:var(--text-3)}
+.bar{position:relative;height:16px;background:var(--surface-2);border-radius:4px;margin:3px 0;overflow:visible}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--text-3);opacity:.55}
+.bar.top i{background:var(--acc);opacity:.9}
+.bar b{position:absolute;left:6px;top:0;font-size:11.5px;line-height:16px;font-weight:500;color:var(--text);white-space:nowrap}
+.bar em{position:absolute;right:6px;top:0;font-size:11.5px;line-height:16px;font-style:normal;color:var(--text-2)}
+.bar .th{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text)}
+.yes{color:var(--good);font-weight:600} .no{color:var(--text-3)}
+.sec{margin:14px 0 6px;font-size:13px;font-weight:700;color:var(--text-2)}
+.rules{display:flex;flex-direction:column;gap:4px}
+.rule{display:grid;grid-template-columns:44px 64px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:4px 8px;border-radius:6px}
+.rule.hit{background:var(--good-bg)} .rule.fail{background:var(--bad-bg)}
+.rule .s{font-size:12px;color:var(--text-3)}
+.rule.hit .s{color:var(--good);font-weight:700} .rule.fail .s{color:var(--bad);font-weight:700}
+.wf{position:relative;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+.wf-row{display:grid;grid-template-columns:150px 1fr 150px;gap:8px;align-items:center;font-size:12.5px;margin:3px 0}
+.wf-track{position:relative;height:14px;background:var(--surface-2);border-radius:3px}
+.wf-track i{position:absolute;top:0;bottom:0;border-radius:3px}
+.k-jev{background:var(--c-jev)} .k-nlu{background:var(--c-nlu3)} .k-llm{background:var(--c-llm)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--text-3);font-weight:600;font-size:12px}
+.tag{display:inline-block;font-size:11.5px;border-radius:4px;padding:0 6px;border:1px solid var(--line);color:var(--text-2)}
+.tag.entry{border-color:var(--c-nlu);color:var(--c-nlu)} .tag.non{border-color:var(--c-slow);color:var(--c-slow)}
+details{margin-top:10px} summary{cursor:pointer;color:var(--text-3);font-size:12.5px}
+details.raw pre{max-height:420px;overflow:auto} details.raw{margin-top:6px}
+.hidden{display:none!important}
+.jf-bar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.jf-find{padding:3px 8px;font-size:12.5px;width:180px}
+.jf{max-height:520px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--surface-2)}
+.jf .json-formatter-row,.jf .json-formatter-row a{font-family:var(--mono);font-size:12.5px}
+.jf .json-formatter-dark.json-formatter-row{color:var(--text)}
+.jf .jf-hit{background:var(--warn-bg);outline:1px solid var(--warn);border-radius:2px}
+.pgrid{display:grid;grid-template-columns:220px 1fr;gap:14px;align-items:start}
+.plist button{display:block;width:100%;text-align:left;background:none;border:1px solid transparent;color:var(--text-2);border-radius:6px;padding:7px 10px;margin-bottom:4px}
+.plist button.on{border-color:var(--acc);color:var(--text);background:var(--surface-2)}
+.plist button .m{float:right;color:var(--acc);font-size:12px}
+.fld{margin:8px 0}
+.fld>label{display:block;font-size:12.5px;color:var(--text-3);margin-bottom:3px}
+.fld textarea{font-family:inherit;font-size:13px;min-height:38px}
+.opt{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0}
+.opt-h{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.opt-h .no{color:var(--text-3);font-size:12px;width:22px}
+.opt-h input{flex:1;min-width:140px;font-weight:600}
+.ghost-like{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:7px 14px;color:var(--text-2);cursor:pointer}
+.mod{outline:2px solid var(--warn);outline-offset:1px}
+.segsel{display:inline-flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.segsel .hint{padding:0 8px;margin:0}
+.segsel button{border:none;border-left:1px solid var(--line);border-radius:0;background:transparent;color:var(--text-2);padding:5px 12px}
+.segsel button.on{background:var(--acc);color:#fff}
+.be{display:inline-block;font-size:11.5px;font-weight:700;border-radius:4px;padding:1px 7px;color:#fff}
+.be-jev{background:#2a6fd6} .be-startlux{background:#0f8a6a}
+.cmp-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.cmp-cols>div{min-width:0}
+td.diff{background:var(--warn-bg)}
+@media (max-width:980px){ .cmp-cols{grid-template-columns:1fr} }
+.badge.custom{border-color:var(--warn);color:var(--warn)}
+@media (max-width:820px){ .pgrid{grid-template-columns:1fr} }
+details.opts{margin-top:4px} details.opts summary{font-size:12px} details.opts[open]{border-top:1px dashed var(--line);padding-top:4px}
+pre{background:var(--surface-2);border-radius:6px;padding:10px;overflow-x:auto;font-size:12px;margin:6px 0}
+.ok{color:var(--good);font-weight:700} .bad{color:var(--bad);font-weight:700}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:10px 0}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px 12px}
+.stat b{display:block;font-size:22px} .stat span{font-size:12px;color:var(--text-3)}
+.progress{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin:8px 0}
+.progress i{display:block;height:100%;background:var(--acc);width:0}
+tr.clk{cursor:pointer} tr.clk:hover td{background:var(--surface-2)}
+.kv{display:grid;grid-template-columns:200px 1fr;gap:6px 12px;align-items:center}
+.err{color:var(--bad);white-space:pre-wrap}
+.seg{display:inline-block;border:1px dashed var(--line);border-radius:6px;padding:0 6px;margin-right:4px;font-size:12.5px}
+@media (max-width:720px){ .kv{grid-template-columns:1fr} .wf-row{grid-template-columns:90px 1fr 56px} .rule{grid-template-columns:36px 54px 1fr} }
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>v5 分流测试</h1><div class="sub">Jev 一次判定（criteria v3）∥ NLU3.0 → 分发策略 R0–R7 → 落域</div></div>
+  <div class="badges" id="badges"></div>
+  <div class="segsel" id="beSel" title="决策后端：单轮、多轮、批量都用它；对比模式两个都跑"><span class="hint">决策后端</span><button data-be="jev">Jev</button><button data-be="startlux">StartLux</button></div>
+  <div class="spacer"></div>
+  <a class="badge" href="/" style="text-decoration:none">第 14 版演示</a>
+  <button class="ghost sm" id="themeBtn">深浅色</button>
+</header>
+<nav class="tabs" role="tablist">
+  <button data-tab="single" class="on">单轮</button>
+  <button data-tab="multi">多轮</button>
+  <button data-tab="batch">批量测试</button>
+  <button data-tab="prompts">提示词</button>
+  <button data-tab="settings">设置</button>
+  <button data-tab="criteria">判据文件</button>
+</nav>
+
+<main>
+<section class="tab on" id="tab-single">
+  <div class="panel">
+    <div class="row">
+      <input id="q" class="qin" placeholder="输入一句话，回车发送（每句独立，没有上一轮）" autocomplete="off">
+      <button id="sendBtn">发送</button>
+      <button class="ghost" id="clearSingle">清空</button>
+      <label><input type="checkbox" id="cmpSingle"> Jev 和 StartLux 对比</label>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div class="hint">单轮：每句都用新会话判定，不带上一轮。概率条上的竖线是阈值。每个 Choice 卡片下“全部 N 个选项”可展开看完整概率。 <label><input type="checkbox" class="expandAll"> 默认展开全部选项</label></div>
+  </div>
+  <div id="results"></div>
+</section>
+
+<section class="tab" id="tab-multi">
+  <div class="panel">
+    <div class="row">
+      <input id="mq" class="qin" placeholder="在当前会话里继续说，回车发送" autocomplete="off">
+      <button id="mSendBtn">发送</button>
+    </div>
+    <div class="sess">
+      <span>会话 <code id="sid"></code> · 第 <b id="turnNo">0</b> 轮 · 累计费用 <b id="sessCost">¥0</b></span>
+      <span>上一轮：<span class="last" id="lastTurn">无</span></span>
+      <label>业务侧回传
+        <select id="lastStatus"><option value="end">end（已结束）</option><option value="continue">continue（还在进行）</option></select>
+      </label>
+      <button class="ghost sm" id="rejectBtn" title="模拟业务侧回传“不支持 / 不归我”，触发 R7">模拟落域被拒（R7）</button>
+      <button class="ghost sm" id="newSess">新会话</button>
+    </div>
+    <div class="sec">多轮脚本（点一下在新会话里按顺序跑完）</div>
+    <div class="chips" id="dialogs"></div>
+    <div class="hint"><label><input type="checkbox" class="expandAll"> 默认展开全部选项</label>　“业务侧回传”改成 continue，模拟 Agent 或慢思考还在等用户（R1 会话占用）；“模拟落域被拒”测 R7。对话按时间顺序往下排。</div>
+  </div>
+  <div id="convo"></div>
+</section>
+
+<section class="tab" id="tab-batch">
+  <div class="panel">
+    <div class="row">
+      <button class="ghost" id="loadBuiltin">载入内置样例</button>
+      <button class="ghost" id="loadBiz">载入业务标签抽样</button>
+      <label>每个标签 <input id="bizN" type="number" value="3" min="1" max="30" style="width:64px"> 句</label>
+      <label>种子 <input id="bizSeed" type="number" value="0" style="width:64px"></label>
+      <div class="spacer"></div>
+      <label>并发 <input id="conc" type="number" value="4" min="1" max="8" style="width:56px"></label>
+      <label><input type="checkbox" id="flip"> 同时倒序跑一次（统计翻转）</label>
+      <label><input type="checkbox" id="cmpBatch"> Jev 和 StartLux 对比</label>
+      <button id="runBatch">运行</button>
+    </div>
+    <textarea id="batchText" rows="8" placeholder="每行一句：句子 [Tab] 期望（可选，多个用 | 分隔：nlu / agent:天气 / slow / split / chat / safe）"></textarea>
+    <div class="hint">业务标签抽样会排除已写进提示词的例句（criteria_v3_pinned_dev.json）和多轮行；期望按业务标签粗映射，闲聊类允许闲聊或联网搜索。这是演示，不代替正式评测。</div>
+    <div class="progress"><i id="prog"></i></div>
+    <div id="batchSummary"></div>
+  </div>
+  <div class="panel"><table id="batchTable"><thead><tr><th>#</th><th>句子</th><th>来源</th><th>期望</th><th>落域</th><th>对错</th><th>倒序</th><th>耗时</th><th>费用</th></tr></thead><tbody></tbody></table></div>
+  <div id="batchDetail"></div>
+</section>
+
+<section class="tab" id="tab-prompts">
+  <div class="panel">
+    <div class="row">
+      <b>Jev 提示词</b><span class="hint" id="pState"></span>
+      <div class="spacer"></div>
+      <button id="pApply">应用（生效）</button>
+      <button class="ghost" id="pDiscard">放弃未应用的修改</button>
+      <button class="ghost" id="pReset">恢复判据文件</button>
+      <button class="ghost" id="pExport">导出 JSON</button>
+      <label class="ghost-btn"><input type="file" id="pImport" accept=".json" hidden><span class="ghost-like">导入 JSON</span></label>
+    </div>
+    <div class="hint">这里改的是每次请求里发给 Jev 的 <code>questions</code>（问法 instructions + 选项说明 criteria + 选项顺序）。“应用”后对单轮、多轮、批量的后续请求生效，只保存在本机浏览器，不改服务器上的 criteria_v3.json；要固化请把导出的内容写回 docs/share/make_criteria_v3.py。分发代码按选项名读答案，标 🔒 的选项不能删、不能改名，但可以改说明和顺序（排第一的会被偏向）。</div>
+    <div class="err" id="pErr"></div>
+  </div>
+  <div class="pgrid">
+    <div class="panel plist" id="pList"></div>
+    <div class="panel" id="pEdit"></div>
+  </div>
+</section>
+
+<section class="tab" id="tab-settings">
+  <div class="panel">
+    <div class="sec">阈值（初值来自 criteria_v3.json，未实测）</div>
+    <div class="kv" id="thForm"></div>
+    <div class="sec">Agent 状态（off / shadow 时按回退表或落慢思考）</div>
+    <div class="kv" id="lsForm"></div>
+    <div class="sec">其他</div>
+    <div class="kv">
+      <span>Choice 选项倒序</span><label><input type="checkbox" id="optReverse"> 倒序发送（测选项偏序）</label>
+      <span>车辆状态</span><span><label><input type="checkbox" id="vNav"> 导航中</label> <label>播放 <select id="vPlay"><option value="">无</option><option>music</option><option>video</option><option>fm</option></select></label></span>
+    </div>
+    <div class="sec">计价</div><div class="hint" id="priceInfo"></div>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="resetSettings">恢复默认</button><span class="hint">设置保存在本机浏览器。</span></div>
+  </div>
+</section>
+
+<section class="tab" id="tab-criteria">
+  <div class="panel" id="critView"></div>
+</section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+                set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+let CFG = null, SID = newId();
+function newId() { return Math.random().toString(36).slice(2, 10); }
+
+// ---------- 主题 ----------
+(function () { const t = store.get("v5theme", null); if (t) document.documentElement.dataset.theme = t; })();
+$("#themeBtn").onclick = () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const nx = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = nx; store.set("v5theme", nx);
+};
+// ---------- 标签页 ----------
+document.querySelectorAll("nav.tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("nav.tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x.id === "tab-" + b.dataset.tab));
+});
+
+// ---------- 设置 ----------
+function options() {
+  const s = store.get("v5settings", {});
+  const o = { thresholds: s.thresholds || {}, label_status: s.label_status || {}, reverse: !!s.reverse,
+           vehicle: { navigating: !!s.vNav, playing: s.vPlay || null } };
+  const p = store.get("v5prompts", null); if (p) o.prompts = p;
+  o.backend = store.get("v5backend", "jev");
+  return o;
+}
+function saveSettings() {
+  const th = {}, ls = {};
+  document.querySelectorAll("#thForm input").forEach(i => { const v = parseFloat(i.value); if (!isNaN(v) && v !== CFG.thresholds[i.name]) th[i.name] = v; });
+  document.querySelectorAll("#lsForm select").forEach(i => { if (i.value !== CFG.label_status[i.name]) ls[i.name] = i.value; });
+  store.set("v5settings", { thresholds: th, label_status: ls, reverse: $("#optReverse").checked, vNav: $("#vNav").checked, vPlay: $("#vPlay").value });
+}
+function renderSettings() {
+  const o = options();
+  $("#thForm").innerHTML = Object.entries(CFG.thresholds).map(([k, v]) =>
+    `<code>${k}</code><input name="${k}" type="number" step="0.05" min="0" max="1" value="${o.thresholds[k] ?? v}" style="width:90px">`).join("");
+  $("#lsForm").innerHTML = Object.entries(CFG.label_status).map(([k, v]) =>
+    `<span>${esc(k)}${CFG.label_fallback[k] ? `<span class="hint"> · 回退 ${esc(CFG.label_fallback[k])}</span>` : ""}</span>
+     <select name="${esc(k)}">${["on","shadow","off"].map(x => `<option ${ (o.label_status[k] ?? v) === x ? "selected" : ""}>${x}</option>`).join("")}</select>`).join("");
+  $("#optReverse").checked = o.reverse; $("#vNav").checked = o.vehicle.navigating; $("#vPlay").value = o.vehicle.playing || "";
+  document.querySelectorAll("#tab-settings input, #tab-settings select").forEach(e => e.onchange = saveSettings);
+}
+$("#resetSettings").onclick = () => { store.set("v5settings", {}); renderSettings(); };
+
+// ---------- 渲染一次结果 ----------
+const TGT_NAME = { __rewrite__: "改写重判", __chat__: "闲聊", __slow__: "慢思考" };
+const ROUTE_NAME = { nlu: "NLU 直达", agent: "Agent 直达", slow: "慢思考", chat: "闲聊", safe: "安全拒答", split: "拆分" };
+const TH_OF = { is_unsafe: "T_UNSAFE", needs_context: "T_CONTEXT", has_nickname: "T_NICKNAME" };
+function routeBadge(d) {
+  let t = ROUTE_NAME[d.route] || d.route;
+  if (d.route === "agent") t += " · " + d.agent;
+  return `<span class="route r-${d.route}">${esc(t)}</span>`;
+}
+function bar(label, p, { top = false, th = null, right = "" } = {}) {
+  return `<div class="bar ${top ? "top" : ""}"><i style="width:${(p * 100).toFixed(1)}%"></i><b>${esc(label)}</b><em>${right || p.toFixed(2)}</em>${th != null ? `<span class="th" style="left:${th * 100}%"></span>` : ""}</div>`;
+}
+function judgCard(key, a, th, used, reverse = false) {
+  const head = `<div class="t"><code>${esc(key)}</code><span>${used ? "本次用到" : "未用到"}</span></div>`;
+  if (a.type === "noul") {
+    const t = th[TH_OF[key]];
+    return `<div class="j">${head}${bar(a.p >= (t ?? .5) ? "是" : "否", a.p, { top: a.p >= (t ?? .5), th: t })}<div class="hint">阈值 ${t ?? "—"}</div></div>`;
+  }
+  const ent = Object.entries(a.probs).sort((x, y) => y[1] - x[1]).slice(0, 4);
+  const thr = key === "route" ? th.T_AGENT_ROUTE : key === "agent_label" ? th.T_AGENT_LABEL : null;
+  // 全部选项：按判据里的顺序列全（segment_role 用模板顺序），概率缺失记 0
+  const order = CFG.questions[key]?.options || (key.startsWith("segment_role_") ? CFG.segment_roles : null) || Object.keys(a.probs);
+  const all = [...order, ...Object.keys(a.probs).filter(k => !order.includes(k))];
+  const full = `<details class="opts"${store.get("v5expand", false) ? " open" : ""}><summary>全部 ${all.length} 个选项（按提示词里的顺序${reverse ? "，本次倒序发送" : ""}）</summary>
+    ${all.map((o, i) => bar(`${i + 1}. ${o}`, a.probs[o] ?? 0, { top: o === a.top })).join("")}</details>`;
+  return `<div class="j">${head}${ent.map(([k, v], i) => bar(k, v, { top: i === 0 })).join("")}
+    <div class="hint">置信 ${a.conf.toFixed(2)}${thr != null ? `（门槛 ${thr}）` : ""} · 共 ${all.length} 个选项</div>${full}</div>`;
+}
+function usedKeys(r) {
+  const s = new Set(["is_unsafe", "route", "needs_context"]);
+  r.trace.forEach(t => { if (t.rule === "R3" || t.rule === "R2") s.add("agent_label"); if (t.rule === "R4") { s.add("domain"); s.add("agent_label"); } });
+  if (r.rewritten) s.add("has_nickname");
+  Object.keys(r.jev.answers).filter(k => k.startsWith("segment_role_")).forEach(k => s.add(k));
+  return s;
+}
+function waterfall(r) {
+  const total = Math.max(r.total_ms, ...r.steps.map(s => s.start + s.ms), 1);
+  return `<div class="wf">${r.steps.map(s => `<div class="wf-row"><span>${esc(s.name)}</span>
+    <div class="wf-track"><i class="k-${s.kind}" style="left:${s.start / total * 100}%;width:${Math.max(.5, s.ms / total * 100)}%"></i></div>
+    <span class="mono">${s.ms.toFixed(0)}ms${s.cost ? " · " + yuan(s.cost.yuan) : ""}</span></div>`).join("")}
+    <div class="wf-row"><span><b>端到端分流</b></span><div class="wf-track"><i style="left:0;width:100%;background:var(--text-3);opacity:.35"></i></div><span class="mono"><b>${r.total_ms.toFixed(0)}ms</b></span></div></div>`;
+}
+function nluTable(n) {
+  const rows = (n.intents || []).map(it => `<tr><td><code>${esc(it.domain)}</code> ${CFG.nlu_entry.includes(it.domain) ? '<span class="tag entry">入口</span>' : `<span class="tag non">非入口${CFG.domain_to_agent[it.domain] ? " → " + esc(TGT_NAME[CFG.domain_to_agent[it.domain]] || CFG.domain_to_agent[it.domain]) : ""}</span>`}</td>
+    <td>${esc(it.intent || "—")}</td><td class="mono">${esc(JSON.stringify(it.slots || {}))}</td><td>${it.complete === false ? '<span class="bad">不完整</span>' : "完整"}</td></tr>`).join("");
+  return `<table><thead><tr><th>domain</th><th>intent</th><th>slots</th><th>结构</th></tr></thead><tbody>${rows || '<tr><td colspan="4">无</td></tr>'}</tbody></table>
+    <div class="hint">NLU3.0（${n.kind === "real" ? "真实" : "模拟"}）· ${n.ms.toFixed(0)}ms</div>`;
+}
+let RAW_ID = 0; const RAW = {};
+function rawBlock(title, obj, note = "") {
+  if (obj == null) return "";
+  const id = "raw" + (++RAW_ID); RAW[id] = obj;
+  const kb = (JSON.stringify(obj).length / 1024).toFixed(1);
+  return `<details class="raw" data-raw="${id}"><summary>${esc(title)} <span class="hint">· ${kb} KB</span></summary>
+    ${note ? `<div class="hint">${esc(note)}</div>` : ""}
+    <div class="jf-bar">
+      <span class="hint">展开到</span>${[1, 2, 3, 4].map(n => `<button class="ghost sm" data-depth="${n}">${n} 层</button>`).join("")}
+      <button class="ghost sm" data-depth="99">全部</button><button class="ghost sm" data-depth="0">收起</button>
+      <input class="jf-find" placeholder="查找键或值，回车" data-find="${id}">
+      <span class="hint jf-hits"></span>
+      <div class="spacer"></div>
+      <button class="ghost sm" data-plain="${id}">原文</button><button class="ghost sm" data-copy="${id}">复制 JSON</button>
+    </div>
+    <div class="jf" id="${id}"></div><pre class="jf-plain hidden"></pre></details>`;
+}
+// 展开折叠区时才渲染 JSON 树（json-formatter-js 2.5.18，本地 vendor）
+const JF = {};
+const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+function jfRender(id, depth = 2) {
+  const box = document.getElementById(id); if (!box) return;
+  const f = new JSONFormatter(RAW[id], depth, { theme: isDark() ? "dark" : "", hoverPreviewEnabled: true, hoverPreviewFieldCount: 6, animateOpen: false, animateClose: false });
+  box.innerHTML = ""; box.appendChild(f.render()); JF[id] = f;
+}
+document.addEventListener("toggle", e => {
+  const d = e.target; if (!(d instanceof HTMLDetailsElement) || !d.dataset.raw || !d.open) return;
+  if (!JF[d.dataset.raw]) jfRender(d.dataset.raw, 2);
+}, true);
+function jfFind(id, term) {
+  const box = document.getElementById(id), hitsEl = box.closest("details").querySelector(".jf-hits");
+  box.querySelectorAll(".jf-hit").forEach(x => x.classList.remove("jf-hit"));
+  if (!term) { hitsEl.textContent = ""; return; }
+  jfRender(id, Infinity);   // 全部展开后再找
+  const hits = [...box.querySelectorAll(".json-formatter-key, .json-formatter-string, .json-formatter-number, .json-formatter-boolean")]
+    .filter(x => x.textContent.toLowerCase().includes(term.toLowerCase()));
+  hits.forEach(x => x.classList.add("jf-hit"));
+  hitsEl.textContent = hits.length ? `${hits.length} 处` : "没找到";
+  hits[0]?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+document.addEventListener("keydown", e => {
+  const i = e.target.closest?.("input[data-find]"); if (i && e.key === "Enter" && !e.isComposing) jfFind(i.dataset.find, i.value.trim());
+});
+document.addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const det = b.closest("details.raw"); const id = det?.dataset.raw;
+  if (b.dataset.depth != null && id) {
+    const n = +b.dataset.depth; det.querySelector(".jf-plain").classList.add("hidden"); document.getElementById(id).classList.remove("hidden");
+    if (n === 0) jfRender(id, 0); else jfRender(id, n === 99 ? Infinity : n);
+  } else if (b.dataset.plain && id) {
+    const pre = det.querySelector(".jf-plain"), box = document.getElementById(id);
+    if (pre.classList.contains("hidden")) { pre.textContent = JSON.stringify(RAW[id], null, 1); pre.classList.remove("hidden"); box.classList.add("hidden"); b.textContent = "树形"; }
+    else { pre.classList.add("hidden"); box.classList.remove("hidden"); b.textContent = "原文"; }
+  } else if (b.dataset.copy) {
+    try { await navigator.clipboard.writeText(JSON.stringify(RAW[b.dataset.copy], null, 1)); b.textContent = "已复制"; }
+    catch { b.textContent = "复制失败，请用原文手动选中"; }
+    setTimeout(() => (b.textContent = "复制 JSON"), 1500);
+  }
+});
+const yuan = y => y == null ? "—" : y === 0 ? "¥0" : y < 0.01 ? "¥" + y.toFixed(6) : "¥" + y.toFixed(4);
+const usd = u => u == null ? "—" : "$" + u.toFixed(7);
+const perK = y => y == null ? "—" : "¥" + (y * 1000).toFixed(3);
+function costTable(r) {
+  const c = r.cost; if (!c) return "";
+  const rows = r.steps.filter(s => s.cost).map(s => s.kind === "jev"
+    ? `<tr><td>${esc(s.name)}</td><td class="mono">输入 ${s.cost.tokens.input} · 输出 ${s.cost.tokens.output}（免费）</td><td class="mono">${usd(s.cost.usd)}</td><td class="mono">${yuan(s.cost.yuan)}</td></tr>`
+    : `<tr><td>${esc(s.name)}</td><td class="mono">输入 ${s.cost.tokens.cache_hit + s.cost.tokens.cache_miss}（命中缓存 ${s.cost.tokens.cache_hit}）· 输出 ${s.cost.tokens.output}</td><td>—</td><td class="mono">${yuan(s.cost.yuan)}</td></tr>`).join("");
+  return `<table><thead><tr><th>调用</th><th>tokens</th><th>美元</th><th>人民币</th></tr></thead><tbody>${r.cost.billed ? "" : `<tr><td>${esc(r.backend?.name || "")} 决策</td><td class="mono">输入 ${r.jev.input_tokens ?? "—"}（${esc(r.backend?.name || "")} 口径）</td><td>—</td><td class="hint">${r.backend?.id === "startlux" ? "自部署，不按 token 计费" : "模拟，不计费"}</td></tr>`}${rows}
+    <tr><td><b>本句合计</b></td><td class="mono">Jev ${c.jev_calls} 次 · 改写 ${c.llm_calls} 次</td><td class="mono">${usd(c.jev_usd)}</td><td class="mono"><b>${yuan(c.total_yuan)}</b></td></tr></tbody></table>
+    <div class="hint">折合每千句 ${perK(c.total_yuan)}（Jev ${perK(c.jev_yuan)}，改写 ${perK(c.llm_yuan)}）。Jev 只按输入 token 计费，汇率 ${CFG.pricing.usd_cny}；${esc(CFG.pricing.jev)}；DeepSeek 按 ${esc(CFG.pricing.deepseek)}。</div>`;
+}
+function renderResult(r, { compact = false } = {}) {
+  if (r.error) return `<div class="card"><div class="card-b err">${esc(r.error)}</div></div>`;
+  const d = r.decision, used = usedKeys(r);
+  const segs = r.segments && r.segments.length ? `<div class="hint">切分：${r.segments.map((s, i) => `<span class="seg">${i + 1}. ${esc(s)}</span>`).join("")}</div>` : "";
+  const rw = r.rewritten ? `<div class="hint">改写：${esc(r.query)} → <b>${esc(r.rewritten)}</b>${r.rewritten !== r.query ? "，已回 Jev 重判" : "（未变化）"}</div>` : "";
+  let extra = "";
+  if (d.route === "split") extra = `<div class="hint">指令片段 → NLU：<b>${esc(d.nlu_text)}</b>　其余 → 慢思考：<b>${esc(d.slow_text)}</b></div>`;
+  if (d.hint && d.hint !== "none" && d.route !== "agent") extra += `<div class="hint">带给慢思考的提示：${esc(d.hint)}</div>`;
+  const ans = r.jev.answers;
+  const order = ["is_unsafe", "route", "domain", "agent_label", "needs_context", "has_nickname", ...Object.keys(ans).filter(k => k.startsWith("segment_role_")).sort()];
+  return `<div class="card">
+    <div class="card-h">${r.backend ? `<span class="be be-${r.backend.id}">${esc(r.backend.name)}</span>` : ""}<span class="q">${esc(r.query)}</span>${routeBadge(d)}<span class="why">${esc(d.why || "")}</span>
+      <span class="ms">${esc(r.backend?.name || "Jev")} ${r.jev.ms.toFixed(0)}ms · NLU ${r.nlu.ms.toFixed(0)}ms · 共 ${r.total_ms.toFixed(0)}ms${r.jev.input_tokens ? ` · ${r.jev.input_tokens} tokens` : ""}${r.cost ? ` · 费用 ${yuan(r.cost.total_yuan)}${r.cost.billed ? "" : "（决策不计费）"}` : ""}${r.reverse ? " · 倒序" : ""}${r.custom_prompts ? " · 自定义提示词" : ""}</span></div>
+    <div class="card-b">
+      ${r.previous_turn ? `<div class="hint">上一轮：${esc(r.previous_turn.query)} → ${esc(r.previous_turn.route)}${r.previous_turn.agent ? " · " + esc(r.previous_turn.agent) : ""}（${esc(r.previous_turn.status)}）</div>` : ""}
+      ${rw}${segs}${extra}
+      <div class="sec">分发规则（按顺序匹配，命中即停）</div>
+      <div class="rules">${r.trace.map(t => `<div class="rule ${t.status}"><b>${t.rule}</b><span class="s">${{hit:"命中",pass:"通过",fail:"未过",skip:"跳过"}[t.status]}</span><span>${esc(t.text)}</span></div>`).join("")}</div>
+      <div class="sec">Jev 一次请求 · 7 个判定 ${r.jev.model ? `<span class="hint">（${esc(r.jev.model)}）</span>` : ""}</div>
+      <div class="grid">${order.filter(k => ans[k]).map(k => judgCard(k, ans[k], r.thresholds, used.has(k), r.reverse)).join("")}</div>
+      ${compact ? "" : `<div class="sec">NLU3.0 解析</div>${nluTable(r.nlu)}
+      ${d.nlu_intents ? `<div class="sec">指令片段的 NLU3.0 解析</div>${nluTable({ intents: d.nlu_intents, kind: r.nlu.kind, ms: 0 })}` : ""}
+      <div class="sec">费用</div>${costTable(r)}
+      <div class="sec">耗时</div>${waterfall(r)}`}
+      ${rawBlock("完整 Jev 请求" + (r.first ? "（改写后重判的那次）" : ""), r.jev.request, "HTTP API 请求体：model + state + questions（7 道题的 instructions / criteria，选项顺序即发送顺序）。API 密钥在服务端，不在请求体里。")}
+      ${rawBlock("Jev 原始返回", r.jev.raw, "SDK 返回的原样结构：answers（choice / confidence / probabilities 或 noul）+ usage。卡片上的置信度是页面按同一公式重算的。")}
+      ${r.first ? rawBlock("改写前的第一次 Jev 请求", r.first.jev.request, "has_nickname 或 needs_context 触发改写之前发出的请求。") + rawBlock("改写前的第一次 Jev 返回", r.first.jev.raw) : ""}
+      ${rawBlock("NLU3.0 返回" + (r.nlu.kind === "real" ? "" : "（模拟）"), r.nlu)}
+      ${rawBlock("落域结果（分发代码输出，不是 Jev 返回）", { decision: d, trace: r.trace })}
+    </div></div>`;
+}
+
+// ---------- 全部选项展开开关（两个标签页共用） ----------
+document.querySelectorAll(".expandAll").forEach(cb => {
+  cb.checked = store.get("v5expand", false);
+  cb.onchange = () => {
+    store.set("v5expand", cb.checked);
+    document.querySelectorAll(".expandAll").forEach(x => x.checked = cb.checked);
+    document.querySelectorAll("details.opts").forEach(d => d.open = cb.checked);
+  };
+});
+
+// ---------- 单轮 ----------
+async function runApi(text, sid) {
+  return (await fetch("/api/v5/run", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: text, session_id: sid, options: options() }) })).json();
+}
+async function runApiBe(text, sid, be) {
+  const r = await (await fetch("/api/v5/run", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query: text, session_id: sid, options: { ...options(), backend: be } }) })).json();
+  fetch("/api/v5/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid }) });
+  return r;
+}
+const outcomeOf = d => d ? (d.route === "agent" ? "agent:" + d.agent : d.route) : "错误";
+function ansText(a) {
+  if (!a) return "—";
+  return a.type === "noul" ? a.p.toFixed(2) : `${a.top}（${a.conf.toFixed(2)}）`;
+}
+function compareBlock(text, rj, rs) {
+  const both = [rj, rs];
+  if (both.some(r => r.error)) return `<div class="card"><div class="card-b err">${both.map(r => r.error ? esc(r.error) : "").join("<br>")}</div></div>`;
+  const oj = outcomeOf(rj.decision), os = outcomeOf(rs.decision), same = oj === os;
+  const keys = [...new Set([...Object.keys(rj.jev.answers), ...Object.keys(rs.jev.answers)])]
+    .sort((a, b) => (a.startsWith("segment") ? 1 : 0) - (b.startsWith("segment") ? 1 : 0));
+  const sameAns = (a, b) => a && b && (a.type === "noul" ? (a.p >= .5) === (b.p >= .5) : a.top === b.top);
+  const row = (name, a, b, diff) => `<tr><td>${name}</td><td class="${diff ? "diff" : ""}">${a}</td><td class="${diff ? "diff" : ""}">${b}</td></tr>`;
+  const rows = [
+    row("<b>落域</b>", routeBadge(rj.decision), routeBadge(rs.decision), !same),
+    row("命中规则", esc(rj.trace.filter(t => t.status === "hit").map(t => t.rule).join(" → ") || "—"), esc(rs.trace.filter(t => t.status === "hit").map(t => t.rule).join(" → ") || "—"), false),
+    ...keys.map(k => row(`<code>${esc(k)}</code>`, esc(ansText(rj.jev.answers[k])), esc(ansText(rs.jev.answers[k])), !sameAns(rj.jev.answers[k], rs.jev.answers[k]))),
+    row("决策耗时", `${rj.jev.ms.toFixed(0)}ms`, `${rs.jev.ms.toFixed(0)}ms`, false),
+    row("端到端分流", `${rj.total_ms.toFixed(0)}ms`, `${rs.total_ms.toFixed(0)}ms`, false),
+    row("input tokens", rj.jev.input_tokens ?? "—", rs.jev.input_tokens ?? "—", false),
+    row("费用", rj.cost ? yuan(rj.cost.total_yuan) : "—", rs.cost ? yuan(rs.cost.total_yuan) + "（决策不计费）" : "—", false),
+    row("模型", esc(rj.backend?.model || ""), esc(rs.backend?.model || ""), false),
+  ].join("");
+  return `<div class="card"><div class="card-h"><span class="q">${esc(text)}</span>
+      <span class="route ${same ? "r-nlu" : "r-safe"}">${same ? "落域一致" : "落域不一致"}</span>
+      <span class="why">黄底为两边判断不同（是非题按 0.5 分界，单选题看最高项）</span></div>
+    <div class="card-b"><table><thead><tr><th style="width:22%"></th><th><span class="be be-jev">Jev</span></th><th><span class="be be-startlux">StartLux</span></th></tr></thead><tbody>${rows}</tbody></table>
+    <details><summary>两边的完整结果并排</summary><div class="cmp-cols"><div>${renderResult(rj, { compact: true })}</div><div>${renderResult(rs, { compact: true })}</div></div></details>
+    </div></div>`;
+}
+async function send(text) {
+  text = (text ?? $("#q").value).trim(); if (!text) return;
+  $("#sendBtn").disabled = true;
+  try {
+    if ($("#cmpSingle").checked) {
+      const [rj, rs] = await Promise.all(["jev", "startlux"].map(be => runApiBe(text, "s-" + newId(), be)));
+      $("#results").insertAdjacentHTML("afterbegin", compareBlock(text, rj, rs));
+    } else {
+      const sid = "s-" + newId();
+      const r = await runApi(text, sid);
+      fetch("/api/v5/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session_id: sid }) });
+      $("#results").insertAdjacentHTML("afterbegin", renderResult(r));
+    }
+    $("#q").value = "";
+  } catch (e) { $("#results").insertAdjacentHTML("afterbegin", `<div class="card"><div class="card-b err">${esc(e)}</div></div>`); }
+  $("#sendBtn").disabled = false; $("#q").focus();
+}
+$("#sendBtn").onclick = () => send();
+$("#q").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) send(); };
+$("#clearSingle").onclick = () => { $("#results").innerHTML = ""; };
+
+// ---------- 多轮 ----------
+let TURN = 0, SESS_COST = 0;
+const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+function addConvo(html) { $("#convo").insertAdjacentHTML("beforeend", html); $("#convo").lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+async function msend(text) {
+  text = (text ?? $("#mq").value).trim(); if (!text) return;
+  $("#mSendBtn").disabled = true;
+  try {
+    const r = await runApi(text, SID);
+    TURN += 1; $("#turnNo").textContent = TURN;
+    SESS_COST += r.cost?.total_yuan || 0; $("#sessCost").textContent = yuan(SESS_COST);
+    addConvo(`<div class="turn"><b>第 ${TURN} 轮</b>${r.previous_turn ? `承接：${esc(r.previous_turn.query)}（${esc(ROUTE_NAME[r.previous_turn.route] || r.previous_turn.route)}${r.previous_turn.agent ? " · " + esc(r.previous_turn.agent) : ""}，${esc(r.previous_turn.status)}）` : "会话开始"}</div>` + renderResult(r, { compact: true }));
+    if (r.session) showLast(r.session.last);
+    $("#mq").value = "";
+  } catch (e) { addConvo(`<div class="card"><div class="card-b err">${esc(e)}</div></div>`); }
+  $("#mSendBtn").disabled = false; $("#mq").focus();
+}
+function showLast(l) {
+  $("#lastTurn").textContent = l ? `${l.query} → ${ROUTE_NAME[l.route] || l.route}${l.agent ? " · " + l.agent : ""}` : "无";
+  $("#lastStatus").value = l?.status || "end";
+}
+async function newSession(silent) {
+  await post("/api/v5/reset", { session_id: SID });
+  SID = newId(); TURN = 0; SESS_COST = 0; $("#sid").textContent = SID; $("#turnNo").textContent = 0; $("#sessCost").textContent = "¥0"; showLast(null);
+  if (!silent) addConvo(`<div class="turn"><b>新会话 ${SID}</b></div>`);
+}
+async function setStatus(st) {
+  const r = await post("/api/v5/status", { session_id: SID, status: st });
+  if (r.error) return addConvo(`<div class="event err">${esc(r.error)}</div>`);
+  showLast(r.last);
+  addConvo(`<div class="event">业务侧回传：上一轮 <b>${esc(st)}</b>${st === "continue" ? "（下一句将按 R1 会话占用交回原去向）" : ""}</div>`);
+}
+$("#mSendBtn").onclick = () => msend();
+$("#mq").onkeydown = e => { if (e.key === "Enter" && !e.isComposing) msend(); };
+$("#newSess").onclick = () => newSession(false);
+$("#lastStatus").onchange = () => setStatus($("#lastStatus").value);
+$("#rejectBtn").onclick = async () => {
+  const r = await post("/api/v5/status", { session_id: SID, reject: true });
+  if (r.error) return addConvo(`<div class="event err">${esc(r.error)}</div>`);
+  showLast(r.last);
+  addConvo(`<div class="event"><b>R7</b> ${esc(r.r7.text)}</div>`);
+};
+const DIALOGS = [
+  { name: "NLU 指代拼回", steps: ["导航去动物园", "那换成去博物馆呢"] },
+  { name: "Agent 追问交回", steps: ["先去西湖再去灵隐寺最后到河坊街", "灵隐寺不去了"] },
+  { name: "联网搜索追问", steps: ["珠穆朗玛峰有多高", "那乔戈里峰呢"] },
+  { name: "切换不带偏", steps: ["来点适合下雨天听的歌", "把空调调到24度"] },
+  { name: "闲聊追问", steps: ["给我讲个关于宇航员的故事", "那后来呢"] },
+  { name: "Agent 进行中（continue）", steps: ["附近有没有人均五十以内的面馆", { status: "continue" }, "第二家"] },
+  { name: "落域被拒（R7）", steps: ["帮我把副驾的香氛换成雪松味", { reject: true }, "算了不用了"] },
+];
+async function runDialog(d) {
+  await newSession(true);
+  addConvo(`<div class="turn"><b>脚本：${esc(d.name)}</b>会话 ${SID}</div>`);
+  for (const st of d.steps) {
+    if (typeof st === "string") await msend(st);
+    else if (st.status) { $("#lastStatus").value = st.status; await setStatus(st.status); }
+    else if (st.reject) await $("#rejectBtn").onclick();
+  }
+}
+
+// ---------- 批量 ----------
+let SAMPLES = null, LAST_BATCH = [];
+async function samples() { if (!SAMPLES) SAMPLES = await (await fetch("/api/v5/samples")).json(); return SAMPLES; }
+const toLines = items => items.map(i => i.query + (i.expect ? "\t" + i.expect.join("|") : "") + (i.source ? "\t#" + i.source : "")).join("\n");
+$("#loadBuiltin").onclick = async () => { $("#batchText").value = toLines((await samples()).builtin); };
+$("#loadBiz").onclick = async () => {
+  const r = await (await fetch(`/api/v5/samples?n=${+$("#bizN").value || 3}&seed=${+$("#bizSeed").value || 0}`)).json();
+  if (!r.biz.length) return ($("#batchSummary").innerHTML = '<div class="err">没有读到业务标签数据（data/一阶分发业务labels），或缺少 openpyxl</div>');
+  $("#batchText").value = toLines(r.biz);
+};
+function parseBatch() {
+  return $("#batchText").value.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const [q, e, s] = l.split("\t");
+    return { query: q.trim(), expect: e && !e.startsWith("#") ? e.split("|").map(x => x.trim()).filter(Boolean) : null,
+             source: (s || (e && e.startsWith("#") ? e : "") || "").replace(/^#/, "") || null };
+  });
+}
+const pct = (a, b) => b ? (a / b * 100).toFixed(1) + "%" : "—";
+function quant(arr, q) { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; }
+function summarize(rows) {
+  const done = rows.filter(Boolean), judged = done.filter(r => r.ok != null), ok = judged.filter(r => r.ok);
+  const jms = done.filter(r => r.jev_ms).map(r => r.jev_ms), tms = done.filter(r => r.ms).map(r => r.ms);
+  const toks = done.filter(r => r.tokens).map(r => r.tokens);
+  const flips = done.filter(r => r.flipped != null);
+  const cs = done.filter(r => r.cost).map(r => r.cost), cr = done.filter(r => r.cost_reversed).map(r => r.cost_reversed);
+  const sum = (a, k) => a.reduce((x, c) => x + (c[k] || 0), 0);
+  const tot = sum(cs, "total_yuan") + sum(cr, "total_yuan"), avg = cs.length ? sum(cs, "total_yuan") / cs.length : null;
+  const by = {};
+  judged.forEach(r => { const k = r.item.source || r.item.expect.join("|"); (by[k] ||= { n: 0, ok: 0, got: {} }); by[k].n++; if (r.ok) by[k].ok++; by[k].got[r.got] = (by[k].got[r.got] || 0) + 1; });
+  const dist = {}; done.forEach(r => { if (r.got) dist[r.got] = (dist[r.got] || 0) + 1; });
+  return `<div class="stats">
+    <div class="stat"><b>${done.length}</b><span>已完成</span></div>
+    <div class="stat"><b>${pct(ok.length, judged.length)}</b><span>落域正确（${ok.length}/${judged.length}）</span></div>
+    <div class="stat"><b>${quant(jms, .5).toFixed(0)} / ${quant(jms, .9).toFixed(0)}</b><span>Jev 耗时 p50 / p90（ms）</span></div>
+    <div class="stat"><b>${quant(tms, .5).toFixed(0)} / ${quant(tms, .9).toFixed(0)}</b><span>端到端分流 p50 / p90（ms）</span></div>
+    <div class="stat"><b>${toks.length ? Math.round(toks.reduce((a, b) => a + b, 0) / toks.length) : "—"}</b><span>平均 input tokens</span></div>
+    ${flips.length ? `<div class="stat"><b>${pct(flips.filter(r => r.flipped).length, flips.length)}</b><span>倒序后落域翻转</span></div>` : ""}
+    <div class="stat"><b>${yuan(tot)}</b><span>本批总费用${cr.length ? "（含倒序重跑）" : ""}</span></div>
+    <div class="stat"><b>${perK(avg)}</b><span>每千句（Jev ${perK(cs.length ? sum(cs, "jev_yuan") / cs.length : null)} · 改写 ${perK(cs.length ? sum(cs, "llm_yuan") / cs.length : null)}）</span></div>
+  </div>
+  <table><thead><tr><th>分组</th><th>句数</th><th>正确率</th><th>实际落域分布</th></tr></thead><tbody>
+  ${Object.entries(by).sort().map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.n}</td><td class="${v.ok === v.n ? "ok" : v.ok / v.n < .8 ? "bad" : ""}">${pct(v.ok, v.n)}</td>
+    <td>${Object.entries(v.got).sort((a, b) => b[1] - a[1]).map(([g, c]) => `${esc(g)} ×${c}`).join("　")}</td></tr>`).join("")}
+  </tbody></table>
+  <div class="hint">全部落域分布：${Object.entries(dist).sort((a, b) => b[1] - a[1]).map(([g, c]) => `${esc(g)} ×${c}`).join("　")}</div>`;
+}
+$("#runBatch").onclick = async () => {
+  const items = parseBatch(); if (!items.length) return;
+  $("#runBatch").disabled = true; LAST_BATCH = new Array(items.length);
+  const CMP = $("#cmpBatch").checked; BATCH_CMP = CMP;
+  $("#batchTable thead").innerHTML = CMP
+    ? '<tr><th>#</th><th>句子</th><th>来源</th><th>期望</th><th><span class="be be-jev">Jev</span> 落域</th><th>对错</th><th><span class="be be-startlux">StartLux</span> 落域</th><th>对错</th><th>一致</th><th>耗时 J / S</th></tr>'
+    : '<tr><th>#</th><th>句子</th><th>来源</th><th>期望</th><th>落域</th><th>对错</th><th>倒序</th><th>耗时</th><th>费用</th></tr>';
+  const tb = $("#batchTable tbody"); tb.innerHTML = items.map((it, i) => `<tr class="clk" data-i="${i}"><td>${i + 1}</td><td>${esc(it.query)}</td><td>${esc(it.source || "")}</td><td>${esc((it.expect || []).join(" | "))}</td><td colspan="5" class="hint">等待…</td></tr>`).join("");
+  $("#batchDetail").innerHTML = ""; let n = 0;
+  const resp = await fetch("/api/v5/batch", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items, options: options(), concurrency: +$("#conc").value || 4, flip_check: $("#flip").checked && !CMP, compare: CMP }) });
+  const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true }); let k;
+    while ((k = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, k); buf = buf.slice(k + 1); if (!line.trim()) continue;
+      const r = JSON.parse(line); LAST_BATCH[r.index] = r; n++;
+      const tr = tb.querySelector(`tr[data-i="${r.index}"]`);
+      if (CMP) {
+        const okc = x => x.ok == null ? "—" : x.ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>';
+        const cell = x => x.error ? `<td class="err" colspan="2">${esc(x.error)}</td>` : `<td>${routeBadge(x.result.decision)}</td><td>${okc(x)}</td>`;
+        const J = r.results.jev, S = r.results.startlux;
+        tr.innerHTML = `<td>${r.index + 1}</td><td>${esc(r.item.query)}</td><td>${esc(r.item.source || "")}</td><td>${esc((r.item.expect || []).join(" | "))}</td>${cell(J)}${cell(S)}
+          <td>${r.agree == null ? "—" : r.agree ? "一致" : '<span class="bad">不一致</span>'}</td><td class="mono">${J.ms ? J.ms.toFixed(0) : "—"} / ${S.ms ? S.ms.toFixed(0) : "—"}</td>`;
+        $("#prog").style.width = (n / items.length * 100) + "%";
+        $("#batchSummary").innerHTML = summarizeCmp(LAST_BATCH);
+        continue;
+      }
+      tr.innerHTML = `<td>${r.index + 1}</td><td>${esc(r.item.query)}</td><td>${esc(r.item.source || "")}</td><td>${esc((r.item.expect || []).join(" | "))}</td>` +
+        (r.error ? `<td colspan="5" class="err">${esc(r.error)}</td>` :
+        `<td>${r.result ? routeBadge(r.result.decision) : ""}</td><td>${r.ok == null ? "—" : r.ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'}</td>
+         <td>${r.got_reversed ? (r.flipped ? `<span class="bad">${esc(r.got_reversed)}</span>` : "一致") : "—"}</td><td class="mono">${r.ms.toFixed(0)}ms</td><td class="mono">${r.cost ? yuan(r.cost.total_yuan) : "—"}</td>`);
+      $("#prog").style.width = (n / items.length * 100) + "%";
+      $("#batchSummary").innerHTML = summarize(LAST_BATCH);
+    }
+  }
+  $("#runBatch").disabled = false;
+};
+let BATCH_CMP = false;
+$("#batchTable").onclick = e => {
+  const tr = e.target.closest("tr.clk"); if (!tr) return; const r = LAST_BATCH[+tr.dataset.i]; if (!r) return;
+  if (r.results) {
+    const J = r.results.jev, S = r.results.startlux;
+    $("#batchDetail").innerHTML = compareBlock(r.item.query, J.result || { error: J.error }, S.result || { error: S.error });
+  } else if (r.result) $("#batchDetail").innerHTML = renderResult(r.result);
+  else return;
+  $("#batchDetail").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+function summarizeCmp(rows) {
+  const done = rows.filter(Boolean);
+  const side = id => {
+    const xs = done.map(r => r.results[id]).filter(x => x && !x.error), judged = xs.filter(x => x.ok != null);
+    const ms = xs.map(x => x.jev_ms).filter(Boolean), tot = xs.map(x => x.ms).filter(Boolean), tok = xs.map(x => x.tokens).filter(Boolean);
+    const cost = xs.reduce((a, x) => a + (x.cost?.total_yuan || 0), 0);
+    return { n: xs.length, ok: judged.filter(x => x.ok).length, judged: judged.length, err: done.filter(r => r.results[id]?.error).length,
+             p50: quant(ms, .5), p90: quant(ms, .9), e50: quant(tot, .5), e90: quant(tot, .9),
+             tok: tok.length ? Math.round(tok.reduce((a, b) => a + b, 0) / tok.length) : null, cost, perK: xs.length ? cost / xs.length * 1000 : null };
+  };
+  const J = side("jev"), S = side("startlux");
+  const agreed = done.filter(r => r.agree != null), agree = agreed.filter(r => r.agree).length;
+  const both = done.filter(r => r.results.jev?.ok != null && r.results.startlux?.ok != null);
+  const onlyJ = both.filter(r => r.results.jev.ok && !r.results.startlux.ok).length, onlyS = both.filter(r => !r.results.jev.ok && r.results.startlux.ok).length;
+  const by = {};
+  done.forEach(r => { const k = r.item.source || (r.item.expect || []).join("|") || "未标期望"; (by[k] ||= { n: 0, j: 0, s: 0, a: 0, jd: 0 });
+    by[k].n++; if (r.results.jev?.ok) by[k].j++; if (r.results.startlux?.ok) by[k].s++; if (r.agree) by[k].a++; if (r.results.jev?.ok != null) by[k].jd++; });
+  const tr = (name, a, b) => `<tr><td>${name}</td><td>${a}</td><td>${b}</td></tr>`;
+  return `<div class="stats">
+    <div class="stat"><b>${done.length}</b><span>已完成</span></div>
+    <div class="stat"><b>${pct(agree, agreed.length)}</b><span>两边落域一致（${agree}/${agreed.length}）</span></div>
+    <div class="stat"><b>${onlyJ} / ${onlyS}</b><span>只有 Jev 对 / 只有 StartLux 对</span></div></div>
+  <table><thead><tr><th></th><th><span class="be be-jev">Jev</span></th><th><span class="be be-startlux">StartLux</span></th></tr></thead><tbody>
+    ${tr("落域正确率", `${pct(J.ok, J.judged)}（${J.ok}/${J.judged}）`, `${pct(S.ok, S.judged)}（${S.ok}/${S.judged}）`)}
+    ${tr("决策耗时 p50 / p90", `${J.p50.toFixed(0)} / ${J.p90.toFixed(0)} ms`, `${S.p50.toFixed(0)} / ${S.p90.toFixed(0)} ms`)}
+    ${tr("端到端分流 p50 / p90", `${J.e50.toFixed(0)} / ${J.e90.toFixed(0)} ms`, `${S.e50.toFixed(0)} / ${S.e90.toFixed(0)} ms`)}
+    ${tr("平均 input tokens", J.tok ?? "—", (S.tok ?? "—") + "（各自口径）")}
+    ${tr("费用", `${yuan(J.cost)}，每千句 ${perK(J.perK / 1000)}`, `${yuan(S.cost)}（决策自部署不计费，只含改写）`)}
+    ${tr("出错", J.err, S.err)}
+  </tbody></table>
+  <table><thead><tr><th>分组</th><th>句数</th><th>Jev 正确率</th><th>StartLux 正确率</th><th>一致率</th></tr></thead><tbody>
+  ${Object.entries(by).sort().map(([k, v]) => `<tr><td>${esc(k)}</td><td>${v.n}</td><td>${v.jd ? pct(v.j, v.jd) : "—"}</td><td>${v.jd ? pct(v.s, v.jd) : "—"}</td><td>${pct(v.a, v.n)}</td></tr>`).join("")}
+  </tbody></table>
+  <div class="hint">StartLux 实例逐题串行处理，对比批量会明显变慢；并发数对它帮助不大。</div>`;
+}
+
+// ---------- 判据文件 ----------
+function renderCriteria() {
+  const q = CFG.questions;
+  $("#critView").innerHTML = `
+    <div class="sec">叫法约定</div>
+    <pre>判据文件 docs/share/criteria_v3.json（由 docs/share/make_criteria_v3.py 生成）
+├─ questions  ← 提示词：发给 Jev
+│    └─ 每道题 = instructions（问法） + criteria（选项说明：选项和说明，顺序即发送顺序）
+└─ config     ← 代码配置：阈值、入口域、回流表、Agent 上线状态，不发给 Jev</pre>
+    <table><thead><tr><th>页面</th><th>对应</th><th>改动生效方式</th></tr></thead><tbody>
+      <tr><td>提示词</td><td><code>questions</code>：问法和选项说明</td><td>应用后临时覆盖，存在本机浏览器</td></tr>
+      <tr><td>设置</td><td><code>config</code> 里的阈值和 Agent 上线状态</td><td>临时覆盖，存在本机浏览器</td></tr>
+      <tr><td>判据文件（本页）</td><td>整份文件，只读</td><td>要固化：改 make_criteria_v3.py 后重新生成，页面自动读到新文件</td></tr>
+    </tbody></table>
+    <div class="hint">当前文件：${esc(CFG.version)} · 模型 ${esc(CFG.model)}。下面是文件里的提示词（问法和选项顺序）和代码配置。</div>
+    <div class="sec">提示词 questions</div>` +
+    Object.entries(q).map(([k, v]) => `<div class="sec"><code>${esc(k)}</code> · ${v.type === "noul" ? "Noul" : "Choice · " + v.options.length + " 选 1"}</div>
+      <pre>${esc(typeof v.instructions === "string" ? v.instructions : JSON.stringify(v.instructions, null, 1))}</pre>
+      ${v.options ? `<div class="chips">${v.options.map((o, i) => `<span class="chip" style="cursor:default">${i + 1}. ${esc(o)}</span>`).join("")}</div>` : ""}`).join("") +
+    `<div class="sec">代码配置 config · NLU 入口域（${CFG.nlu_entry.length}）</div><div class="chips">${CFG.nlu_entry.map(d => `<span class="chip" style="cursor:default">${esc(d)}</span>`).join("")}</div>
+     <div class="sec">代码配置 config · 非入口域回流</div><div class="chips">${Object.entries(CFG.domain_to_agent).map(([d, a]) => `<span class="chip" style="cursor:default">${esc(d)} → ${esc(TGT_NAME[a] || a)}</span>`).join("")}</div>`;
+}
+
+// ---------- 提示词编辑 ----------
+let BASE = null, DRAFT = null, PSEL = "route";
+const clone = o => JSON.parse(JSON.stringify(o));
+const PKEYS = () => [...Object.keys(BASE.questions), "segment_role_template"];
+const pget = k => k === "segment_role_template" ? DRAFT.segment_role_template : DRAFT.questions[k];
+const pbase = k => k === "segment_role_template" ? BASE.segment_role_template : BASE.questions[k];
+const reqOpts = k => BASE.required_options[k === "segment_role_template" ? "segment_role" : k] || [];
+const applied = () => store.get("v5prompts", null);
+function pTitle(k) { return k === "segment_role_template" ? "segment_role（模板）" : k; }
+function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+function pStatus() {
+  const a = applied(), dirty = !same(DRAFT, a || { questions: BASE.questions, segment_role_template: BASE.segment_role_template });
+  $("#pState").textContent = (a ? "当前生效：自定义提示词（本机）" : "当前生效：判据文件 " + BASE.version.split(" ")[0]) + (dirty ? " · 有未应用的修改" : "");
+  const bd = document.querySelector("#badges .custom"); if (bd) bd.remove();
+  if (a) $("#badges").insertAdjacentHTML("beforeend", '<span class="badge custom">提示词：自定义</span>');
+}
+function renderPList() {
+  $("#pList").innerHTML = PKEYS().map(k => {
+    const q = pget(k), m = !same(q, pbase(k));
+    return `<button data-k="${k}" class="${k === PSEL ? "on" : ""}">${esc(pTitle(k))} <span class="hint">${q.type === "noul" ? "Noul" : "Choice · " + Object.keys(q.criteria).length}</span>${m ? '<span class="m">已改</span>' : ""}</button>`;
+  }).join("");
+}
+$("#pList").onclick = e => { const b = e.target.closest("button[data-k]"); if (b) { PSEL = b.dataset.k; renderPList(); renderPEdit(); } };
+// 把任意值渲染成可编辑字段：字符串 → 文本；字符串数组 → 每行一条；其他 → JSON
+function fieldFor(path, val, label) {
+  const p = esc(JSON.stringify(path));
+  if (typeof val === "string") return `<div class="fld"><label>${esc(label)}</label><textarea data-path='${p}' data-kind="text" rows="${Math.min(8, Math.max(2, Math.ceil(val.length / 60)))}">${esc(val)}</textarea></div>`;
+  if (Array.isArray(val) && val.every(x => typeof x === "string")) return `<div class="fld"><label>${esc(label)}（每行一条）</label><textarea data-path='${p}' data-kind="lines" rows="${Math.min(10, Math.max(2, val.length))}">${esc(val.join("\n"))}</textarea></div>`;
+  return `<div class="fld"><label>${esc(label)}（JSON）</label><textarea data-path='${p}' data-kind="json" rows="4" class="mono">${esc(JSON.stringify(val, null, 1))}</textarea></div>`;
+}
+function objFields(path, val, label) {
+  if (val && typeof val === "object" && !Array.isArray(val)) return Object.entries(val).map(([k, v]) => fieldFor([...path, k], v, `${label}.${k}`)).join("");
+  return fieldFor(path, val ?? "", label);
+}
+function renderPEdit() {
+  const k = PSEL, q = pget(k), root = k === "segment_role_template" ? ["segment_role_template"] : ["questions", k];
+  const req = reqOpts(k);
+  let html = `<div class="row"><b>${esc(pTitle(k))}</b><span class="hint">${q.type === "noul" ? "Noul：是 / 否" : "Choice：" + Object.keys(q.criteria).length + " 选 1"}${k === "segment_role_template" ? "，按片段数生成 segment_role_0…；问法里保留“第 1 段 `segments[0]`”" : ""}</span>
+    <div class="spacer"></div><button class="ghost sm" id="pRevertOne">还原这道题</button></div>
+    <div class="sec">instructions（问法）</div>${objFields([...root, "instructions"], q.instructions, "instructions")}`;
+  if (q.type === "noul") {
+    html += `<div class="sec">criteria（是 / 否的说明）</div>` + ["true", "false"].map(t => `<div class="opt"><div class="opt-h"><b>${t}</b></div>${objFields([...root, "criteria", t], (q.criteria || {})[t], t)}</div>`).join("");
+  } else {
+    const names = Object.keys(q.criteria);
+    html += `<div class="sec">criteria（选项说明，顺序即发送顺序）</div>` + names.map((n, i) => {
+      const locked = req.includes(n) || (k === "domain") || (k === "agent_label" && n in (CFG.label_status || {}));
+      return `<div class="opt"><div class="opt-h"><span class="no">${i + 1}</span>
+        <input value="${esc(n)}" data-rename="${esc(n)}" ${locked ? "disabled" : ""}>${locked ? "🔒" : ""}
+        <button class="ghost sm" data-move="${i}" data-d="-1" ${i === 0 ? "disabled" : ""}>↑</button>
+        <button class="ghost sm" data-move="${i}" data-d="1" ${i === names.length - 1 ? "disabled" : ""}>↓</button>
+        ${!req.includes(n) && k === "agent_label" ? `<button class="ghost sm" data-del="${esc(n)}">删除</button>` : ""}</div>
+        ${objFields([...root, "criteria", n], q.criteria[n], n)}</div>`;
+    }).join("");
+    if (k === "agent_label") html += `<button class="ghost sm" id="pAddOpt">新增 Agent 标签</button><span class="hint"> 新标签在设置里默认 off，命中时落慢思考并记录</span>`;
+  }
+  html += `<details class="raw"><summary>高级：直接编辑这道题的 JSON</summary><textarea id="pJson" rows="16" class="mono">${esc(JSON.stringify(q, null, 1))}</textarea>
+    <button class="ghost sm" id="pJsonApply">用这段 JSON 替换这道题</button></details>`;
+  $("#pEdit").innerHTML = html;
+}
+function setPath(path, v) { let o = DRAFT; for (let i = 0; i < path.length - 1; i++) o = o[path[i]]; o[path[path.length - 1]] = v; }
+$("#pEdit").addEventListener("input", e => {
+  const t = e.target; if (!t.dataset.path) return;
+  const path = JSON.parse(t.dataset.path); let v = t.value;
+  if (t.dataset.kind === "lines") v = v.split("\n").map(x => x.trim()).filter(Boolean);
+  if (t.dataset.kind === "json") { try { v = JSON.parse(v); t.classList.remove("mod"); } catch { t.classList.add("mod"); return; } }
+  setPath(path, v); renderPList(); pStatus();
+});
+function reorder(q, names) { const c = {}; names.forEach(n => (c[n] = q.criteria[n])); q.criteria = c; }
+$("#pEdit").addEventListener("change", e => {
+  const t = e.target; if (!t.dataset.rename) return;
+  const q = pget(PSEL), old = t.dataset.rename, nw = t.value.trim();
+  if (!nw || nw === old || nw in q.criteria) { t.value = old; return; }
+  const c = {}; Object.entries(q.criteria).forEach(([k, v]) => (c[k === old ? nw : k] = v)); q.criteria = c;
+  renderPList(); renderPEdit(); pStatus();
+});
+$("#pEdit").addEventListener("click", e => {
+  const q = pget(PSEL), b = e.target.closest("button"); if (!b) return;
+  if (b.id === "pRevertOne") { if (PSEL === "segment_role_template") DRAFT.segment_role_template = clone(BASE.segment_role_template); else DRAFT.questions[PSEL] = clone(BASE.questions[PSEL]); }
+  else if (b.dataset.move != null) { const n = Object.keys(q.criteria), i = +b.dataset.move, j = i + +b.dataset.d; [n[i], n[j]] = [n[j], n[i]]; reorder(q, n); }
+  else if (b.dataset.del) { delete q.criteria[b.dataset.del]; }
+  else if (b.id === "pAddOpt") { let n = "新标签", i = 1; while ((n + i) in q.criteria) i++; q.criteria[n + i] = { what: "", not_for: "", examples: [] }; }
+  else if (b.id === "pJsonApply") {
+    try { const v = JSON.parse($("#pJson").value); if (PSEL === "segment_role_template") DRAFT.segment_role_template = v; else DRAFT.questions[PSEL] = v; $("#pErr").textContent = ""; }
+    catch (err) { $("#pErr").textContent = "JSON 解析失败：" + err.message; return; }
+  } else return;
+  renderPList(); renderPEdit(); pStatus();
+});
+$("#pApply").onclick = async () => {
+  const r = await post("/api/v5/criteria/check", { prompts: DRAFT });
+  if (!r.ok) { $("#pErr").textContent = "未生效：" + r.error; return; }
+  $("#pErr").textContent = "";
+  if (same(DRAFT, { questions: BASE.questions, segment_role_template: BASE.segment_role_template })) store.set("v5prompts", null);
+  else store.set("v5prompts", DRAFT);
+  pStatus(); $("#pState").textContent += ` · 已生效（约 ${(r.chars / 1024).toFixed(1)} KB）`;
+};
+$("#pDiscard").onclick = () => { DRAFT = clone(applied() || { questions: BASE.questions, segment_role_template: BASE.segment_role_template }); renderPList(); renderPEdit(); pStatus(); };
+$("#pReset").onclick = () => { store.set("v5prompts", null); DRAFT = clone({ questions: BASE.questions, segment_role_template: BASE.segment_role_template }); renderPList(); renderPEdit(); pStatus(); $("#pErr").textContent = ""; };
+$("#pExport").onclick = () => {
+  const blob = new Blob([JSON.stringify(DRAFT, null, 1)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "jev_prompts_v5.json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$("#pImport").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const v = JSON.parse(await f.text()); if (!v.questions) throw new Error("缺少 questions"); DRAFT = { questions: { ...clone(BASE.questions), ...v.questions }, segment_role_template: v.segment_role_template || clone(BASE.segment_role_template) }; $("#pErr").textContent = "已导入，检查后点“应用”生效"; }
+  catch (err) { $("#pErr").textContent = "导入失败：" + err.message; }
+  renderPList(); renderPEdit(); pStatus(); e.target.value = "";
+};
+async function initPrompts() {
+  BASE = await (await fetch("/api/v5/criteria")).json();
+  const a = applied();
+  if (a) { const r = await post("/api/v5/criteria/check", { prompts: a }); if (!r.ok) { store.set("v5prompts", null); $("#pErr").textContent = "本机保存的自定义提示词已不兼容当前判据文件，已停用：" + r.error; } }
+  DRAFT = clone(applied() || { questions: BASE.questions, segment_role_template: BASE.segment_role_template });
+  renderPList(); renderPEdit(); pStatus();
+}
+
+// ---------- 启动 ----------
+(async function init() {
+  CFG = await (await fetch("/api/v5/config")).json();
+  const b = (name, kind, extra = "") => `<span class="badge ${kind === "real" ? "real" : "mock"}">${name}：${kind === "real" ? "真实" : kind === "absent" ? "未接入" : "模拟"}${extra}</span>`;
+  $("#badges").innerHTML = b("Jev", CFG.jev, CFG.jev === "real" ? " · " + CFG.jev_model : "") + b("NLU3.0", CFG.nlu) + b("改写 DeepSeek", CFG.llm) +
+    `<span class="badge">判据文件 ${esc(CFG.version.split(" ")[0])}</span>`;
+  $("#sid").textContent = SID;
+  const setBe = be => { store.set("v5backend", be); document.querySelectorAll("#beSel button").forEach(b => b.classList.toggle("on", b.dataset.be === be)); };
+  setBe(store.get("v5backend", "jev"));
+  $("#beSel").onclick = e => { const b = e.target.closest("button[data-be]"); if (b) setBe(b.dataset.be); };
+  const sl = CFG.backends?.startlux;
+  if (sl) $("#badges").insertAdjacentHTML("beforeend", `<span class="badge real" title="${esc(sl.url || "")}">StartLux：${esc(sl.url || "")}</span>`);
+  renderSettings(); renderCriteria(); await initPrompts();
+  $("#priceInfo").innerHTML = `Jev：${esc(CFG.pricing.jev)}，换算汇率 ${CFG.pricing.usd_cny}（环境变量 USD_CNY 可改）。DeepSeek 改写：${esc(CFG.pricing.deepseek)}，分高峰 / 空闲时段。价格表在 webdemo/pricing.py。`;
+  const s = await samples();
+  $("#chips").innerHTML = s.builtin.map(i => `<span class="chip" title="期望：${esc((i.expect || []).join(" | "))}">${esc(i.query)}</span>`).join("");
+  $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (c) send(c.textContent); };
+  $("#dialogs").innerHTML = DIALOGS.map((d, i) => `<span class="chip" data-i="${i}" title="${esc(d.steps.map(x => typeof x === "string" ? x : x.status ? "回传 " + x.status : "落域被拒").join(" → "))}">${esc(d.name)}</span>`).join("");
+  $("#dialogs").onclick = e => { const c = e.target.closest(".chip"); if (c) runDialog(DIALOGS[+c.dataset.i]); };
+  const P = new URLSearchParams(location.search);   // /v5?q=… 单轮打开即发送；/v5?tab=multi&dialog=1 打开即跑多轮脚本
+  const tab = P.get("tab"); if (tab) document.querySelector(`nav.tabs button[data-tab="${tab}"]`)?.click();
+  if (P.get("cmp")) $("#cmpSingle").checked = true;   // /v5?cmp=1&q=… 打开即两边对比
+  if (P.get("q")) send(P.get("q"));
+  if (P.get("dialog") != null && DIALOGS[+P.get("dialog")]) { document.querySelector('nav.tabs button[data-tab="multi"]').click(); runDialog(DIALOGS[+P.get("dialog")]); }
+})();
+</script>
+</body>
+</html>

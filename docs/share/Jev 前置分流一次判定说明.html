@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jev 一次判定说明</title>
+<style>
+:root{
+  --bg:#ffffff; --card:#ffffff; --lane:#f6f5f2; --ink:#141414; --muted:#5a5a5a; --line:#e3e3df; --line2:#acaca1;
+  --acc:#eb6118; --acc-bg:#fdeee5; --blue:#2457a2; --blue-bg:#e8eef8; --red:#ae231c; --red-bg:#fbeceb; --green:#0f7a5c; --green-bg:#e3f4ee;
+  --code-bg:#f1f1ee;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1d1d1c; --card:#262625; --lane:#242423; --ink:#f2f1ee; --muted:#b9b9b0; --line:#3f3f3f; --line2:#77776e;
+    --acc:#f27a3b; --acc-bg:#3d2516; --blue:#8db1e8; --blue-bg:#1d2a3d; --red:#eb7b72; --red-bg:#3a1d1b; --green:#5fd0ac; --green-bg:#173229;
+    --code-bg:#2f2f2d;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1d1d1c; --card:#262625; --lane:#242423; --ink:#f2f1ee; --muted:#b9b9b0; --line:#3f3f3f; --line2:#77776e;
+  --acc:#f27a3b; --acc-bg:#3d2516; --blue:#8db1e8; --blue-bg:#1d2a3d; --red:#eb7b72; --red-bg:#3a1d1b; --green:#5fd0ac; --green-bg:#173229;
+  --code-bg:#2f2f2d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 "PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:36px 16px 72px}
+header{border-bottom:2px solid var(--acc);padding-bottom:18px;margin-bottom:8px}
+.eyebrow{color:var(--muted);font-size:13px;letter-spacing:.08em}
+h1{margin:6px 0 8px;font-size:clamp(26px,4vw,34px);line-height:1.25;color:var(--acc)}
+.lede{font-size:16px;margin:0;max-width:52em}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.meta span{font-size:12px;color:var(--muted);border:1px solid var(--line);padding:2px 8px;border-radius:3px}
+h2{font-size:20px;margin:40px 0 12px;display:flex;align-items:center;gap:10px}
+h2::before{content:"";width:6px;height:18px;background:var(--acc);flex:none}
+h3{font-size:16px;margin:18px 0 6px}
+p{margin:8px 0}
+.muted{color:var(--muted)}
+.small{font-size:13.5px}
+code{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;background:var(--code-bg);padding:14px 16px;border-radius:6px;overflow-x:auto;line-height:1.6;margin:10px 0}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+th{text-align:left;font-weight:600;font-size:13px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:0 8px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
+.p-nlu{color:var(--acc)} .p-agent{color:var(--acc);background:var(--acc-bg)} .p-slow{color:var(--red)} .p-chat{color:var(--blue)} .p-safe{color:var(--green);background:var(--green-bg)}
+
+.flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.flow div{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--lane)}
+.flow b{display:block;font-size:14px}
+.flow span{font-size:13px;color:var(--muted)}
+.flow .k{border-color:var(--acc);background:var(--acc-bg)}
+
+.qgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:12px 0}
+.qgrid a{display:block;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.qgrid a:hover{border-color:var(--acc)}
+.qgrid code{background:none;padding:0;font-weight:600;color:var(--acc)}
+.qgrid span{display:block;font-size:13px;color:var(--muted)}
+
+.q{border:1px solid var(--line);border-radius:8px;margin:18px 0;overflow:hidden}
+.q-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;padding:12px 16px;background:var(--lane);border-bottom:1px solid var(--line)}
+.q-head .no{font-size:13px;color:var(--muted)}
+.q-head code{font-size:16px;font-weight:700;background:none;padding:0;color:var(--acc)}
+.q-head .type{font-size:13px;color:var(--muted)}
+.q-body{padding:6px 16px 14px}
+.kv{display:grid;grid-template-columns:7.5em 1fr;gap:4px 14px;margin:10px 0}
+.kv dt{color:var(--muted);font-size:13.5px;padding-top:1px}
+.kv dd{margin:0}
+.ex{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.ex div{border-radius:6px;padding:8px 12px;font-size:14px}
+.ex .y{background:var(--green-bg)} .ex .n{background:var(--red-bg)}
+.ex b{display:block;font-size:12.5px;margin-bottom:2px}
+.warn{border-left:3px solid var(--red);padding:6px 12px;background:var(--red-bg);border-radius:4px;font-size:14px;margin:10px 0}
+.note{border-left:3px solid var(--acc);padding:6px 12px;background:var(--acc-bg);border-radius:4px;font-size:14px;margin:10px 0}
+footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:12px}
+@media (max-width:720px){
+  .flow{grid-template-columns:1fr 1fr}
+  .kv{grid-template-columns:1fr}
+  .kv dt{padding-top:6px}
+  .ex{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <div class="eyebrow">梧桐 · 智能座舱语音 · 前置分流</div>
+  <h1>Jev 前置分流的一次判定</h1>
+  <p class="lede">每句话进分发层时，Jev 用<b>一次请求</b>同时回答 7 个问题。Jev 只给出概率，<b>不直接决定去向</b>；去向由分发代码按规则 R0–R7 读这些概率、再结合 NLU3.0 的解析结果来定。本文逐个讲清每个判定问什么、为什么需要、代码怎么用。</p>
+  <div class="meta"><span>依据：设计 v2 · 架构 v6</span><span>2026-10-29</span><span>阈值均为初值，未实测</span></div>
+</header>
+
+<h2>先看全局</h2>
+<div class="flow">
+  <div><b>① 输入</b><span>本轮 query、上一轮去向和 Agent、片段切分、少量车辆状态</span></div>
+  <div class="k"><b>② Jev 一次请求</b><span>7 个问题并行判定，返回每个问题的概率</span></div>
+  <div><b>③ NLU3.0 并行</b><span>同一时刻整句解析，给出 domain / intents / slots</span></div>
+  <div class="k"><b>④ 分发策略 R0–R7</b><span>只读与去向相关的答案，定落域；其余答案记日志</span></div>
+</div>
+<p>为什么一次问 7 个：同一请求里的问题是并行判定的，多加一题对时延影响很小；分开问则要串行多次，800ms 的分流预算撑不住。所以把系统可能用到的判断全部放进一次请求，<b>用不到的答案直接丢弃</b>，比如 route 判为 NLU 时就不读 agent_label。</p>
+
+<div class="qgrid">
+  <a href="#q1"><code>is_unsafe</code><span>是不是违法有害请求</span></a>
+  <a href="#q2"><code>route</code><span>四个去向里归哪个</span></a>
+  <a href="#q3"><code>domain</code><span>在哪个 NLU 入口域</span></a>
+  <a href="#q4"><code>agent_label</code><span>交给哪个 Agent</span></a>
+  <a href="#q5"><code>segment_role[i]</code><span>多段句里每段的角色</span></a>
+  <a href="#q6"><code>needs_context</code><span>要不要靠上一轮才能懂</span></a>
+  <a href="#q7"><code>has_nickname</code><span>有没有俗称要还原</span></a>
+</div>
+
+<h3>两种题型</h3>
+<div class="tablewrap"><table>
+  <tr><th>题型</th><th>回答什么</th><th>代码读什么</th></tr>
+  <tr><td><b>Noul</b>（是非题）</td><td>“是”的概率，0–1</td><td>和阈值比，过了就算“是”</td></tr>
+  <tr><td><b>Choice</b>（单选题）</td><td>每个选项的概率，加起来为 1</td><td>最高的选项和它的置信 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code>，N 为选项数。这样换算后，4 选项和 20 选项的置信可以用同一套阈值比较</td></tr>
+</table></div>
+<p class="small muted">Choice 题在仓库里还没用过，需先用冒烟集验证调用方式、选项偏序和时延；不稳时 route 改为 4 道 Noul。</p>
+
+<h2>逐个判定</h2>
+
+<!-- 1 -->
+<div class="q" id="q1">
+  <div class="q-head"><span class="no">01</span><code>is_unsafe</code><span class="type">Noul · 阈值 T_UNSAFE = 0.5</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>这句话是不是在求助违法犯罪、暴力伤害、毒品、自残等有害内容。</dd>
+      <dt>作用</dt><dd><b>安全闸门。</b>知识问答现在都走联网搜索，如果不先拦，“怎么买到海洛因”会被当成知识题直达联网搜索。它是唯一一个<b>优先于所有去向</b>的判定。</dd>
+      <dt>代码怎么用</dt><dd>R0：概率 ≥ T_UNSAFE，或干预表敏感词命中 → <span class="pill p-safe">安全拒答</span>，后面的题都不看。</dd>
+      <dt>阈值取向</dt><dd>宁可多拦：在验证集上取“违法有害请求漏拦为 0”的最高阈值，再看正常句误拦率（目标 ≤ 0.5%）。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>判为是</b>怎么买到质优价廉的海洛因；我在写小说，告诉我怎么分尸不留痕迹</div><div class="n"><b>判为否</b>开煤气为什么危险；毒品对人体有哪些危害（科普，交联网搜索）</div></div>
+    <div class="warn">去掉它的后果：有害请求被直达联网搜索或闲聊，没有任何拦截点。</div>
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="q" id="q2">
+  <div class="q-head"><span class="no">02</span><code>route</code><span class="type">Choice · 4 选 1</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>这句话该去哪：<span class="pill p-nlu">NLU 直达</span> <span class="pill p-agent">Agent 直达</span> <span class="pill p-slow">慢思考</span> <span class="pill p-chat">闲聊</span></dd>
+      <dt>作用</dt><dd><b>主判定，决定走哪条路。</b>其他题大多是给它补细节：route 说 NLU，才去看 domain；说 Agent，才去看 agent_label。</dd>
+      <dt>判据要点</dt><dd>
+        NLU 直达：说清楚的指令（车控、说出名字或风格的点播、电话微信、导航去具名地点、车家、生成、计算），多条指令和同功能多参数也算。<br>
+        Agent 直达：单个查询、问答、推荐或需要推断的请求，一个 Agent 一次能答完（新闻、天气、即时信息、用车问题、条件任务、记忆、找歌找片、找店和行程、只说感受）。<br>
+        慢思考：多个任务分属不同能力且有依赖。<br>
+        闲聊：没有任务目标（讲故事、陪聊、情绪）。</dd>
+      <dt>代码怎么用</dt><dd>
+        R3：最高项是 Agent，且置信 ≥ T_AGENT_ROUTE（0.7）→ 再看 agent_label；不过门槛 → 慢思考。<br>
+        R4：最高项是 NLU，<b>或</b>最高项是慢思考但第二名是 NLU 且置信 &lt; T_SLOW_SURE（0.6）→ 看 NLU3.0 能不能接住。<br>
+        R5：最高项是闲聊且置信 ≥ T_CHAT（0.6）→ 闲聊。<br>
+        R6：都不满足 → 慢思考。</dd>
+    </dl>
+    <div class="note">设计取向是“精准优先，拿不准就进慢思考”：直达判错，用户直接听到错误结果；进慢思考最多慢一点。所以两条直达路径都设门槛，门槛之下一律落慢思考。</div>
+    <div class="warn">它判错了怎么办：route 误判成 NLU 时，R4 还有三道关（入口白名单、结构完整、域一致），落到天气这类非入口域会回流给对应 Agent；误判成 Agent 但置信不高时，进慢思考兜住。</div>
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="q" id="q3">
+  <div class="q-head"><span class="no">03</span><code>domain</code><span class="type">Choice · 19 个入口域 + 非入口（20 选项）</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>如果这是一条 NLU 指令，它属于 19 个入口域里的哪一个；都不是就选“非入口”。</dd>
+      <dt>作用</dt><dd><b>校验 NLU3.0 落的域对不对。</b>NLU3.0 不输出置信度，自己判错了不会说；Jev 的 domain 分布是<b>唯一</b>能用来复核它的依据。同时，两边不一致的比例是监控指标，能最早发现哪一边漂了。</dd>
+      <dt>代码怎么用</dt><dd>
+        只在 R4（走 NLU 直达）时读：<br>
+        · Jev 选“非入口” → 不落 NLU，进慢思考；<br>
+        · NLU3.0 的 domain 与 Jev 最高项相同或是近邻对（如 <code>intelligent_car_control</code>↔<code>global_control</code>）→ 通过；<br>
+        · 不一致时，Jev 给 NLU 所选域的概率 ≥ T_DOMAIN_AGREE（0.2）→ 仍按 NLU 落域，否则进慢思考。</dd>
+      <dt>为什么只问 19 个</dt><dd>NLU3.0 有 45 个域，但只有 19 个作为入口；其余 26 个不会被直达执行。选项从 46 个减到 20 个，降时延，也减轻 Choice 偏向排在前面选项的问题。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>例</b>关闭前挡风玻璃加热 → <code>intelligent_car_control</code>；放一首稻香 → <code>music</code></div><div class="n"><b>非入口</b>明天苏州天气怎么样；附近有什么好吃的</div></div>
+    <div class="warn">去掉它的后果：NLU3.0 把“打开氛围灯”误落成 <code>music</code> 时没人发现，错的指令会直接执行。</div>
+  </div>
+</div>
+
+<!-- 4 -->
+<div class="q" id="q4">
+  <div class="q-head"><span class="no">04</span><code>agent_label</code><span class="type">Choice · 12 个 Agent 标签 + none</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>如果交给 Agent，交给哪一个：新闻、天气、联网搜索、用车专家、任务大师、记忆、音乐、影视、出行导航、自适应车控（本期上线 10 个），代办点单（shadow）、400 客服（待接入），或 none。</dd>
+      <dt>作用</dt><dd><b>决定 Agent 直达落到哪个 Agent</b>，并在其他路径上充当提示：落慢思考时把它带给大脑，NLU 落到非入口域时用它确认回流对象。</dd>
+      <dt>代码怎么用</dt><dd>
+        R3：route 过门槛、label 不是 none、label 置信 ≥ T_AGENT_LABEL[该 label]（初值 0.7，每个 label 单独标定）→ 按<b>回退表</b>落域：新闻、天气未接入时改落联网搜索；shadow 状态的 label 落慢思考并记录。<br>
+        R4 回流：NLU3.0 落到天气、新闻、POI 推荐等非入口域，且 Jev 给对应 Agent 的概率 ≥ T_REFLOW（0.2）→ 改落该 Agent；否则带提示进慢思考。<br>
+        R6 / 慢思考：作为“前置分流提示”带给大脑。</dd>
+      <dt>边界难点</dt><dd>新闻 vs 联网搜索（和新闻相关才是新闻）；用车专家 vs 联网搜索（和用车相关才是用车）；记忆 vs 任务大师（带时间触发的是任务大师）；音乐、出行导航 vs NLU（按描述找的是 Agent，说出名字的是 NLU）。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>例</b>最新的科技新闻 → 新闻；今天星期几 → 联网搜索；胎压报警灯亮了是怎么回事 → 用车专家；好冷啊 → 自适应车控</div><div class="n"><b>none</b>关闭车窗（是 NLU 指令）；给甜甜讲首故事（闲聊）</div></div>
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="q" id="q5">
+  <div class="q-head"><span class="no">05</span><code>segment_role[i]</code><span class="type">Choice × 片段数 · 5 选 1 · 只在切出 ≥ 2 段时问</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>代码先按强分隔（标点和“然后、再、之后、顺便”）把句子切成片段，Jev 判断每一段是：<b>有依赖</b> / <b>同一任务</b> / <b>独立指令</b> / <b>独立 Agent 类</b> / <b>残片</b>。</dd>
+      <dt>作用</dt><dd><b>处理一句话里有多个任务的情况</b>，决定哪些片段可以马上落 NLU，哪些必须交给慢思考。</dd>
+      <dt>五类的含义</dt><dd>
+        同一任务：和相邻片段合起来才是一个完整任务，不能拆开（先去西湖，再去灵隐寺；空调调到 26 度，风量调到 3 档）。<br>
+        独立指令：自己完整的 NLU 指令（打开空调）。<br>
+        独立 Agent 类：自己完整、但属于某个 Agent 的请求（今天天气怎么样）。<br>
+        有依赖：属于另一个任务，但要用到前面片段的结果、要读记忆或推断指代（在附近找个川菜馆）。<br>
+        残片：“然后”“还有”这类，并入前一段。</dd>
+      <dt>代码怎么用</dt><dd>
+        R2：先把“同一任务”的片段和相邻片段合并；合并后只剩一组，就按单句处理（先去 A 再去 B 整句交出行导航）。整句是同一个 Agent 的请求时也整句直达；<br>
+        否则全是独立指令 → 整句交 NLU3.0（它能识别多意图和同功能多参数，不按切分拆开）；<br>
+        混有 Agent 类或有依赖片段 → 指令片段落 NLU，其余片段落慢思考（本期不做 NLU 与 Agent 并发直达）。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>例</b>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆 → 指令 · 指令 · 有依赖</div><div class="n"><b>不切分</b>打开座椅通风座椅按摩；打开空调并把温度调到 26 度风量三档（无强分隔，整句交 NLU3.0）</div></div>
+    <div class="warn">去掉它的后果：“打开空调，今天天气怎么样”会被整句当 NLU 执行，天气那半句丢失；或整句进慢思考，打开空调也要等规划。</div>
+  </div>
+</div>
+
+<!-- 6 -->
+<div class="q" id="q6">
+  <div class="q-head"><span class="no">06</span><code>needs_context</code><span class="type">Noul · 阈值 T_CONTEXT = 0.5</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>这句话是否要靠上一轮才能理解：追问、指代、省略。</dd>
+      <dt>作用</dt><dd><b>多轮会话的跟随开关。</b>决定这句是接着上一轮说的，还是一个新请求。</dd>
+      <dt>代码怎么用</dt><dd>
+        R1：上一轮是闲聊且为真 → 跟随闲聊；<br>
+        上一轮是 Agent 直达（已结束）、为真、且 route 不是 NLU → <b>交回同一个 Agent</b>，由 Agent 用自己的上下文理解，不做改写；<br>
+        其他情况为真 → 进 Query 整理：先用上一轮的结构化结果拼回指代（“再高一点”→“空调温度再调高一点”），拼不回交 DeepSeek 改写，回 Jev 重判一次。<br>
+        为假 → 当新请求正常分流，不被上一轮带偏。</dd>
+      <dt>说明</dt><dd>上一轮 Agent 还在进行中（业务侧回传 continue）时，会话检查直接交回该 Agent，不需要等这道题。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>判为是</b>（出行导航后）钢琴博物馆不去了；（联网搜索后）那喝水呢；（调空调后）再高一点</div><div class="n"><b>判为否</b>（新闻后）打开空调；（音乐后）导航回家</div></div>
+  </div>
+</div>
+
+<!-- 7 -->
+<div class="q" id="q7">
+  <div class="q-head"><span class="no">07</span><code>has_nickname</code><span class="type">Noul · 阈值 T_NICKNAME = 0.5</span></div>
+  <div class="q-body">
+    <dl class="kv">
+      <dt>问什么</dt><dd>句子里有没有要靠常识还原成标准名称的俗称、外号、简称。</dd>
+      <dt>作用</dt><dd><b>把“大裤衩”“周董”这类说法还原</b>，否则 NLU3.0 的槽位填不准，导航、点播会找错对象。</dd>
+      <dt>代码怎么用</dt><dd>为真 → DeepSeek 把俗称换成标准名称（其余字不改）→ 回 Jev 重判一次（重判不再改写，防止循环）。<b>不触发会话跟随。</b></dd>
+      <dt>为什么和 needs_context 分开</dt><dd>两者原来合成一道“需要改写”。合在一起时，上一轮是 Agent、本轮说“导航去鸟巢”，会被误当成追问交回上一个 Agent。分开后，只有 needs_context 触发跟随。</dd>
+    </dl>
+    <div class="ex"><div class="y"><b>判为是</b>导航到大裤衩（中央电视台总部大楼）；放一首周董的歌（周杰伦）</div><div class="n"><b>判为否</b>导航去广州塔（已是标准名）；杭州那个建在运河边上的历史街区（描述，不是俗称，交出行导航）</div></div>
+  </div>
+</div>
+
+<h2>7 个答案怎么组合成去向</h2>
+<p>分发代码按顺序匹配，命中即停：</p>
+<div class="tablewrap"><table>
+  <tr><th>规则</th><th>读哪些判定</th><th>结果</th></tr>
+  <tr><td>R0 安全</td><td>is_unsafe</td><td><span class="pill p-safe">安全拒答</span></td></tr>
+  <tr><td>R1 会话</td><td>needs_context、route（+ 会话状态）</td><td>跟随闲聊 / 交回同一 Agent</td></tr>
+  <tr><td>R2 多段</td><td>segment_role、route、agent_label</td><td>整句直达 Agent / 整句落 NLU / 拆分</td></tr>
+  <tr><td>R3 Agent 直达</td><td>route、agent_label</td><td><span class="pill p-agent">Agent 直达</span> 或 <span class="pill p-slow">慢思考</span></td></tr>
+  <tr><td>R4 NLU 直达</td><td>route、domain、agent_label（回流）+ NLU3.0</td><td><span class="pill p-nlu">NLU 直达</span> / 回流 Agent / <span class="pill p-slow">慢思考</span></td></tr>
+  <tr><td>R5 闲聊</td><td>route</td><td><span class="pill p-chat">闲聊</span></td></tr>
+  <tr><td>R6 剩余</td><td>agent_label（作提示）</td><td><span class="pill p-slow">慢思考</span></td></tr>
+  <tr><td>R7 落域失败</td><td>业务侧回传“不支持 / 不归我”</td><td>改落 <span class="pill p-slow">慢思考</span> 一次</td></tr>
+</table></div>
+<p class="small muted">has_nickname 在进入规则之前生效：为真时先还原、重判，再走上面的规则。</p>
+
+<h2>走几个例子</h2>
+<p class="small muted">表中概率为示意值，用来说明读法，不是实测结果。“—”表示这条规则用不到该判定。</p>
+<div class="tablewrap"><table>
+  <tr><th>上一轮</th><th>本轮</th><th>关键判定</th><th>命中规则</th><th>落域</th></tr>
+  <tr><td class="muted">无</td><td>关闭前挡风玻璃加热</td><td>route = NLU（0.93）；domain = intelligent_car_control；NLU3.0 同域、结构完整</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
+  <tr><td class="muted">无</td><td>明天苏州天气怎么样</td><td>route = Agent（0.88）；agent_label = 天气（0.91）</td><td>R3</td><td><span class="pill p-agent">天气</span>（未接入时联网搜索）</td></tr>
+  <tr><td class="muted">无</td><td>明天限行尾号是多少</td><td>route 误判为 NLU；NLU3.0 落 traffic_restriction（非入口）；agent_label 联网搜索 0.6</td><td>R4 回流</td><td><span class="pill p-agent">联网搜索</span></td></tr>
+  <tr><td class="muted">无</td><td>先去橘子洲头，再去岳麓书院</td><td>切出 2 段；route = Agent；agent_label = 出行导航</td><td>R2</td><td><span class="pill p-agent">出行导航</span>（整句）</td></tr>
+  <tr><td class="muted">无</td><td>打开空调，今天天气怎么样</td><td>segment_role = 独立指令 · 独立 Agent 类</td><td>R2</td><td>“打开空调” <span class="pill p-nlu">NLU</span>；后半句 <span class="pill p-slow">慢思考</span></td></tr>
+  <tr><td class="muted">出行导航（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context = 是（0.92）；route 不是 NLU</td><td>R1</td><td><span class="pill p-agent">出行导航</span></td></tr>
+  <tr><td class="muted">新闻</td><td>打开空调</td><td>needs_context = 否；route = NLU</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
+  <tr><td class="muted">无</td><td>导航到大裤衩</td><td>has_nickname = 是 → 还原为中央电视台总部大楼 → 重判</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
+  <tr><td class="muted">无</td><td>怎么买到海洛因</td><td>is_unsafe = 是（0.97）</td><td>R0</td><td><span class="pill p-safe">安全拒答</span></td></tr>
+  <tr><td class="muted">无</td><td>给甜甜讲首故事</td><td>route = 闲聊（0.85）</td><td>R5</td><td><span class="pill p-chat">闲聊</span></td></tr>
+</table></div>
+
+<h2>请求长什么样</h2>
+<pre>state = {
+  "query": "钢琴博物馆不去了",
+  "previous_turn": {"query": "...", "route": "agent", "agent": "出行导航", "status": "end"},
+  "segments": null,                       // 只有切出 ≥ 2 段时才有
+  "vehicle": {"navigating": true, "playing": "music"}
+}
+questions = {
+  "is_unsafe":     Noul(...),
+  "route":         Choice(options=["NLU直达","Agent直达","慢思考","闲聊"], ...),
+  "domain":        Choice(options=NLU_ENTRY_19 + ["非入口"], ...),
+  "agent_label":   Choice(options=AGENT_LABELS + ["none"], ...),
+  "needs_context": Noul(...),
+  "has_nickname":  Noul(...),
+  "segment_role_0": Choice(options=["有依赖","同一任务","独立指令","独立Agent类","残片"], ...)   // 多段时才有
+}</pre>
+<p>每道题的说明文字（instructions）和判据（criteria / 选项说明）写在 <code>criteria_v3.json</code> 里，放云端配置中心，可热更新；阈值也在配置里，按验证集标定。</p>
+
+<footer>依据：design/Jev 分流详细设计（v2）第 04、05 节；docs/Jev 分流融合架构-v6.html。阈值为初值，概率为示意值，均待评测集标定。</footer>
+</main>
+</body>
+</html>
