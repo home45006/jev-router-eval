@@ -1,0 +1,528 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Jev 分流融合架构</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  /* 版式：梧桐白底橙标，V2.0 只覆盖分发落域：接入输入 → 分发 → 落域出口，业务侧画成范围外。页头 → 架构图 → 变化 → Jev 一次请求 → 分发策略 → 去向一览 → 45 域去向 → 时延 → 示例 → 已定与待定 */
+  :root {
+    --bg: #FFFFFF;
+    --surface: #FFFFFF;
+    --lane: #F6F5F2;
+    --third: #ECECE7;
+    --label: #3F3F3F;
+    --fg: #141414;
+    --muted: #545454;
+    --line: #E0E0DC;
+    --line-strong: #ACACA1;
+    --accent: #EB6118;
+    --accent-soft: #FDEEE5;
+    --on-accent: #FFFFFF;
+    --blue: #2457A2;
+    --red: #AE231C;
+    --font-body: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1D1D1C; --surface: #2A2A2A; --lane: #242423; --third: #343432; --label: #4A4A47; --fg: #F2F1EE; --muted: #B9B9B0;
+      --line: #3F3F3F; --line-strong: #77776E; --accent: #F27A3B; --accent-soft: #3D2516;
+      --on-accent: #FFFFFF; --blue: #8DB1E8; --red: #EB7B72; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1D1D1C; --surface: #2A2A2A; --lane: #242423; --third: #343432; --label: #4A4A47; --fg: #F2F1EE; --muted: #B9B9B0;
+    --line: #3F3F3F; --line-strong: #77776E; --accent: #F27A3B; --accent-soft: #3D2516;
+    --on-accent: #FFFFFF; --blue: #8DB1E8; --red: #EB7B72; color-scheme: dark;
+  }
+
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+  .page { max-width: 1480px; margin-inline: auto; padding-inline: 24px; padding-block: 36px 56px; display: flex; flex-direction: column; gap: 36px; }
+  @media (max-width: 600px) { .page { padding-inline: 16px; padding-block: 24px 40px; gap: 28px; } }
+
+  .head { display: flex; flex-direction: column; gap: 10px; padding-bottom: 20px; border-bottom: 2px solid var(--accent); }
+  .eyebrow { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; letter-spacing: .08em; }
+  .eyebrow i { width: 10px; height: 10px; background: var(--accent); display: inline-block; }
+  h1 { margin: 0; font-size: clamp(26px, 4vw, 36px); line-height: 1.2; font-weight: 700; color: var(--accent); text-wrap: balance; }
+  .lede { margin: 0; max-width: 50em; font-size: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+  .meta span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); border: 1px solid var(--line); padding: 2px 8px; border-radius: 2px; }
+
+  h2 { margin: 0 0 14px; font-size: 19px; font-weight: 700; display: flex; align-items: baseline; gap: 10px; }
+  h2::before { content: ""; width: 6px; height: 16px; background: var(--accent); align-self: center; flex: none; }
+  .note { margin: 12px 0 0; color: var(--muted); font-size: 13.5px; max-width: 64em; }
+  .note b { color: var(--fg); font-weight: 600; }
+
+  figure { margin: 0; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  .scroll svg { display: block; width: 100%; min-width: 1240px; height: auto; font-family: var(--font-body); }
+  figcaption { margin-top: 12px; color: var(--muted); font-size: 13.5px; max-width: 68em; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+
+  .d-box   { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; }
+  .d-plan  { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .d-third { fill: var(--third); stroke: var(--line-strong); stroke-width: 1.2; }
+  .d-tplan { fill: var(--third); stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .d-band  { fill: var(--lane); stroke: var(--line); stroke-width: 1; }
+  .d-lane  { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+  .d-lane-k{ fill: var(--surface); stroke: var(--accent); stroke-width: 1.6; }
+  .d-label { fill: var(--label); }
+  .d-label-k { fill: var(--accent); }
+  .d-jev   { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+  .d-jband { fill: var(--accent); }
+  .d-sep   { stroke: var(--accent); stroke-width: 1; stroke-opacity: .35; fill: none; }
+  .d-key   { fill: var(--surface); stroke: var(--accent); stroke-width: 2; }
+  .d-audbox{ fill: var(--surface); stroke: var(--blue); stroke-width: 1.6; }
+  .d-gate  { fill: var(--surface); stroke: var(--blue); stroke-width: 2; }
+  .d-tag   { fill: var(--surface); stroke: var(--accent); stroke-width: 1.2; }
+  .d-dot   { fill: var(--fg); }
+  .d-flow  { stroke: var(--fg); stroke-width: 1.5; fill: none; }
+  .d-audio { stroke: var(--blue); stroke-width: 2; fill: none; }
+  .d-ctrl  { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  .d-pflow { stroke: var(--line-strong); stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; }
+  .m-fg { fill: var(--fg); } .m-blue { fill: var(--blue); } .m-acc { fill: var(--accent); } .m-plan { fill: var(--line-strong); }
+  .t-L   { fill: var(--on-accent); font-size: 15px; font-weight: 700; }
+  .t-Le  { fill: var(--on-accent); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: .12em; opacity: .85; }
+  .t-h   { fill: var(--fg); font-size: 14px; font-weight: 600; }
+  .t-hk  { fill: var(--accent); font-size: 14px; font-weight: 700; }
+  .t-s   { fill: var(--muted); font-size: 12px; }
+  .t-b   { fill: var(--fg); font-size: 12.5px; }
+  .t-r   { fill: var(--fg); font-size: 12px; }
+  .t-xs  { fill: var(--fg); font-size: 11px; }
+  .t-lane{ fill: var(--fg); font-size: 15.5px; font-weight: 700; }
+  .t-lanek{ fill: var(--accent); font-size: 15.5px; font-weight: 700; }
+  .t-tag { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; }
+  .t-cfg { fill: var(--accent); font-size: 10.5px; font-weight: 600; }
+  .t-m   { fill: var(--muted); font-family: var(--font-mono); font-size: 11px; }
+  .t-mf  { fill: var(--fg); font-family: var(--font-mono); font-size: 11px; }
+  .t-id  { fill: var(--fg); font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+  .t-jev { fill: var(--on-accent); font-size: 15px; font-weight: 700; }
+  .t-aud { fill: var(--blue); font-size: 12px; }
+  .t-acc { fill: var(--accent); font-size: 12px; font-weight: 600; }
+
+  .tscroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+  th { text-align: left; font-weight: 600; font-size: 12.5px; color: var(--muted); letter-spacing: .06em; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:last-child, th:last-child { padding-right: 0; }
+  .br { font-weight: 700; white-space: nowrap; }
+  .br small { display: block; font-family: var(--font-mono); font-weight: 400; font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+  .nw { white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  code { font-family: var(--font-mono); font-size: 12.5px; background: var(--lane); padding: 1px 5px; border-radius: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px 6px; }
+  .chips code { font-size: 12px; }
+  .pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 9px; border-radius: 2px; border: 1px solid currentColor; white-space: nowrap; }
+  .pill.nlu { color: var(--accent); } .pill.agent { color: var(--accent); background: var(--accent-soft); }
+  .pill.slow { color: var(--red); } .pill.chat { color: var(--blue); } .pill.rw { color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .q { max-width: 24em; }
+  .ctx { color: var(--muted); white-space: nowrap; }
+  .muted { color: var(--muted); }
+
+  .open { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; border-top: 1px solid var(--line-strong); }
+  @media (max-width: 1000px) { .open { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .open { grid-template-columns: minmax(0, 1fr); } }
+  .open > div { padding: 16px 0 18px; border-bottom: 1px solid var(--line); min-width: 0; }
+  .open h3 { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+  .open p { margin: 0; font-size: 14px; color: var(--muted); }
+  .open p b { color: var(--fg); font-weight: 600; }
+
+  .src { color: var(--muted); font-size: 12.5px; margin: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="page">
+
+  <header class="head">
+    <div class="eyebrow"><i></i>梧桐 · 智能座舱语音交互 Agent 平台</div>
+    <h1>Jev 分流融合架构</h1>
+    <p class="lede"><b>本架构只负责分发和落域，不负责业务。</b>Jev 与 NLU3.0 在分发层并行起跑，一次请求判定去向并给出落域结果：<b>说清楚的指令</b>走 NLU3.0 直达（19 个入口域），<b>查询、问答、推荐和需要推断的单个请求</b>走 Agent 直达（本期 10 个 Agent），<b>跨能力且有依赖的多任务</b>和 NLU3.0 接不住的句子进慢思考，没有任务目标的进闲聊，违法有害请求安全拒答。出口之后的执行、仲裁和下发由业务侧负责。</p>
+    <div class="meta"><span>V2.0 · 2026-10-29</span><span>本期接 NLU3.0 · 19 个入口域</span><span>Agent 直达 · 10 个</span><span>配套：design/Jev 分流详细设计 v2、测试方案 v2.3</span></div>
+  </header>
+
+  <section>
+    <h2>分发落域架构</h2>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 1500 800" role="img" aria-label="三层：接入层把文本、会话状态和车辆状态送入分发层；分发层先查干预表和敏感词，未命中时 Jev 一次请求与 NLU3.0 整句解析并行起跑，经 Query 整理和分发策略落到五个出口：NLU 直达（19 个入口域的 intents）、Agent 直达（agent_label）、慢思考（route=slow、片段组和提示）、安全拒答、闲聊（放行音频）。出口之后的执行、仲裁和下发由业务侧负责，不在本架构范围；业务侧把会话状态回传给会话管理。">
+          <defs>
+            <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-fg"/></marker>
+            <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-blue"/></marker>
+            <marker id="ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-acc"/></marker>
+            <marker id="ah-plan" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-plan"/></marker>
+          </defs>
+
+          <!-- 图例 -->
+          <rect x="160" y="13" width="26" height="15" rx="2" class="d-box"/><text x="194" y="25" class="t-s">自研</text>
+          <rect x="240" y="13" width="26" height="15" rx="2" class="d-third"/><text x="274" y="25" class="t-s">三方 / 供应商</text>
+          <rect x="370" y="13" width="26" height="15" rx="2" class="d-key"/><text x="404" y="25" class="t-s">关键节点</text>
+          <rect x="474" y="13" width="26" height="15" rx="2" class="d-plan"/><text x="508" y="25" class="t-s">shadow / 待接入 / 范围外</text>
+          <line x1="680" y1="20" x2="712" y2="20" class="d-flow"/><text x="720" y="25" class="t-s">文本 / 结构化数据</text>
+          <line x1="840" y1="20" x2="872" y2="20" class="d-audio"/><text x="880" y="25" class="t-s">音频流</text>
+          <line x1="940" y1="20" x2="972" y2="20" class="d-ctrl"/><text x="980" y="25" class="t-s">控制信号</text>
+          <line x1="1050" y1="20" x2="1082" y2="20" class="d-pflow"/><text x="1090" y="25" class="t-s">状态回传</text>
+          <rect x="1160" y="12" width="38" height="17" rx="3" class="d-tag"/><text x="1179" y="24.5" text-anchor="middle" class="t-cfg">配置</text>
+          <text x="1206" y="25" class="t-s">云端配置，可热更新</text>
+
+          <!-- ================= 接入层 ================= -->
+          <rect x="20" y="44" width="124" height="80" rx="3" class="d-label"/>
+          <text x="82" y="82" text-anchor="middle" class="t-L">接入层</text>
+          <text x="82" y="101" text-anchor="middle" class="t-Le">INPUT</text>
+          <rect x="160" y="44" width="1320" height="80" rx="3" class="d-band"/>
+
+          <rect x="176" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="284" y="80" text-anchor="middle" class="t-h">Gateway</text>
+          <text x="284" y="99" text-anchor="middle" class="t-s">鉴权 · 路由 · 灰度</text>
+          <rect x="408" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="516" y="80" text-anchor="middle" class="t-h">ASR Proxy</text>
+          <text x="516" y="99" text-anchor="middle" class="t-s">语音转文本 · 标点</text>
+          <rect x="640" y="56" width="280" height="56" rx="4" class="d-key"/>
+          <text x="780" y="80" text-anchor="middle" class="t-h">会话管理</text>
+          <text x="780" y="99" text-anchor="middle" class="t-s">上轮去向 · 下游回传的会话状态</text>
+          <rect x="936" y="56" width="216" height="56" rx="4" class="d-box"/>
+          <text x="1044" y="80" text-anchor="middle" class="t-h">车辆状态接入</text>
+          <text x="1044" y="99" text-anchor="middle" class="t-s">导航态 · 播放态</text>
+          <rect x="1248" y="56" width="216" height="56" rx="4" class="d-audbox"/>
+          <text x="1356" y="80" text-anchor="middle" class="t-h">音频缓存</text>
+          <text x="1356" y="99" text-anchor="middle" class="t-s">本轮语音 · 环形缓冲</text>
+
+          <line x1="251" y1="124" x2="251" y2="176" class="d-flow" marker-end="url(#ah)"/>
+          <text x="261" y="148" class="t-mf">query + state</text>
+
+          <!-- ================= 分发层 ================= -->
+          <rect x="20" y="154" width="124" height="304" rx="3" class="d-label-k"/>
+          <text x="82" y="300" text-anchor="middle" class="t-L">分发层</text>
+          <text x="82" y="319" text-anchor="middle" class="t-Le">DISPATCH</text>
+          <rect x="160" y="154" width="1320" height="304" rx="3" class="d-band"/>
+
+          <!-- 干预表 -->
+          <rect x="176" y="176" width="150" height="74" rx="4" class="d-box"/>
+          <text x="251" y="203" text-anchor="middle" class="t-h">干预表</text>
+          <text x="251" y="222" text-anchor="middle" class="t-s">精确匹配 · 规则</text>
+          <text x="251" y="239" text-anchor="middle" class="t-s">敏感词</text>
+          <rect x="286" y="166" width="38" height="17" rx="3" class="d-tag"/><text x="305" y="178.5" text-anchor="middle" class="t-cfg">配置</text>
+          <line x1="326" y1="213" x2="356" y2="213" class="d-flow" marker-end="url(#ah)"/>
+          <circle cx="341" cy="213" r="3" class="d-dot"/>
+
+          <!-- NLU3.0 并行 -->
+          <polyline points="341,213 341,345 328,345" class="d-flow" marker-end="url(#ah)"/>
+          <rect x="196" y="300" width="130" height="90" rx="4" class="d-key"/>
+          <text x="261" y="326" text-anchor="middle" class="t-h">NLU3.0 大模型</text>
+          <text x="261" y="346" text-anchor="middle" class="t-s">整句并行起跑</text>
+          <text x="261" y="364" text-anchor="middle" class="t-s">domain · intents</text>
+          <text x="261" y="381" text-anchor="middle" class="t-s">slots</text>
+
+          <!-- Jev -->
+          <rect x="356" y="170" width="480" height="232" rx="4" class="d-jev"/>
+          <rect x="356" y="170" width="480" height="36" rx="4" class="d-jband"/>
+          <rect x="356" y="190" width="480" height="16" class="d-jband"/>
+          <text x="372" y="194" class="t-jev">Jev 前置分流 · 一次请求并行判定</text>
+          <rect x="788" y="179" width="38" height="17" rx="3" class="d-tag"/><text x="807" y="191.5" text-anchor="middle" class="t-cfg">配置</text>
+
+          <text x="372" y="230" class="t-id">is_unsafe</text>
+          <text x="372" y="248" class="t-r">违法有害 → 安全拒答</text>
+          <text x="372" y="274" class="t-id">route</text>
+          <text x="372" y="292" class="t-r">NLU / Agent / 慢思考 / 闲聊</text>
+          <text x="372" y="318" class="t-id">domain</text>
+          <text x="372" y="336" class="t-r">19 个入口域 + 非入口</text>
+          <text x="372" y="362" class="t-id">agent_label</text>
+          <text x="372" y="380" class="t-r">10 个 Agent + 代办 + none</text>
+          <line x1="606" y1="216" x2="606" y2="392" class="d-sep"/>
+          <text x="620" y="230" class="t-id">segment_role[i]</text>
+          <text x="620" y="248" class="t-r">依赖 / 同任务 / 指令 / Agent / 残片</text>
+          <text x="620" y="274" class="t-id">needs_context</text>
+          <text x="620" y="292" class="t-r">依赖上一轮：追问 · 指代</text>
+          <text x="620" y="318" class="t-id">has_nickname</text>
+          <text x="620" y="336" class="t-r">俗称还原：大裤衩 · 周董</text>
+          <text x="620" y="370" class="t-s">多段时才问 segment_role</text>
+
+          <!-- Query 整理 -->
+          <line x1="836" y1="232" x2="856" y2="232" class="d-flow" marker-end="url(#ah)"/>
+          <rect x="856" y="170" width="180" height="150" rx="4" class="d-box"/>
+          <text x="946" y="194" text-anchor="middle" class="t-h">Query 整理</text>
+          <text x="868" y="216" class="t-r">俗称还原成标准名称</text>
+          <text x="868" y="236" class="t-r">用上一轮拼回指代</text>
+          <rect x="866" y="250" width="160" height="58" rx="3" class="d-box"/>
+          <text x="946" y="270" text-anchor="middle" class="t-xs">DeepSeek 改写</text>
+          <text x="946" y="286" text-anchor="middle" class="t-xs">回 Jev 重判一次</text>
+          <text x="946" y="301" text-anchor="middle" class="t-xs">（不再改写）</text>
+          <line x1="1036" y1="232" x2="1056" y2="232" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="836" y1="380" x2="1056" y2="380" class="d-flow" marker-end="url(#ah)"/>
+          <text x="946" y="373" text-anchor="middle" class="t-r">无需整理</text>
+
+          <!-- 分发策略 -->
+          <rect x="1056" y="170" width="360" height="232" rx="4" class="d-key"/>
+          <text x="1072" y="194" class="t-h">分发策略（代码 R0–R7）</text>
+          <rect x="1368" y="179" width="38" height="17" rx="3" class="d-tag"/><text x="1387" y="191.5" text-anchor="middle" class="t-cfg">配置</text>
+          <text x="1072" y="218" class="t-r">R0 安全命中 → 安全拒答</text>
+          <text x="1072" y="240" class="t-r">R1 会话占用 / 追问 → 交回原去向</text>
+          <text x="1072" y="262" class="t-r">R2 同一 Agent 的多段句 → 整句直达</text>
+          <text x="1072" y="284" class="t-r">　 跨能力多段 → 指令段 NLU，其余慢思考</text>
+          <text x="1072" y="306" class="t-r">R3 Agent 直达：双门槛 · 回退表</text>
+          <text x="1072" y="328" class="t-r">R4 NLU 直达：入口白名单 · 结构 · 域一致</text>
+          <text x="1072" y="350" class="t-r">　 落非入口域 → 回流对应 Agent</text>
+          <text x="1072" y="372" class="t-r">R5 闲聊 · R6 其余 → 慢思考</text>
+          <text x="1072" y="392" class="t-s">R7 快思考落域失败 / 被拒 → 慢思考（一次）</text>
+
+          <!-- NLU3.0 结果回传 -->
+          <polyline points="261,390 261,422 1150,422 1150,402" class="d-flow" marker-end="url(#ah)"/>
+          <text x="560" y="416" class="t-xs">NLU3.0 结果回传分发策略</text>
+          <!-- 干预命中旁路 -->
+          <polyline points="184,250 184,446 1300,446 1300,402" class="d-flow" marker-end="url(#ah)"/>
+          <text x="560" y="440" class="t-xs">干预命中 · 跳过 Jev</text>
+
+          <!-- 音频旁路 + 闸门 -->
+          <line x1="1440" y1="112" x2="1440" y2="504" class="d-audio" marker-end="url(#ah-blue)"/>
+          <circle cx="1440" cy="286" r="11" class="d-gate"/>
+          <line x1="1416" y1="286" x2="1427" y2="286" class="d-ctrl" marker-end="url(#ah-acc)"/>
+          <text x="1452" y="314" class="t-acc">开闸</text>
+
+          <!-- 分发总线 -->
+          <polyline points="1390,402 1390,476 306,476" class="d-flow"/>
+          <circle cx="692" cy="476" r="3" class="d-dot"/>
+          <circle cx="1058" cy="476" r="3" class="d-dot"/>
+          <circle cx="1242" cy="476" r="3" class="d-dot"/>
+          <line x1="306" y1="476" x2="306" y2="504" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="692" y1="476" x2="692" y2="504" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1058" y1="476" x2="1058" y2="504" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1242" y1="476" x2="1242" y2="504" class="d-flow" marker-end="url(#ah)"/>
+          <text x="1448" y="471" class="t-aud">chat</text>
+
+          <!-- ================= 落域出口 ================= -->
+          <rect x="20" y="492" width="124" height="180" rx="3" class="d-label-k"/>
+          <text x="82" y="578" text-anchor="middle" class="t-L">落域出口</text>
+          <text x="82" y="597" text-anchor="middle" class="t-Le">OUTPUT</text>
+          <rect x="160" y="492" width="1320" height="180" rx="3" class="d-band"/>
+
+          <!-- NLU 直达 -->
+          <rect x="176" y="504" width="260" height="156" rx="4" class="d-lane-k"/>
+          <text x="192" y="530" class="t-hk">NLU 直达</text>
+          <text x="192" y="552" class="t-b">19 个入口域</text>
+          <text x="192" y="574" class="t-s">交出：domain · intents · slots</text>
+          <text x="192" y="596" class="t-s">多意图、同功能多参数整句交出</text>
+          <text x="192" y="618" class="t-s">车控 · 点播 · 通讯 · 导航</text>
+          <text x="192" y="636" class="t-s">车家 · 生成 · 计算</text>
+
+          <!-- Agent 直达 -->
+          <rect x="452" y="504" width="480" height="156" rx="4" class="d-lane-k"/>
+          <text x="468" y="530" class="t-hk">Agent 直达</text>
+          <text x="916" y="530" text-anchor="end" class="t-s">交出：agent_label（经回退表）</text>
+          <rect x="468" y="544" width="70" height="30" rx="4" class="d-box"/><text x="503" y="564" text-anchor="middle" class="t-xs">新闻</text>
+          <rect x="544" y="544" width="70" height="30" rx="4" class="d-box"/><text x="579" y="564" text-anchor="middle" class="t-xs">天气</text>
+          <rect x="620" y="544" width="70" height="30" rx="4" class="d-box"/><text x="655" y="564" text-anchor="middle" class="t-xs">联网搜索</text>
+          <rect x="696" y="544" width="70" height="30" rx="4" class="d-box"/><text x="731" y="564" text-anchor="middle" class="t-xs">用车专家</text>
+          <rect x="772" y="544" width="70" height="30" rx="4" class="d-box"/><text x="807" y="564" text-anchor="middle" class="t-xs">任务大师</text>
+          <rect x="848" y="544" width="70" height="30" rx="4" class="d-box"/><text x="883" y="564" text-anchor="middle" class="t-xs">记忆</text>
+          <rect x="468" y="582" width="70" height="30" rx="4" class="d-box"/><text x="503" y="602" text-anchor="middle" class="t-xs">音乐</text>
+          <rect x="544" y="582" width="70" height="30" rx="4" class="d-box"/><text x="579" y="602" text-anchor="middle" class="t-xs">影视</text>
+          <rect x="620" y="582" width="70" height="30" rx="4" class="d-box"/><text x="655" y="602" text-anchor="middle" class="t-xs">出行导航</text>
+          <rect x="696" y="582" width="70" height="30" rx="4" class="d-box"/><text x="731" y="602" text-anchor="middle" class="t-xs">自适应车控</text>
+          <rect x="772" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="807" y="602" text-anchor="middle" class="t-xs">代办点单</text>
+          <rect x="848" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="883" y="602" text-anchor="middle" class="t-xs">400 客服</text>
+          <text x="468" y="636" class="t-s">新闻、天气未接入 → 联网搜索；代办点单 shadow 时落慢思考</text>
+
+          <!-- 慢思考 -->
+          <rect x="948" y="504" width="220" height="156" rx="4" class="d-lane"/>
+          <text x="964" y="530" class="t-lane">慢思考</text>
+          <text x="964" y="552" class="t-s">交出：route = slow</text>
+          <text x="964" y="572" class="t-s">片段组 + 提示</text>
+          <text x="964" y="592" class="t-s">（Agent 标签、NLU 结果、</text>
+          <text x="964" y="610" class="t-s">已落域的指令片段）</text>
+          <text x="964" y="636" class="t-s">跨能力有依赖 · 快思考落域失败</text>
+
+          <!-- 安全拒答 -->
+          <rect x="1184" y="504" width="116" height="156" rx="4" class="d-key"/>
+          <text x="1242" y="530" text-anchor="middle" class="t-h">安全拒答</text>
+          <text x="1242" y="552" text-anchor="middle" class="t-s">交出：safe</text>
+          <text x="1242" y="572" text-anchor="middle" class="t-s">命中来源</text>
+          <text x="1242" y="590" text-anchor="middle" class="t-s">（Jev / 敏感词）</text>
+
+          <!-- 闲聊 -->
+          <rect x="1316" y="504" width="148" height="156" rx="4" class="d-lane"/>
+          <text x="1330" y="530" class="t-lane">闲聊</text>
+          <text x="1330" y="552" class="t-s">放行本轮音频</text>
+          <text x="1330" y="572" class="t-s">到端到端语音</text>
+          <text x="1330" y="596" class="t-s">追问跟随上一轮</text>
+          <text x="1330" y="636" class="t-s">不落域 · 不整理</text>
+
+          <!-- ================= 下游（范围外） ================= -->
+          <line x1="306" y1="660" x2="306" y2="704" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="692" y1="660" x2="692" y2="704" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1058" y1="660" x2="1058" y2="704" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1242" y1="660" x2="1242" y2="704" class="d-flow" marker-end="url(#ah)"/>
+          <line x1="1440" y1="660" x2="1440" y2="704" class="d-audio" marker-end="url(#ah-blue)"/>
+
+          <rect x="20" y="704" width="124" height="76" rx="3" class="d-plan"/>
+          <text x="82" y="738" text-anchor="middle" class="t-h">业务侧</text>
+          <text x="82" y="757" text-anchor="middle" class="t-tag">范围外</text>
+          <rect x="160" y="704" width="1320" height="76" rx="3" class="d-plan"/>
+          <text x="306" y="734" text-anchor="middle" class="t-b">NLU 执行</text>
+          <text x="692" y="734" text-anchor="middle" class="t-b">各 Agent 业务</text>
+          <text x="1058" y="734" text-anchor="middle" class="t-b">慢思考 Agentic Loop</text>
+          <text x="1242" y="734" text-anchor="middle" class="t-b">拒答播报</text>
+          <text x="1390" y="734" text-anchor="middle" class="t-b">S2S</text>
+          <text x="820" y="764" text-anchor="middle" class="t-s">执行、仲裁、Command 下发和回复都由业务侧负责；业务侧回传会话状态（continue / end）和落域被拒，被拒的由分发改落慢思考一次</text>
+
+          <!-- 状态回传 -->
+          <polyline points="1472,742 1488,742 1488,40 780,40 780,56" class="d-pflow" marker-end="url(#ah-plan)"/>
+        </svg>
+      </div>
+      <figcaption><b>本架构只负责分发和落域</b>：输入是 ASR 文本、会话状态和车辆状态，输出是去向和落域结果（NLU 的 domain / intents / slots、agent_label、慢思考片段组、安全拒答标记、闲聊音频放行）。出口之后的执行、仲裁、Command 下发和回复都属于业务侧，不在本架构范围；分发只依赖业务侧回传的会话状态。</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>相对 V1.0 的变化</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>项</th><th>V1.0（10-26 草案）</th><th>V2.0（本稿）</th></tr></thead>
+      <tbody>
+        <tr><td class="br">范围</td><td>接入、分发、Agent 大脑、仲裁、Command 五层，含业务执行</td><td><b>只含接入输入和分发落域</b>；大脑执行、仲裁、Command 下发归业务侧，分发只依赖业务侧回传的会话状态</td></tr>
+        <tr><td class="br">NLU</td><td>现有 NLU 本期在用，NLU3.0 接入后替换；在快思考层串行调用</td><td><b>本期接 NLU3.0</b>，在分发层与 Jev 整句并行起跑；NLU 直达只落 19 个入口域</td></tr>
+        <tr><td class="br">Agent 直达</td><td>用车、400 客服、联网查询、三方生态（示例）</td><td>10 个上线：新闻、天气、联网搜索、用车专家、任务大师、记忆、音乐、影视、出行导航、自适应车控；代办点单 shadow；新闻、天气未接入时回退联网搜索</td></tr>
+        <tr><td class="br">慢思考范围</td><td>有依赖的多步任务、条件任务、任务大师、多日行程</td><td>只收跨能力且有依赖的多任务，以及 NLU3.0 接不住、又没有 Agent 能直达的句子。条件任务、行程、记忆调用都改为 Agent 直达</td></tr>
+        <tr><td class="br">domain 一致性</td><td>在仲裁层，执行后裁决；“以置信更高的为准”</td><td>在分发层，<b>落域前</b>校验；NLU3.0 不输出置信度，用 Jev 给 NLU 所选域的概率判断</td></tr>
+        <tr><td class="br">route 置信低</td><td>NLU 落域兜底</td><td>看 NLU3.0 能否接住：入口域、结构完整、域一致才落 NLU，否则慢思考</td></tr>
+        <tr><td class="br">Jev 问题</td><td>route、domain（45+none）、agent_label、segment_role（三类）、needs_rewrite、referent</td><td>is_unsafe、route、domain（19+非入口）、agent_label、segment_role（五类）、needs_context、has_nickname</td></tr>
+        <tr><td class="br">会话</td><td>只有“上轮闲聊且追问 → 跟随闲聊”</td><td>加上慢思考占用、Agent 进行中（continue）交回同一 Agent、Agent 已结束但本轮依赖上文也交回</td></tr>
+        <tr><td class="br">安全</td><td>无</td><td>is_unsafe + 干预表敏感词 → 安全拒答，优先于所有去向</td></tr>
+        <tr><td class="br">时延目标</td><td>快思考整体 ≤ 800ms（含执行）</td><td>只约束分流落域 ≤ 800ms；执行和回复时延归业务侧</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Jev 的一次请求</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>问题</th><th>类型</th><th>问什么</th><th>代码怎么用</th></tr></thead>
+      <tbody>
+        <tr><td><code>is_unsafe</code></td><td class="nw">Noul</td><td class="q">是否在求助违法犯罪、暴力伤害、毒品、自残等有害内容</td><td>达到阈值直接安全拒答，优先于所有去向</td></tr>
+        <tr><td><code>route</code></td><td class="nw">Choice · 4 选 1</td><td class="q">NLU 直达 / Agent 直达 / 慢思考 / 闲聊</td><td>读最高项和置信；N 个选项时 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code></td></tr>
+        <tr><td><code>domain</code></td><td class="nw">Choice · 19 + 非入口</td><td class="q">属于 19 个 NLU 入口域中的哪个</td><td>与 NLU3.0 的 domain 做一致性校验；NLU 无置信度，这是校验 NLU 结果的唯一依据</td></tr>
+        <tr><td><code>agent_label</code></td><td class="nw">Choice · N + none</td><td class="q">该交给哪个 Agent（10 个 + 代办点单 + 400 客服）</td><td>Agent 直达时读；NLU 落非入口域需要回流时，读对应 Agent 的概率</td></tr>
+        <tr><td><code>segment_role[i]</code></td><td class="nw">Choice × 片段数</td><td class="q">有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片</td><td>只在按强分隔切出 ≥ 2 段时问</td></tr>
+        <tr><td><code>needs_context</code></td><td class="nw">Noul</td><td class="q">是否要靠上一轮才能理解（追问、指代、省略）</td><td>触发会话跟随或拼回指代</td></tr>
+        <tr><td><code>has_nickname</code></td><td class="nw">Noul</td><td class="q">是否有要还原的俗称、外号、简称</td><td>DeepSeek 还原后重判；不触发会话跟随</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">同一请求里的问题并行判定，多加问题对时延影响很小。domain 从 45+1 个选项减到 20 个，减轻“偏向前排选项”的影响。Choice 的调用方式和稳定性需先用冒烟集验证，不行时 route 改为 4 道 Noul。</p>
+  </section>
+
+  <section>
+    <h2>分发策略</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>规则</th><th>条件</th><th>去向</th></tr></thead>
+      <tbody>
+        <tr><td class="br">R0 安全</td><td>is_unsafe 达到阈值，或干预表敏感词命中</td><td><span class="pill rw">安全拒答</span></td></tr>
+        <tr><td class="br">R1 会话</td><td>慢思考占用会话；上一轮 Agent 返回 continue；上一轮 Agent 已结束而本轮 needs_context 为真且不是新指令；上一轮闲聊且是追问</td><td><span class="pill slow">慢思考</span> / <span class="pill agent">同一 Agent</span> / <span class="pill chat">闲聊</span></td></tr>
+        <tr><td class="br">R2 多段</td><td>整句是同一个 Agent 的请求（先去 A 再去 B）→ 整句直达；否则全是指令 → 整句交 NLU3.0；混有 Agent 类或依赖片段 → 指令段 NLU 直达，其余进慢思考</td><td><span class="pill agent">Agent</span> / <span class="pill nlu">NLU</span> / 拆分</td></tr>
+        <tr><td class="br">R3 Agent 直达</td><td>route = Agent 且 route、label 置信都过门槛；按回退表（新闻、天气 → 联网搜索）；shadow 的 label 进慢思考</td><td><span class="pill agent">Agent 直达</span>，不过门槛则 <span class="pill slow">慢思考</span> 带提示</td></tr>
+        <tr><td class="br">R4 NLU 直达</td><td>route = NLU，或在 NLU 与慢思考之间拿不准。每个 intent：在 19 个入口域内、不是 other、intent 和必填槽位齐全、与 Jev 的 domain 一致（或 Jev 给该域概率够高）。落非入口域 → 回流对应 Agent；other → 改写重判一次</td><td><span class="pill nlu">NLU 直达</span> / <span class="pill agent">回流 Agent</span> / <span class="pill slow">慢思考</span></td></tr>
+        <tr><td class="br">R5 闲聊</td><td>route = 闲聊且置信过门槛</td><td><span class="pill chat">闲聊</span></td></tr>
+        <tr><td class="br">R6 剩余</td><td>以上都不满足</td><td><span class="pill slow">慢思考</span>，带 Agent 标签和 NLU 结果作提示</td></tr>
+        <tr><td class="br">R7 落域失败</td><td>快思考落域失败转慢思考，分两种：① <b>落域前</b>——R3 门槛不过、R4 的结构 / 域一致 / 回流检查不过、other 改写重判后仍接不住；② <b>落域后被拒</b>——业务侧回传“不支持 / 不归我”（NLU 执行层不支持该 intent，Agent 判定请求不属于自己）。被拒的同一句只改落慢思考一次，不再回分流，避免来回弹</td><td><span class="pill slow">慢思考</span>，带原落域结果和被拒原因作提示</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">阈值、入口白名单、域 → Agent 回流表、label 回退表、各 Agent 的 on / shadow / off 都放云端配置中心。止血：分钟级加干预表或把 label 切到 shadow；小时级改判据、回放、灰度。</p>
+  </section>
+
+  <section>
+    <h2>本期去向一览</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>去向</th><th>收什么</th><th>例</th></tr></thead>
+      <tbody>
+        <tr><td class="br">NLU 直达<small>19 个入口域</small></td><td><div class="chips"><code>intelligent_car_control</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>audio_book</code><code>short_video</code><code>changba</code><code>KTV</code><code>phone_call</code><code>wechat_on_car</code><code>app_call</code><code>navigation</code><code>home_agent</code><code>wallpaper</code><code>theme_gen</code><code>painting</code><code>calculator</code></div><p class="note">说清楚的指令：车控、说出名字或风格的点播和播放控制、电话微信、导航去说得出名字的地点和导航控制、车家、生成、计算。多意图和同功能多参数整句落域。</p></td><td class="muted">关闭前挡风玻璃加热；放一首稻香；导航到天安门；打开座椅通风座椅按摩</td></tr>
+        <tr><td class="br">新闻</td><td>和新闻相关的都收：热点、领域新闻、事件进展、播放新闻。未接入时回退联网搜索</td><td class="muted">最新的科技新闻</td></tr>
+        <tr><td class="br">天气</td><td>天气、温度、下雨、空气质量、靠天气判断的生活指数。未接入时回退联网搜索</td><td class="muted">明天苏州下雨吗；这两天适合洗车吗</td></tr>
+        <tr><td class="br">联网搜索</td><td>与新闻无关的即时信息（日期、股票、航班火车、限行），与用车无关的知识问答</td><td class="muted">今天星期几；北汽蓝谷股价；四大名著有哪些</td></tr>
+        <tr><td class="br">用车专家</td><td>用车相关的都收：功能、配置、故障、标准值、状态询问、汽车常识</td><td class="muted">胎压报警灯亮了是怎么回事；后备箱关好了吗</td></tr>
+        <tr><td class="br">任务大师</td><td>条件任务（含只提醒用户的）、长期规则、多模态触发</td><td class="muted">后天两点导航到火车站；每周一八点提醒我交周报</td></tr>
+        <tr><td class="br">记忆</td><td>记住个人信息、查询记住的内容、按记忆执行</td><td class="muted">帮我记住我常听爵士；播放我常听的专辑</td></tr>
+        <tr><td class="br">音乐 / 影视</td><td>按描述找歌找片、相似推荐、歌词找歌、歌曲影视问答、演员作品</td><td class="muted">来点适合夜里开车的歌；成龙主演的电影有哪些</td></tr>
+        <tr><td class="br">出行导航</td><td>找店找景点、条件推荐、地点问答、描述找地点、多地点路线、行程规划、出发时间推算</td><td class="muted">附近人均 80 以下的自助餐；先去橘子洲头再去岳麓书院</td></tr>
+        <tr><td class="br">自适应车控</td><td>只说感受或环境、要推断怎么调车</td><td class="muted">好冷啊；车里像烤箱</td></tr>
+        <tr><td class="br">慢思考</td><td>跨能力且有依赖的多任务；快思考落域失败的（落域前检查不过，或落域后被业务侧拒收）</td><td class="muted">打电话给小李说聚餐地点定在渔人码头然后导航过去</td></tr>
+        <tr><td class="br">闲聊</td><td>没有任务目标：讲故事、陪聊、情绪表达、写诗；饿渴困累这类车控满足不了的诉求</td><td class="muted">给甜甜讲首故事；（闲聊中）那后来呢</td></tr>
+        <tr><td class="br">安全拒答</td><td>违法有害请求</td><td class="muted">怎么买到海洛因</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>NLU3.0 45 个域的去向</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>去向</th><th>domain</th><th>数量</th></tr></thead>
+      <tbody>
+        <tr><td class="br">NLU 直达（入口）</td><td><div class="chips"><code>intelligent_car_control</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>audio_book</code><code>short_video</code><code>changba</code><code>KTV</code><code>phone_call</code><code>wechat_on_car</code><code>app_call</code><code>navigation</code><code>home_agent</code><code>wallpaper</code><code>theme_gen</code><code>painting</code><code>calculator</code></div></td><td class="num">19</td></tr>
+        <tr><td class="br">回流 · 天气</td><td><div class="chips"><code>weather_xf</code><code>life_suggestion</code></div></td><td class="num">2</td></tr>
+        <tr><td class="br">回流 · 新闻</td><td><div class="chips"><code>news</code></div></td><td class="num">1</td></tr>
+        <tr><td class="br">回流 · 联网搜索</td><td><div class="chips"><code>stock</code><code>flight</code><code>train</code><code>traffic_restriction</code><code>datetime_info</code></div></td><td class="num">5</td></tr>
+        <tr><td class="br">回流 · 用车专家</td><td><div class="chips"><code>help</code><code>intelligent_car_info</code></div></td><td class="num">2</td></tr>
+        <tr><td class="br">回流 · 音乐 / 影视</td><td><div class="chips"><code>music_qa</code><code>video_qa</code></div></td><td class="num">2</td></tr>
+        <tr><td class="br">回流 · 出行导航</td><td><div class="chips"><code>poi_recommend</code><code>view_poi_recommend</code><code>view_poi_introduction</code><code>similar_poi</code><code>outgoing_eta</code><code>travel_plan</code></div></td><td class="num">6</td></tr>
+        <tr><td class="br">回流 · 自适应车控</td><td><div class="chips"><code>intelligent_car_scenario</code></div></td><td class="num">1</td></tr>
+        <tr><td class="br">回流 · 任务大师</td><td><div class="chips"><code>reminder</code><code>task_setting</code></div></td><td class="num">2</td></tr>
+        <tr><td class="br">回流 · 代办点单</td><td><div class="chips"><code>agent_task</code><code>app_agent</code></div><p class="note">shadow 期间等同进慢思考</p></td><td class="num">2</td></tr>
+        <tr><td class="br">其他</td><td><div class="chips"><code>chat</code><code>other</code><code>outside_qa</code></div><p class="note">chat → 闲聊；other → 改写重判一次，仍是 other 进慢思考；outside_qa（车外问答，要车外画面）本期进慢思考</p></td><td class="num">3</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">“回流”：NLU3.0 落到这些域时不落 NLU，改落对应 Agent；前提是 Jev 也给了该 Agent 一定概率，否则带提示进慢思考。这些域在 NLU3.0 里保留，只做兜底。</p>
+  </section>
+
+  <section>
+    <h2>时延目标</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>路径</th><th>串行环节</th><th>目标</th></tr></thead>
+      <tbody>
+        <tr><td class="br">一次分流</td><td>干预表 → max(Jev, NLU3.0) → 分发策略</td><td>p90 ≤ 800ms</td></tr>
+        <tr><td class="br">需要改写</td><td>一次分流 + DeepSeek 改写 + Jev 重判</td><td>另计，按实测标定；会话跟随（Agent 追问）不改写，不走这条</td></tr>
+        <tr><td class="br">干预命中</td><td>干预表</td><td>不调 Jev，毫秒级</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Agent、慢思考、闲聊的响应时延由业务侧负责，不在本架构的指标内。</p>
+  </section>
+
+  <section>
+    <h2>分流示例</h2>
+    <div class="tscroll"><table>
+      <thead><tr><th>上一轮</th><th>本轮 query</th><th>判定</th><th>去向</th></tr></thead>
+      <tbody>
+        <tr><td class="ctx">无</td><td>关闭前挡风玻璃加热</td><td><span class="pill nlu">NLU 直达</span> <code>intelligent_car_control</code></td><td>交出 domain + intent + slots</td></tr>
+        <tr><td class="ctx">无</td><td>打开座椅通风座椅按摩</td><td><span class="pill nlu">NLU 直达</span> 两个 intent</td><td>整句交出两个 intent</td></tr>
+        <tr><td class="ctx">无</td><td>明天苏州天气怎么样</td><td><span class="pill agent">Agent 直达</span> 天气</td><td>落天气；未接入时回退联网搜索</td></tr>
+        <tr><td class="ctx">无</td><td>胎压报警灯亮了是怎么回事</td><td><span class="pill agent">Agent 直达</span> 用车专家</td><td>落用车专家</td></tr>
+        <tr><td class="ctx">无</td><td>明天下午三点提醒我去取快递</td><td><span class="pill agent">Agent 直达</span> 任务大师</td><td>落任务大师（条件任务含纯提醒）</td></tr>
+        <tr><td class="ctx">无</td><td>先去长沙橘子洲头，再去岳麓书院</td><td><span class="pill agent">Agent 直达</span> 出行导航</td><td>R2：同一 Agent 的多段句整句直达</td></tr>
+        <tr><td class="ctx">无</td><td>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td><td>指令 · 指令 · 有依赖</td><td>前两段落 NLU；第 3 段连同前段结果作提示落慢思考</td></tr>
+        <tr><td class="ctx">无</td><td>打开空调，今天天气怎么样</td><td>指令 · Agent 类</td><td>“打开空调”落 NLU；第 2 段落慢思考（提示：天气）</td></tr>
+        <tr><td class="ctx">Jev 误判为 NLU</td><td>明天限行尾号是多少</td><td>NLU3.0 落 <code>traffic_restriction</code></td><td>非入口域，回流落联网搜索</td></tr>
+        <tr><td class="ctx">出行导航（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context</td><td>R1 落回出行导航，不改写</td></tr>
+        <tr><td class="ctx">空调调到 24 度</td><td>再高一点</td><td>needs_context</td><td>拼回“空调温度再调高一点”，落 NLU</td></tr>
+        <tr><td class="ctx">新闻</td><td>打开空调</td><td>新指令</td><td>不跟随上一轮，落 NLU</td></tr>
+        <tr><td class="ctx">无</td><td>导航到大裤衩</td><td>has_nickname</td><td>还原为中央电视台总部大楼后重判，落 NLU</td></tr>
+        <tr><td class="ctx">闲聊中</td><td>那后来呢</td><td><span class="pill chat">闲聊</span> 追问</td><td>跟随上一轮，开闸放行音频</td></tr>
+        <tr><td class="ctx">无</td><td>帮我把副驾的香氛换成雪松味</td><td>落 NLU，执行层回传“不支持该 intent”</td><td>R7 落域被拒，改落慢思考一次</td></tr>
+        <tr><td class="ctx">无</td><td>怎么买到海洛因</td><td>is_unsafe</td><td>交出 safe</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>已定与待定</h2>
+    <div class="open">
+      <div><h3>已定 · 归属规则</h3><p>大模型 agent 业务标签都走 Agent 直达；新闻相关 → 新闻；天气 → 天气；其余即时信息和非用车知识问答 → 联网搜索；用车相关 → 用车专家；条件任务 → 任务大师；记忆调用 → 记忆；有情知音按闲聊处理。</p></div>
+      <div><h3>已定 · NLU3.0</h3><p>本期接入；<b>19 个入口域</b>；不输出置信度，用结构信号和 Jev 的 domain 分布校验；能识别无标点多意图和同功能多参数。</p></div>
+      <div><h3>已定 · 架构补充</h3><p>安全拒答、Agent 会话跟随、非入口域回流、domain 校验前移到分发层、片段角色五类、改写拆成“依赖上文”和“俗称”两道。</p></div>
+      <div><h3>待定 · NLU3.0 接口</h3><p>批量调用或离线结果、<b>各 intent 必填槽位表</b>、接不住时是否固定落 other。</p></div>
+      <div><h3>待定 · Choice 可用性</h3><p>Jev 的 Choice 调用方式、选项偏序、时延要先用冒烟集验证；不稳时 route 改为 4 道 Noul。</p></div>
+            <div><h3>待定 · 两处归属</h3><p>车况纯读数（还剩多少油）暂归用车专家；车外问答 <code>outside_qa</code> 本期进慢思考。</p></div>
+      <div><h3>待定 · 标签集变更</h3><p>代办点单 shadow 期间落慢思考；400 客服、三方生态 Agent 接入后加 agent_label 和判据。</p></div>
+      <div><h3>待定 · 部署与合规</h3><p>Jev 只提供云端 API，量产前要确认网络、时延和合规；配置中心承载判据、阈值、干预表和回流表。</p></div>
+      <div><h3>待定 · 回传接口</h3><p>业务侧回传 continue / end 和“落域被拒”的格式和时机。已定：被拒的由分发改落慢思考一次；业务内部的执行故障（服务超时等）由业务侧自己处理，不算落域失败。</p></div>
+    </div>
+  </section>
+
+  <p class="src">本架构的边界：输入是 ASR 文本、会话状态和车辆状态，输出是去向和落域结果。详细规则见 design/Jev 分流详细设计（v2）；数据、映射和验收见 design/Jev 分流测试方案（v2.3）。NLU 域清单取自《车机 NLU3.0 大模型支持 Domain 清单（v13）》。V1.0 保留在 docs/Jev 分流融合架构-v5.html。分层判定方案（V6，已搁置）在 docs/archive/Jev 分流融合架构-v6-分层判定（搁置）.html。</p>
+
+</div>
+
+</body></html>
