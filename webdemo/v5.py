@@ -413,7 +413,8 @@ async def run_once(query: str, sid: str, opts: dict) -> dict:
     prev = {k: last.get(k) for k in ("query", "route", "agent", "status")} if last else None
     bid = opts.get("backend") or "jev"
     if bid not in _S["backends"]:
-        raise ValueError(f"未知的后端 {bid}；可选 {list(_S['backends'])}")
+        raise ValueError(f"后端 {bid} 未开启或不存在；可选 {list(_S['backends'])}"
+                         + ("。StartLux 默认关闭，设 STARTLUX_ENABLED=1 后重启服务" if bid == "startlux" else ""))
     be = _S["backends"][bid]
     reverse = bool(opts.get("reverse"))
     prompts = check_prompts(opts["prompts"]) if opts.get("prompts") else None
@@ -650,6 +651,10 @@ async def batch(req: BatchReq):
     async def one(i, item):
         async with sem:
             out = {"index": i, "item": item.model_dump()}
+            if req.compare and "startlux" not in _S["backends"]:
+                out["error"] = "StartLux 未开启（STARTLUX_ENABLED=1 后重启服务），不能对比"
+                await q.put(json.dumps(out, ensure_ascii=False))
+                return
             if req.compare:
                 async def by(bid):
                     sid = f"b-{bid}-{uuid.uuid4().hex[:8]}"
@@ -699,11 +704,14 @@ async def start(llm=None):
     model = crit()["model"]
     _S["jev"] = RealJev(model) if os.environ.get("TYPESAFE_API_KEY") else MockJev()
     await _S["jev"].start()
-    # StartLux：与 System One 兼容的自部署服务，同一 SDK 换 base_url；STARTLUX_URL 可覆盖
-    sl = RealJev(os.environ.get("STARTLUX_MODEL", "startlux"), base_url=os.environ.get("STARTLUX_URL", "http://81.70.90.78:8090"),
-                 api_key=os.environ.get("STARTLUX_API_KEY"), name="StartLux", billed=False)
-    await sl.start()
-    _S["backends"] = {"jev": _S["jev"], "startlux": sl}
+    _S["backends"] = {"jev": _S["jev"]}
+    # StartLux：与 System One 兼容的自部署服务，同一 SDK 换 base_url。默认关闭，先按 Jev 做原型；
+    # STARTLUX_ENABLED=1 打开，STARTLUX_URL 指定地址（默认自部署实例），STARTLUX_API_KEY 可选。
+    if os.environ.get("STARTLUX_ENABLED", "").lower() in ("1", "true", "yes", "on"):
+        sl = RealJev(os.environ.get("STARTLUX_MODEL", "startlux"), base_url=os.environ.get("STARTLUX_URL", "http://81.70.90.78:8090"),
+                     api_key=os.environ.get("STARTLUX_API_KEY"), name="StartLux", billed=False)
+        await sl.start()
+        _S["backends"]["startlux"] = sl
     _S["nlu"] = NLU3()
     _S["llm"] = llm
 
