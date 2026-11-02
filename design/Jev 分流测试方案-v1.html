@@ -89,7 +89,7 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
   <h1>Jev 分流测试方案</h1>
   <p class="sub">以 data/一阶分发业务labels 的 17 个业务标签为主数据、data/快思考测试集为 NLU 侧和多轮补充，验证《Jev 分流详细设计 v2》</p>
   <div class="meta">
-    <span>评审稿 v2.3</span><span>2026-10-28</span><span>配套：design/Jev 分流详细设计-v1.html（v2）</span><span>状态：待评审</span>
+    <span>评审稿 v2.6</span><span>2026-11-02</span><span>配套：design/Jev 分流详细设计-v1.html（v2.3）、判据 v3.5</span><span>状态：待评审</span>
   </div>
 </header>
 
@@ -113,15 +113,16 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
 <!-- 1 -->
 <section id="s1">
   <h2><span class="no">01</span>测试目标和范围</h2>
+  <div class="callout warn"><b>输入口径（11-02）：</b>真实输入是 ASR 文本，<b>没有标点</b>。评测集的 query 一律去掉标点后再跑（原文保留在 <code>query_raw</code>）；带标点的原句只在 T9 作对照。片段切分在无标点时只靠“然后、再、之后、顺便”等连接词，多数句子切不开，依赖判断主要看 <code>has_dependency</code>。</div>
   <ol>
     <li><b>Agent 直达准不准</b>：直达到的 Agent 对不对（精确率优先），该直达的有多少被直达（召回）；各 Agent 之间会不会互相抢（如闲聊知识题被判成用车专家）。</li>
     <li><b>NLU 直达安不安全</b>：直达执行的句子是不是 NLU3.0 真能接住；该进慢思考或 Agent 的有没有被直达执行。</li>
-    <li><b>多指令和多轮对不对</b>：一语多意图（含无标点）能否整句交 NLU3.0 直达，混有 Agent 类或有依赖片段的能否进慢思考；Agent 追问能否交回同一 Agent；多轮里是否被上一轮带偏。</li>
-    <li><b>时延、稳定性和安全</b>：分流耗时；同一句重复判、选项乱序、唤醒词、去标点下是否一致；违法有害请求不被送去联网搜索。</li>
+    <li><b>多指令和多轮对不对</b>：一语多意图（含无标点）能否整句交 NLU3.0 直达，有依赖的多任务能否整句进慢思考、互不依赖混有 Agent 类的能否正确拆开；Agent 追问能否交回同一 Agent；多轮里是否被上一轮带偏。</li>
+    <li><b>时延、稳定性和安全</b>：分流耗时；同一句重复判、选项乱序、唤醒词、加标点 / 去标点下是否一致；违法有害请求不被送去联网搜索。</li>
   </ol>
   <div class="tablewrap"><table>
     <tr><th>在范围内</th><th>不在范围内</th></tr>
-    <tr><td>Jev 一次请求的六个问题（含 is_unsafe）；分发策略 R0–R7（含快思考落域失败转慢思考）；NLU 入口白名单和非入口域回流；NLU3.0 结构兜底；label 回退（新闻、天气 → 联网搜索）；改写后重判；会话跟随（闲聊追问、Agent 追问）</td><td>各 Agent 的答案质量；NLU3.0 的 intent / slots 准确率；慢思考大脑的规划质量；S2S 闲聊和安全拒答的回复质量。这些各有自己的功能达标测试集</td></tr>
+    <tr><td>Jev 一次请求的问题（6 道固定题含 is_unsafe、has_dependency，加能切开时的片段角色）；分发策略 R0–R7（含快思考落域失败转慢思考）；NLU 入口白名单（A 类 12 个域）和 B 类域回流；NLU3.0 结构兜底；label 回退（出行规划未上线 → 联网搜索，其余未上线 → 慢思考）；改写后重判；会话跟随（闲聊追问、Agent 追问）</td><td>各 Agent 的答案质量；NLU3.0 的 intent / slots 准确率；慢思考大脑的规划质量；S2S 闲聊和安全拒答的回复质量。这些各有自己的功能达标测试集</td></tr>
   </table></div>
 </section>
 
@@ -151,7 +152,7 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
     <tr><td>12</td><td>中枢复杂多任务</td><td class="num">518</td><td><span class="bar" style="width:2%"></span> 2.0%</td><td>多任务里有查询、推断、定时或依赖</td><td class="num">—</td></tr>
     <tr><td>18</td><td>同功能多参数</td><td class="num">386</td><td><span class="bar" style="width:1.5%"></span> 1.5%</td><td>一个功能多个参数（空调 22 度风量 2 挡）；约 50 句带时间</td><td class="num">—</td></tr>
     <tr><td>16</td><td>基础语控</td><td class="num">228</td><td><span class="bar" style="width:0.9%"></span> 0.9%</td><td>打开关闭设置页和开关；约 18 句是指代（播放第 2 个、帮我播放它）</td><td class="num">—</td></tr>
-    <tr><td>14</td><td>车控模糊意图</td><td class="num">188</td><td><span class="bar" style="width:0.7%"></span> 0.7%</td><td>自适应车控（好冷啊、车里像烤箱、空气味道真怪）</td><td class="num">—</td></tr>
+    <tr><td>14</td><td>车控模糊意图</td><td class="num">188</td><td><span class="bar" style="width:0.7%"></span> 0.7%</td><td>隐含车控（好冷啊、车里像烤箱、空气味道真怪）</td><td class="num">—</td></tr>
     <tr><td>13</td><td>中枢简单任务</td><td class="num">108</td><td><span class="bar" style="width:0.4%"></span> 0.4%</td><td>两条以上互不依赖的普通指令</td><td class="num">—</td></tr>
     <tr><td>99</td><td>剔除清单</td><td class="num">148</td><td>—</td><td>饿渴困累 73、打开新闻应用 25、与中枢简单重复 22、视野实景指代 15、纯车控 6、日程待办 6</td><td class="num">—</td></tr>
   </table></div>
@@ -166,17 +167,18 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
     <li><b>业务标签层</b>（稳定）：<code>biz_label</code>（17 个之一）+ <code>sub_label</code>（原子标签或本方案细分的子类，如闲聊下的“知识问答”）。由业务标注给出，必要时人工细分。</li>
     <li><b>去向映射层</b>（可配置）：<code>route_map.yaml</code> 把 (biz_label, sub_label) 映射为 <code>gold_route</code>、<code>gold_agent_label</code> 和 <code>acceptable</code>。</li>
   </ol>
-  <div class="callout ok"><b>好处：</b>归属规则以后再调整（比如某个 Agent 暂不上线、改回 NLU），只改映射表、重新生成，不用重标一句。新闻 Agent 回退到联网搜索也写在映射表里。</div>
+  <div class="callout ok"><b>好处：</b>归属规则以后再调整（比如某个 Agent 暂不上线、改回 NLU），只改映射表、重新生成，不用重标一句。<br><b>口径：</b>gold_agent_label 是 Jev 该判给的 Agent，<b>不管它是否已上线</b>；规划中的 Agent 未上线时实际去了回退 Agent 或慢思考，评测仍按判给的 Agent 计分（测试页 /v5 的批量也按这个口径）。</div>
 <pre># route_map.yaml（节选）
-新闻agent:            {route: agent, label: 新闻, acceptable: [agent:联网搜索]}   # 新闻 Agent 未接入时回退
-天气(基础车控/天气):    {route: agent, label: 天气, acceptable: [agent:联网搜索]}   # 天气 Agent 未接入时回退
-闲聊/闲聊_天气:        {route: agent, label: 天气, acceptable: [agent:联网搜索]}
-用车agent:            {route: agent, label: 用车专家}
+新闻agent:            {route: agent, label: 联网搜索}            # 信息查询都归联网搜索（11-02）
+天气(基础车控/天气):    {route: agent, label: 联网搜索}
+闲聊/闲聊_天气:        {route: agent, label: 联网搜索}
+用车agent:            {route: agent, label: 用车专家, acceptable: [nlu:intelligent_car_info]}   # 状态询问是 A 类车况查询
 闲聊/知识问答:         {route: agent, label: 联网搜索}
 闲聊/汽车相关:         {route: agent, label: 用车专家, acceptable: [agent:联网搜索]}
 闲聊/观点陪聊:         {route: chat}
 条件任务/纯提醒:       {route: agent, label: 任务大师}
-音乐agent:            {route: agent, label: 音乐, acceptable: [nlu:music]}   # 只有入口域可作可接受
+音乐agent:            {route: nlu, domain: music, acceptable: [agent:联网搜索]}   # 点播是 A 类；歌曲问答归联网搜索
+车控模糊意图:          {route: nlu, domain: intelligent_car_scenario}
 有情知音:             {同闲聊}</pre>
   <p><code>gold_route</code> 取值：<code>nlu</code> / <code>agent</code> / <code>slow</code> / <code>chat</code> / <code>safe</code>（安全拒答）/ <code>split</code>（指令片段走 NLU、其余进慢思考，片段级去向写在 <code>segments</code> 里）。split 句按片段计分：指令片段要 NLU 直达，有依赖或 Agent 类片段要进慢思考；慢思考漏判只统计后者被直达执行的情况。</p>
   <p>判对的口径：去向和 label 都等于 gold 记为<b>正确</b>；落在 acceptable 记为<b>降级</b>（不算错，单独统计）；其余记为<b>错误</b>。</p>
@@ -185,41 +187,41 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
 <!-- 4 -->
 <section id="s4">
   <h2><span class="no">04</span>业务标签 → v5 去向映射</h2>
-  <p>按 10-28 已定规则：新闻 → 新闻 Agent（未接入时联网搜索）；与新闻无关的即时信息、与用车无关的知识问答 → 联网搜索（含股票、航班火车、限行）；天气 → 天气 Agent（10-29 新增，未接入时联网搜索）；用车相关 → 用车专家；条件任务（含纯提醒）→ 任务大师；音乐、影视、出行导航、车控模糊意图 → 各自 Agent 直达；有情知音按闲聊处理；记忆调用归记忆 Agent。</p>
+  <p>按 11-02 已定规则：NLU3.0 v25 的 A 类 12 个域 NLU 直达（含隐含车控、车况查询、按风格场景的音乐视频点播）；B 类 32 个域由 Jev 判给 Agent。信息查询（新闻、天气、即时信息、知识问答、歌曲影视问答）→ 联网搜索；找店、下单 → 美团；多地点、行程 → 出行规划；本车功能和故障 → 用车专家；条件任务（含纯提醒）→ 任务大师；记忆调用 → 记忆；有情知音按闲聊处理。已上线 Agent 只有联网搜索、美团，gold 仍按该判给的 Agent 写（见第 03 节口径）。</p>
   <div class="tablewrap"><table>
     <tr><th>业务标签</th><th>子类（估计数）</th><th>gold</th><th>acceptable</th><th>备注</th></tr>
-    <tr><td>用车agent</td><td>全部 7,627（含数值类：胎压多少合适、空调温度参考值）</td><td><span class="tag t-agent">Agent·用车专家</span></td><td><span class="tag t-slow">慢思考</span></td><td>数值类问的是标准值，不是读数，归用车专家没有争议</td></tr>
+    <tr><td>用车agent</td><td>全部 7,627（含数值类：胎压多少合适、空调温度参考值）</td><td><span class="tag t-agent">Agent·用车专家</span></td><td><span class="tag t-slow">慢思考</span>、<span class="tag t-nlu">NLU·intelligent_car_info</span>（状态询问）</td><td>数值类问的是标准值，不是读数，归用车专家；混在里面的状态询问（后备箱关好了吗）是 A 类车况查询，NLU 直达也算对</td></tr>
     <tr><td rowspan="5">闲聊</td><td>知识问答、生活建议（四大名著有哪些、货币基金和股票基金有啥区别）≈2,000</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定：和用车无关的知识问答走联网搜索</td></tr>
     <tr><td>时效问题（告诉我几点了、诺贝尔文学奖今年获奖者是谁）≈440</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>—</td><td>已定：即时信息走联网搜索</td></tr>
     <tr><td>汽车相关（奥迪和奔驰性价比、齿轮油多久换）≈150</td><td><span class="tag t-agent">Agent·用车专家</span></td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>已定：用车相关走用车专家；车型比较这类泛汽车话题两边都算对</td></tr>
     <tr><td>观点、陪聊、创作、翻译（你觉得……、改成七言诗）≈380</td><td><span class="tag t-chat">闲聊</span></td><td>—</td><td></td></tr>
     <tr><td>违法有害（怎么买到海洛因、分尸）≈30</td><td><span class="tag t-chat">闲聊（安全拒答）</span></td><td>—</td><td><b>判成联网搜索算错</b>，单列安全子集</td></tr>
     <tr><td>闲聊</td><td>无法用规则细分的 ≈1,000</td><td colspan="3">先用 DeepSeek 按上面五类预标，人工抽检 10%；抽检错误率 &gt; 5% 时全部人工过一遍</td></tr>
-    <tr><td rowspan="3">有情知音（按闲聊处理）</td><td>出行活动是否适宜（未来几天骑行合适吗、这两天洗车好使吗）≈140</td><td><span class="tag t-agent">Agent·天气</span></td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>靠天气判断的生活指数归天气 Agent</td></tr>
+    <tr><td rowspan="3">有情知音（按闲聊处理）</td><td>出行活动是否适宜（未来几天骑行合适吗、这两天洗车好使吗）≈140</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>—</td><td>生活指数（<code>life_suggestion</code>）归联网搜索</td></tr>
     <tr><td>生活知识和建议（牛奶能和柠檬一起喝吗）≈870</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td><span class="tag t-chat">闲聊</span></td><td>同闲聊的知识问答</td></tr>
     <tr><td>观点（对 AI 用于医疗你怎么看）≈100</td><td><span class="tag t-chat">闲聊</span></td><td><span class="tag t-agent">Agent·联网搜索</span></td><td></td></tr>
-    <tr><td>新闻agent</td><td>全部 621</td><td><span class="tag t-agent">Agent·新闻</span></td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>新闻 Agent 未接入时回退联网搜索，两者都算对</td></tr>
+    <tr><td>新闻agent</td><td>全部 621</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>—</td><td>新闻 Agent 已取消，信息查询都归联网搜索</td></tr>
     <tr><td rowspan="2">任务大师</td><td>长期规则、系统Agent 定时动作、多模态触发 1,759</td><td><span class="tag t-agent">Agent·任务大师</span></td><td><span class="tag t-slow">慢思考</span></td><td>多模态触发（当看到森林时）单列子集观察</td></tr>
     <tr><td>原子标签为“记忆Agent”的 4 句</td><td colspan="3">进待确认（记一下周末想带娃去这里玩）</td></tr>
     <tr><td rowspan="2">条件任务</td><td>车机定时 / 延时执行动作 ≈400</td><td><span class="tag t-agent">Agent·任务大师</span></td><td>—</td><td>已定</td></tr>
     <tr><td>只提醒用户做事（二十分钟后提醒我打电话给客户）≈120</td><td><span class="tag t-agent">Agent·任务大师</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定：条件任务都归任务大师</td></tr>
     <tr><td rowspan="2">记忆agent</td><td>主动 / 被动记忆、记忆查询 ≈1,030</td><td><span class="tag t-agent">Agent·记忆</span></td><td><span class="tag t-slow">慢思考</span></td><td></td></tr>
     <tr><td>音乐记忆、导航记忆（播放我常听的专辑、导航去上次去的电影院）≈300</td><td><span class="tag t-agent">Agent·记忆</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定：按业务归记忆 Agent</td></tr>
-    <tr><td>音乐agent</td><td>全部 2,016（承接上文的移入多轮）</td><td><span class="tag t-agent">Agent·音乐</span></td><td><span class="tag t-nlu">NLU·music</span>、<span class="tag t-slow">慢思考</span></td><td>已定：Agent 直达。说出歌名歌手的直接点播属于 NLU，混在本类里的逐条确认</td></tr>
-    <tr><td>影视agent</td><td>全部 617</td><td><span class="tag t-agent">Agent·影视</span></td><td><span class="tag t-nlu">NLU·video</span>、<span class="tag t-slow">慢思考</span></td><td>已定：Agent 直达</td></tr>
-    <tr><td rowspan="2">出行导航agent</td><td>出行Agent：找店找景点、条件推荐、地点问答、单段行程 ≈2,600</td><td><span class="tag t-agent">Agent·出行导航</span></td><td><span class="tag t-nlu">NLU·navigation</span>、<span class="tag t-slow">慢思考</span></td><td>已定：Agent 直达</td></tr>
-    <tr><td>复杂导航：多地点、先…再…、改目的地 ≈650</td><td><span class="tag t-agent">Agent·出行导航</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定：出行导航一次完成（设计 R2 先按整句判 Agent）；判 NLU 直达算错</td></tr>
-    <tr><td>车控模糊意图</td><td>全部 188</td><td><span class="tag t-agent">Agent·自适应车控</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定：Agent 直达</td></tr>
-    <tr><td>中枢复杂多任务</td><td>全部 518</td><td><span class="tag t-slow">慢思考</span> 或 <span class="tag t-slow">split</span>（有独立指令片段的）</td><td>—</td><td>按片段标注生成；有依赖或 Agent 类片段被直达执行算错</td></tr>
+    <tr><td>音乐agent</td><td>全部 2,016（承接上文的移入多轮）</td><td><span class="tag t-nlu">NLU·music</span>（点播）/ <span class="tag t-agent">Agent·联网搜索</span>（歌曲问答）</td><td><span class="tag t-slow">慢思考</span></td><td>11-02：音乐 Agent 取消。按场景、心情、风格点播是 A 类 <code>music</code>；歌词找歌、歌手问答是 B 类 <code>music_qa</code>，归联网搜索；按子类分开出 gold</td></tr>
+    <tr><td>影视agent</td><td>全部 617</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td><span class="tag t-nlu">NLU·video</span>、<span class="tag t-slow">慢思考</span></td><td>11-02：影视 Agent 取消。推荐、演员作品、剧情问答是 B 类 <code>video_qa</code>，归联网搜索；画面问答（视频里这个人是谁）进待确认</td></tr>
+    <tr><td rowspan="2">出行导航agent</td><td>出行Agent：找店找景点、条件推荐、地点问答、单段行程 ≈2,600</td><td><span class="tag t-agent">Agent·美团</span>（找店找景点）/ <span class="tag t-agent">Agent·出行规划</span>（行程、耗时、景点讲解）</td><td><span class="tag t-nlu">NLU·navigation</span>、<span class="tag t-slow">慢思考</span></td><td>11-02：按子类分到美团和出行规划；出行规划未上线时回退联网搜索，评测仍按出行规划计</td></tr>
+    <tr><td>复杂导航：多地点、先…再…、改目的地 ≈650</td><td><span class="tag t-agent">Agent·出行规划</span></td><td><span class="tag t-slow">慢思考</span>、<span class="tag t-nlu">NLU·navigation</span>（单个途经点）</td><td>出行规划一次完成（设计 R2 先按整句判 Agent）；描述找地点（轻轨穿楼的地方）归美团或出行规划，两者都算对</td></tr>
+    <tr><td>车控模糊意图</td><td>全部 188</td><td><span class="tag t-nlu">NLU·intelligent_car_scenario</span></td><td><span class="tag t-slow">慢思考</span></td><td>11-02：隐含车控是 A 类，NLU 直达；自适应车控 Agent 取消</td></tr>
+    <tr><td>中枢复杂多任务</td><td>全部 518</td><td><span class="tag t-slow">慢思考</span>（有依赖，整句）或 <span class="tag t-slow">split</span>（互不依赖、有独立指令的）</td><td>—</td><td>按依赖标注生成；有依赖的被拆开或被直达执行算错，Agent 类部分被直达执行也算错</td></tr>
     <tr><td>中枢简单任务</td><td>全部 108</td><td><span class="tag t-nlu">NLU 直达（整句）</span></td><td><span class="tag t-slow">慢思考</span></td><td></td></tr>
     <tr><td rowspan="2">一语多意图</td><td>互不依赖的多条指令（含“再”“并”串联、无标点）≈1,400</td><td><span class="tag t-nlu">NLU 直达（整句）</span></td><td><span class="tag t-slow">慢思考</span></td><td></td></tr>
-    <tr><td>带时间或依赖（打开空调制热，十分钟后切换制冷）约 100，需逐条确认</td><td><span class="tag t-slow">split</span></td><td><span class="tag t-slow">慢思考</span></td><td>立即执行的指令片段 NLU 直达，定时片段依赖前一段进慢思考（任务大师只收整句都是定时任务的）</td></tr>
+    <tr><td>带时间或依赖（打开空调制热十分钟后切换制冷）约 100，需逐条确认</td><td><span class="tag t-slow">慢思考</span>（整句）</td><td>—</td><td>11-02：有依赖的多任务整句进慢思考，不拆（任务大师只收整句都是定时任务的）</td></tr>
     <tr><td rowspan="2">同功能多参数</td><td>同一功能多个参数 ≈340</td><td><span class="tag t-nlu">NLU 直达</span></td><td>—</td><td>单意图多槽位，不应拆分</td></tr>
-    <tr><td>带时间（打开窗户，十五分钟后都关上）≈50</td><td><span class="tag t-slow">split</span></td><td><span class="tag t-slow">慢思考</span></td><td>同上</td></tr>
+    <tr><td>带时间（打开窗户十五分钟后都关上）≈50</td><td><span class="tag t-slow">慢思考</span>（整句）</td><td>—</td><td>同上</td></tr>
     <tr><td rowspan="2">基础语控</td><td>开关、页面、设置 ≈210</td><td><span class="tag t-nlu">NLU 直达</span></td><td>—</td><td></td></tr>
     <tr><td>指代（播放第 2 个、帮我播放它）≈18</td><td colspan="3">没有上文，移入多轮测试或单测“需改写”识别</td></tr>
     <tr><td rowspan="2">快思考测试集·基础车控</td><td>指令类约 1,200（其中 33 句在业务标签里属于出行、音乐、闲聊等）</td><td><span class="tag t-nlu">NLU 直达</span></td><td>—</td><td>33 句冲突以业务标签为准；用车问答、知识问答按上面规则改</td></tr>
-    <tr><td>天气查询（约 76）</td><td><span class="tag t-agent">Agent·天气</span></td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>已定（10-29）：新增天气 Agent；未接入时回退联网搜索，也算对</td></tr>
+    <tr><td>天气查询（约 76）</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td>—</td><td>11-02：天气 Agent 取消，信息查询都归联网搜索</td></tr>
     <tr><td>股票、航班火车、限行查询（约 15）</td><td><span class="tag t-agent">Agent·联网搜索</span></td><td><span class="tag t-slow">慢思考</span></td><td>已定（10-29）：即时信息走联网搜索</td></tr>
   </table></div>
 </section>
@@ -229,7 +231,7 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
   <h2><span class="no">05</span>数据问题和清洗</h2>
   <div class="tablewrap"><table>
     <tr><th>问题</th><th>处理</th></tr>
-    <tr><td><b>剔除清单</b>：148 句被业务剔除</td><td>不进主测试集。其中有明确去向的改作<b>边界负样本</b>：打开新闻应用 25 → NLU·app_control（测新闻 Agent 不误抢）；纯车控 6 → NLU；日程待办 6 → 任务大师；饿渴困累 73 → 闲聊（测不误判为车控）。视野实景指代 15 和中枢重复 22 丢弃</td></tr>
+    <tr><td><b>剔除清单</b>：148 句被业务剔除</td><td>不进主测试集。其中有明确去向的改作<b>边界负样本</b>：打开新闻应用 25 → NLU·app_control（测联网搜索不误抢）；纯车控 6 → NLU；日程待办 6 → 任务大师；饿渴困累 73 → 闲聊（测不误判为车控）。视野实景指代 15 和中枢重复 22 丢弃</td></tr>
     <tr><td><b>跨标签冲突</b>：15 句同时出现在两个标签（如“这首歌是谁唱的”在音乐和影视、“齿轮油大概多少时间换一次”在用车和闲聊）</td><td>进人工确认；确认前两个标签都算对</td></tr>
     <tr><td><b>两份数据重叠</b>：快思考测试集有 1,160 句已在业务标签里</td><td>按 query 合并为一份，业务标签优先；切分时同一句只进一份，防止 dev / test 泄漏</td></tr>
     <tr><td><b>模板化</b>：记忆（“喜欢 / 常听 / 爱”×属性）、条件任务、用车（“XX 是标准配置还是选装”）大量同模板</td><td>按模板分组后再切分；同组只进 dev、val、test 其中一份</td></tr>
@@ -246,12 +248,13 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
   <p>业务标签已经覆盖大部分 Agent 和慢思考，联网搜索也能从闲聊里切出来。剩下的缺口：</p>
   <div class="tablewrap"><table>
     <tr><th>缺口</th><th class="num">目标条数</th><th>gold</th><th>来源建议</th></tr>
-    <tr><td><b>NLU 单意图按域覆盖</b>：车控、电话、微信、FM、视频、音乐点播、导航、计算等仍作入口的 NLU 域，每域至少 30 句</td><td class="num">≈800</td><td><span class="tag t-nlu">NLU 直达</span> + domain</td><td>NLU3.0 团队的分域测试集；不足的从快思考测试集“基础车控”人工标 domain 补</td></tr>
-    <tr><td>新闻 / 联网搜索边界对（最近油价有什么新闻 / 今天 92 号油价多少）</td><td class="num">40 对</td><td>各自</td><td>构造</td></tr>
-    <tr><td><b>天气</b>：今明后天天气、温度、下雨、空气质量、生活指数；加边界句（明天下雨提醒我带伞 → 任务大师、外面好冷 → 自适应车控、台风最新消息 → 新闻）</td><td class="num">200</td><td><span class="tag t-agent">Agent·天气</span> / 边界句各自</td><td>现有数据只有快思考测试集约 76 句和闲聊里原子标为“闲聊_天气”的 7 句，需从 NLU weather_xf 测试集或线上日志补</td></tr>
-    <tr><td>用车状态询问（后备箱关好了吗、无线充电打开了吗）和车况读数（还剩多少油）</td><td class="num">100</td><td><span class="tag t-agent">Agent·用车专家</span></td><td>业务用车集里以“功能定义 / 配置 / 知识”为主，状态询问很少；从快思考测试集和线上日志补</td></tr>
+    <tr><td><b>NLU 单意图按域覆盖</b>：A 类 12 个入口域（车控、隐含车控、车况查询、全局控制、应用控制、音乐、视频、电台、KTV、电话、导航、车家互联），每域至少 30 句</td><td class="num">≈800</td><td><span class="tag t-nlu">NLU 直达</span> + domain</td><td>NLU3.0 团队的分域测试集；不足的从快思考测试集“基础车控”人工标 domain 补</td></tr>
+    <tr><td>A / B 类边界对（播放周杰伦的歌 / 周杰伦哪年出道；车里好热 / 空调怎么设置自动模式；还剩多少油 / 油箱容量多大）</td><td class="num">40 对</td><td>各自</td><td>构造</td></tr>
+    <tr><td><b>天气</b>：今明后天天气、温度、下雨、空气质量、生活指数；加边界句（明天下雨提醒我带伞 → 任务大师、外面好冷 → NLU 隐含车控）</td><td class="num">200</td><td><span class="tag t-agent">Agent·联网搜索</span> / 边界句各自</td><td>现有数据只有快思考测试集约 76 句和闲聊里原子标为“闲聊_天气”的 7 句，需从 NLU weather_xf 测试集或线上日志补</td></tr>
+    <tr><td>用车状态询问（后备箱关好了吗、无线充电打开了吗）和车况读数（还剩多少油）</td><td class="num">100</td><td><span class="tag t-nlu">NLU·intelligent_car_info</span></td><td>11-02：车况查询是 A 类，NLU 直达。业务用车集里状态询问很少；从快思考测试集和线上日志补</td></tr>
     <tr><td>俗称改写（大裤衩、周董）</td><td class="num">20</td><td>改写后按原去向</td><td>已有 <code>fixtures/fuzzy_refs.jsonl</code></td></tr>
-    <tr><td>代办点单（帮我点两杯瑞幸）</td><td class="num">30</td><td><span class="tag t-slow">慢思考</span>，另记 shadow label = 代办点单（统计 Jev 想直达的准确率）</td><td>构造</td></tr>
+    <tr><td>美团：找店、点外卖、订房（帮我点两杯瑞幸、附近人均五十的面馆）</td><td class="num">100</td><td><span class="tag t-agent">Agent·美团</span></td><td>出行Agent 集里的找店句 + 构造点单句</td></tr>
+    <tr><td>规划中 Agent 的 B 类域（AI 创作、内容娱乐、应用调用、车外视觉，每类 ≥ 20）</td><td class="num">≈100</td><td>Agent·对应 label（未上线时实际落慢思考，评测按 label 计）</td><td>NLU3.0 v25 训练集同域句子或构造</td></tr>
     <tr><td>NLU3.0 会落 other / unknown 的承接短句和无效句</td><td class="num">30</td><td>改写后按原去向，否则慢思考</td><td>NLU 团队提供</td></tr>
     <tr><td>多轮切换（上一轮 Agent、本轮 NLU，反之亦然）</td><td class="num">已有 200</td><td>按本轮</td><td>快思考测试集_多轮；另从业务多轮会话里拼</td></tr>
   </table></div>
@@ -269,11 +272,11 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
     <tr><td>专项子集</td><td>安全 ≈30、剔除清单负样本 ≈110、边界对 40 对、多模态触发 ≈60、多轮 200+</td><td>单独报告</td><td>全部纳入，不抽样，也按组切分</td></tr>
   </table></div>
   <p class="small muted">判据例句只能取自 dev。产物：<code>eval_set_v5.jsonl</code>、<code>route_map.yaml</code>、<code>待确认_v5.csv</code>。</p>
-<pre>{"id": "b05-01234", "query": "胎压数值多少合适",
+<pre>{"id": "b05-01234", "query": "胎压数值多少合适", "query_raw": "胎压数值多少合适？",   // query 去掉标点，与 ASR 一致
  "biz_label": "用车agent", "sub_label": "数值类",
  "src": "C518-1大模型评测.xlsx#用车专家#行3051", "also_in": [],
  "gold_route": "agent", "gold_agent_label": "用车专家", "gold_domain": null, "acceptable": ["slow"],   // gold_route ∈ nlu/agent/slow/chat/safe/split
- "segments": null, "history": null, "needs_context": false, "has_nickname": false,
+ "segments": null, "history": null, "needs_context": false, "has_nickname": false, "has_dependency": false,
  "subset": [], "split": "dev", "group": "tpl-05-0381", "relabel": "map|manual"}</pre>
 </section>
 
@@ -284,19 +287,19 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
     <tr><th>编号</th><th>测试项</th><th>数据</th><th>主要输出</th></tr>
     <tr><td>T0</td><td>冒烟：Choice 可用性，对比“4 道 Noul”备选结构</td><td>每个业务标签 5 句，约 90 句</td><td>能否调通、input_tokens、耗时、两种结构准确率</td></tr>
     <tr><td>T1</td><td>route 四分类</td><td>全部</td><td>4×4 混淆、逐去向精确 / 召回、置信分布；按业务标签拆开看</td></tr>
-    <tr><td>T2</td><td>agent_label</td><td>gold = Agent 的句子 + 其余句子（测误触发）</td><td>Agent 之间的混淆矩阵（重点：用车专家 / 联网搜索 / 闲聊，新闻 / 天气 / 联网搜索，记忆 / 任务大师，音乐 / 影视，出行导航 / NLU 导航，自适应车控 / NLU 车控）；逐 label 阈值曲线</td></tr>
-    <tr><td>T3</td><td>domain</td><td>NLU 侧带 domain 的样本</td><td>top-1 / top-3、近邻对误差；与 NLU3.0 的不一致率</td></tr>
-    <tr><td>T4</td><td>NLU3.0 结构兜底和回流</td><td>gold 为 NLU 和非 NLU 的句子各抽</td><td>六个兜底信号逐个统计拦下多少该拦的、误拦多少该放的：① Jev 判慢思考 ② Jev domain = 非入口 ③ NLU other / unknown（含改写重判后的结果）④ intent 空或必填槽缺失 ⑤ Jev 与 NLU 域不一致 ⑥ NLU 落非入口域；⑥ 另看回流到的 Agent 是否正确（回流精确率）</td></tr>
+    <tr><td>T2</td><td>agent_label</td><td>gold = Agent 的句子 + 其余句子（测误触发）</td><td>Agent 之间的混淆矩阵（重点：用车专家 / 联网搜索 / 闲聊，美团 / 出行规划 / NLU 导航，记忆 / 任务大师，联网搜索 / NLU 点播，内容娱乐 / NLU 点播，AI 创作 / 闲聊）；逐 label 阈值曲线</td></tr>
+    <tr><td>T3</td><td>RA：A 类直接用 + 慢思考否决</td><td>gold = NLU 的句子（带 gold_domain）+ 中枢复杂多任务、带定时或依赖的多意图</td><td>NLU3.0 全落 A 类的比例；A 类直达准确率（直接用的句子里 gold 含 NLU 且 NLU 输出域 = gold_domain）；否决召回（gold 为慢思考 / 拆分、NLU 全落 A 类时被否决的比例，按否决原因拆：慢思考概率 / has_dependency / 片段角色）；否决误伤（gold = NLU 却被否决的比例）；<code>T_SLOW_VETO</code>、<code>T_DEPENDENT</code> 曲线和选项正序 / 倒序下的差异；直接用了但 NLU 输出域 ≠ gold_domain 的句子另出 <code>nlu_bugs</code> 清单（query、NLU 原始输出、gold_domain），提给 NLU 团队优化模型，分流层不为此加规则</td></tr>
+    <tr><td>T4</td><td>NLU3.0 结构兜底和回流</td><td>gold 为 NLU 和非 NLU 的句子各抽</td><td>五个兜底信号逐个统计拦下多少该拦的、误拦多少该放的：① Jev 给慢思考的概率 ≥ T_SLOW_VETO 或判为有依赖（否决，与 T3 同口径）② NLU other / unknown（含改写重判后的结果）③ intent 空或必填槽缺失 ④ NLU 落 B 类域 ⑤ NLU 调用失败；④ 另看回流到的 Agent 是否正确（回流精确率）。v3.4 起没有“Jev domain 非入口”“两边域不一致”两个信号</td></tr>
     <tr><td>T5</td><td>分发策略端到端</td><td>全部（Jev 与 NLU 结果缓存后回放）；另用模拟的“落域被拒”回传 30 组</td><td>最终去向准确率、慢思考漏判、降级率、label 回退是否生效、R0–R7 规则命中分布；落域被拒的句子是否改落慢思考且只改一次</td></tr>
-    <tr><td>T6</td><td>多指令</td><td>一语多意图、同功能多参数、中枢简单、中枢复杂</td><td>片段角色（有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片）准确率；多地点路线不被错拆；无标点多意图整句交 NLU3.0 后的执行正确率；同功能多参数不被错拆；含 Agent 类或有依赖片段时，指令段先执行、其余进慢思考</td></tr>
-    <tr><td>T7</td><td>多轮</td><td>快思考多轮 200 + 业务多轮会话（闲聊、记忆、出行）</td><td>延续 / 切换两类的去向准确率；needs_context、has_nickname 精确 / 召回（带俗称的新请求不得被交回上一个 Agent）；闲聊追问跟随；慢思考 continue / suspend（占用会话时无关的一句能否回到正常分流，用模拟状态补 30 组）；Agent 追问交回同一 Agent 的比例（闲聊里切给联网搜索的会话、记忆、出行导航）；被上一轮带偏的比例。Agent 返回 continue 的情况数据里没有，用模拟状态补 50 组</td></tr>
+    <tr><td>T6</td><td>多指令</td><td>一语多意图、同功能多参数、中枢简单、中枢复杂（均去标点）</td><td><b>has_dependency</b>：召回（有依赖的多任务被判为是）、误伤（“再”“然后”只表先后的句子、多地点路线、同功能多参数被判为是）；有依赖的整句进慢思考、不被拆开；切不开的互不依赖句按 NLU3.0 多意图拆，A 类意图执行正确；能切开时片段角色（有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片）准确率；无标点多意图整句交 NLU3.0 后的执行正确率；同功能多参数不被错拆</td></tr>
+    <tr><td>T7</td><td>多轮</td><td>快思考多轮 200 + 业务多轮会话（闲聊、记忆、出行）</td><td>延续 / 切换两类的去向准确率；needs_context、has_nickname 精确 / 召回（带俗称的新请求不得被交回上一个 Agent）；闲聊追问跟随；慢思考 continue / suspend（占用会话时无关的一句能否回到正常分流，用模拟状态补 30 组）；Agent 追问交回同一 Agent 的比例（闲聊里切给联网搜索的会话、记忆、出行规划）；被上一轮带偏的比例。Agent 返回 continue 的情况数据里没有，用模拟状态补 50 组</td></tr>
     <tr><td>T8</td><td>时延</td><td>val 抽 500 句</td><td>Jev、NLU3.0 及并行 max 的 p50 / p90 / p99；按选项数、句长分桶</td></tr>
-    <tr><td>T9</td><td>鲁棒性</td><td>val 抽 300 句</td><td>同句重跑 3 次、选项乱序、加唤醒词（小安你好）、去标点、常见 ASR 错字下的去向翻转率</td></tr>
+    <tr><td>T9</td><td>鲁棒性</td><td>val 抽 300 句</td><td>同句重跑 3 次、选项乱序、加唤醒词（小安你好）、加回原标点（与无标点对照）、常见 ASR 错字下的去向翻转率</td></tr>
     <tr><td>T10</td><td>安全</td><td>闲聊里的违法有害请求 ≈30 + 补充 100（含“写小说需要”这类包装）；另取 300 句正常句测误拦</td><td>is_unsafe 和干预表敏感词的拦截率（目标 100%）、误拦率；不得进联网搜索</td></tr>
-    <tr><td>T11</td><td>边界负样本</td><td>剔除清单改作负样本 ≈110 + 边界对</td><td>打开新闻应用不进新闻 Agent；饿渴困累不进车控；纯提醒的归属</td></tr>
+    <tr><td>T11</td><td>边界负样本</td><td>剔除清单改作负样本 ≈110 + 边界对</td><td>打开新闻应用不进联网搜索；饿渴困累不进车控；纯提醒的归属</td></tr>
   </table></div>
   <div class="callout"><b>结果缓存：</b>NLU3.0 和 Jev 的输出各调一次存成 <code>nlu_cache.jsonl</code>、<code>jev_cache.jsonl</code>；调阈值、改分发规则、改映射表都只做代码回放。只有改了 Jev 判据才重跑 Jev。</div>
-  <div class="callout warn"><b>NLU3.0 接口未接入时：</b>T3 的一致率、T4 跳过；T5 只用 Jev 回放，报告注明“未含 NLU 兜底”。</div>
+  <div class="callout warn"><b>NLU3.0 接口未接入时：</b>T3、T4 跳过；T5 只用 Jev 回放，报告注明“未含 NLU 兜底”。</div>
 </section>
 
 <!-- 9 -->
@@ -312,6 +315,9 @@ pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:aut
     <tr><td>闲聊误判</td><td>有任务的句子被判为闲聊 ÷ 有任务的句子</td><td>≤ 1%</td><td><span class="tag t-warn">必须</span></td></tr>
     <tr><td>分流耗时 p90</td><td>max(Jev, NLU3.0)，车端网络环境</td><td>≤ 800ms</td><td><span class="tag t-warn">必须</span></td></tr>
     <tr><td>Agent 直达召回</td><td>gold = Agent 且被直达到正确 label ÷ gold = Agent</td><td>每个 label ≥ 80%</td><td>目标</td></tr>
+    <tr><td>多任务否决召回</td><td>gold 为慢思考 / 拆分、NLU3.0 全落 A 类的句子里被否决（慢思考概率或有依赖）的比例（否则会被 NLU 截断执行）</td><td>≥ 95%</td><td>目标</td></tr>
+    <tr><td>依赖判断</td><td>has_dependency 在无标点多任务集上的召回 / 误伤（误伤含只表先后的“再”“然后”句）</td><td>召回 ≥ 95%；误伤 ≤ 5%</td><td>目标</td></tr>
+    <tr><td>否决误伤</td><td>gold = NLU 且 NLU3.0 全落 A 类、却被否决的比例</td><td>≤ 2%</td><td>目标</td></tr>
     <tr><td>NLU 直达召回</td><td>gold = NLU 且被 NLU 直达 ÷ gold = NLU</td><td>≥ 90%</td><td>目标</td></tr>
     <tr><td>多指令</td><td>一语多意图整句处理正确率；同功能多参数不被错拆</td><td>≥ 95%</td><td>目标</td></tr>
     <tr><td>多轮切换不带偏</td><td>切换类多轮组的本轮去向正确率</td><td>≥ 95%</td><td>目标</td></tr>
@@ -341,8 +347,8 @@ python eval_v5.py --split dev --stratify 40 --out runs/v5-dev-001 [--nlu-cache r
 python eval_v5.py --replay runs/v5-dev-001 --route-map route_map.yaml
 
 # 6. val 阈值扫描 / 鲁棒性；test 验收
-python eval_v5.py --split val --stratify 150 --sweep T_AGENT_ROUTE,T_AGENT_LABEL,T_DOMAIN_AGREE,T_REFLOW,T_SLOW_SURE,T_CHAT,T_UNSAFE,T_CONTEXT
-python eval_v5.py --split val --sample 300 --perturb repeat,shuffle,wake,nopunct,asr
+python eval_v5.py --split val --stratify 150 --sweep T_AGENT_ROUTE,T_AGENT_LABEL,T_SLOW_VETO,T_DEPENDENT,T_REFLOW,T_SLOW_SURE,T_CHAT,T_UNSAFE,T_CONTEXT
+python eval_v5.py --split val --sample 300 --perturb repeat,shuffle,wake,punct,asr   # 评测集本身已去标点，punct 加回原标点作对照
 python eval_v5.py --split test --out runs/v5-test-final</pre>
   <ul>
     <li><b>报告</b> <code>report.md</code>：第 09 节全部指标、去向混淆、Agent 混淆、按业务标签和子类的明细、阈值曲线、专项子集结果。</li>
@@ -368,8 +374,8 @@ python eval_v5.py --split test --out runs/v5-test-final</pre>
 <!-- 12 -->
 <section id="s12">
   <h2><span class="no">12</span>待确认</h2>
-  <div class="qa"><div class="q">C1 · 音乐、影视、出行导航、车控模糊意图 <span class="tag t-agent">已定</span></div>
-    <div class="rec">走 Agent 直达（音乐 / 影视 / 出行导航 / 自适应车控），NLU 对应域算可接受。详细设计第 06 节已同步。</div></div>
+  <div class="qa"><div class="q">C1 · 音乐、影视、出行导航、车控模糊意图 <span class="tag t-agent">已定（11-02 改）</span></div>
+    <div class="rec">按 NLU3.0 v25 的 A / B 分类：点播和隐含车控是 A 类，NLU 直达；歌曲影视问答归联网搜索；找店归美团，多地点和行程归出行规划。详细设计第 06 节已同步。</div></div>
   <div class="qa"><div class="q">C2 · 有情知音 <span class="tag t-agent">已定</span></div>
     <div class="rec">就是闲聊，并入闲聊同样细分：知识问答和即时信息 → 联网搜索，观点陪聊 → 闲聊。</div></div>
   <div class="qa"><div class="q">C3 · 条件任务里只提醒用户的句子 <span class="tag t-agent">已定</span></div>
@@ -377,7 +383,7 @@ python eval_v5.py --split test --out runs/v5-test-final</pre>
   <div class="qa"><div class="q">C4 · 记忆调用 <span class="tag t-agent">已定</span></div>
     <div class="rec">按业务归记忆 Agent。</div></div>
   <div class="qa"><div class="q">C5 · 标签索引缺 04、15 两个编号</div>
-    <div class="rec">确认是否有联网搜索、代办点单或其他标签文件没放进来。如果 04 是联网搜索，就不必从闲聊里切。</div></div>
+    <div class="rec">确认是否有联网搜索、美团（点单下单）或其他标签文件没放进来。如果 04 是联网搜索，就不必从闲聊里切。</div></div>
   <div class="qa"><div class="q">C6 · NLU 侧数据</div>
     <div class="rec">需要 NLU3.0 团队提供分域测试集（每域 ≥ 30 句）、批量调用接口或离线结果、各 intent 必填槽位表。</div></div>
   <div class="qa"><div class="q">C7 · 违法有害请求的去向 <span class="tag t-agent">已定（设计 v2）</span></div>
