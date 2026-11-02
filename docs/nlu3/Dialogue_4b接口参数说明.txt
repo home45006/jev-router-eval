@@ -1,0 +1,74 @@
+（脱敏副本：服务地址已替换为占位符；原件不入库，本地用环境变量 NLU3_DIALOG_URL 配置）
+
+Dialogue /zp/update 测试接口与参数说明（精简版）
+========================================
+
+接口：POST http://<对话系统内网地址>/zp/update
+Header：Content-Type: application/json
+
+1. 单轮请求
+{
+  "query": "主驾座椅加热调高",
+  "session_id": "demo-single-001",
+  "request_id": "demo-single-001-turn-1",
+  "input_data": [],
+  "debug": true,
+  "first_wakeup": true,
+  "enable_hotfix": false
+}
+
+2. 多轮请求（同一 session_id，按顺序发送）
+// 第 1 轮
+{
+  "query": "空调温度开大一点儿",
+  "session_id": "demo-multi-001",
+  "request_id": "demo-multi-001-turn-1",
+  "input_data": [],
+  "debug": true,
+  "first_wakeup": true,
+  "enable_hotfix": false
+}
+
+// 第 2 轮
+{
+  "query": "再大一点儿",
+  "session_id": "demo-multi-001",
+  "request_id": "demo-multi-001-turn-2",
+  "input_data": [],
+  "debug": true,
+  "first_wakeup": false,
+  "enable_hotfix": false
+}
+// 第 3、4 轮：保持相同 session_id，request_id 依次为 turn-3、turn-4，
+// query="再大一点儿"，first_wakeup=false。
+
+3. 主要参数
+query             当前轮用户文本
+session_id        会话 ID；同组多轮保持一致
+request_id        请求 ID；每轮使用不同值
+first_wakeup      首轮 true，当前多轮会话的后续轮次 false；
+                  不同测试组的首轮分别设置 true
+input_data        附加输入；当前 curl 示例传 []
+debug             是否请求 Debug 信息；示例传 true
+enable_hotfix     是否启用 HotFix；示例传 false
+
+4. 其他case
+
+单轮测试
+[case 05]
+小安给你倍速减慢一些
+
+
+[case 06]
+打开广播87.6
+
+
+多轮测试
+[case 12]
+播放吻别	
+换成英文版的
+
+[case 13]  [历史轮数=3]
+焚烧秸秆会对环境有影响吗？
+最近工作效率很低，怎么办才好，就不能查下好办法吗
+使用时间管理工具是有帮助的。那改善工作环境呢
