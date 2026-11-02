@@ -3,3 +3,6 @@ __pycache__/
 eval_set.jsonl
 待确认改标.csv
 .venv/
+
+# NLU3.0 原始接口文档（含服务地址和部署路径）只留本地；仓库里是 docs/nlu3/ 的脱敏副本
+/nlu3/

@@ -177,7 +177,7 @@ MOCK_RULES = [   # (正则, route, domain, agent)
     (r"导航|回家|去公司", "NLU直达", "navigation", "none"),
     (r"播放|放一首|来一首|听", "NLU直达", "music", "none"),
     (r"打电话|拨打", "NLU直达", "phone_call", "none"),
-    (r"微信", "NLU直达", "wechat_on_car", "none"),
+    (r"微信", "慢思考", "非入口", "none"),          # NLU3.0 v25 没有车载微信域
     (r"空调|车窗|座椅|天窗|灯|雨刮|后视镜|音量|屏幕", "NLU直达", "intelligent_car_control", "none"),
 ]
 
@@ -232,7 +232,7 @@ NLU_MOCK = [
     (r"星期几|几号|几点", "datetime_info", "query"), (r"提醒|分钟后|小时后", "reminder", "create"),
     (r"推荐|附近|找个|好吃", "poi_recommend", "search"), (r"好热|好冷|太闷", "intelligent_car_scenario", "adjust"),
     (r"导航|回家|去公司|走高速", "navigation", "navigate"), (r"打电话|拨打", "phone_call", "dial"),
-    (r"微信", "wechat_on_car", "send"), (r"播放|放一首|来一首", "music", "play"),
+    (r"微信", "unknown", ""), (r"播放|放一首|来一首", "music", "play"),
     (r"空调|车窗|座椅|天窗|灯|雨刮|后视镜|音量|屏幕|通风|加热|按摩", "intelligent_car_control", "control"),
     (r"聊|笑话|故事", "chat", "chat"),
 ]
@@ -307,9 +307,9 @@ def dispatch(j: dict, nlu: dict, sess: dict, segs: list[str], th: dict, cfg: dic
             d = it.get("domain")
             if d not in cfg["nlu_entry"]:
                 tgt = cfg["domain_to_agent"].get(d)
-                if d == "other":
-                    log("R4", "fail", "NLU3.0 落 other（信号 3）；演示中改写已在前一步做过，直接进慢思考")
-                    return {"route": "slow", "why": "NLU3.0 落 other"}
+                if d in ("other", "unknown"):
+                    log("R4", "fail", f"NLU3.0 落 {d}（信号 3，接不住）；演示中改写已在前一步做过，直接进慢思考")
+                    return {"route": "slow", "why": f"NLU3.0 落 {d}"}
                 if tgt == "__chat__":
                     log("R4", "fail", "NLU3.0 落 chat")
                     return {"route": "chat", "why": "NLU3.0 落 chat"}
@@ -706,9 +706,11 @@ async def start(llm=None):
     await _S["jev"].start()
     _S["backends"] = {"jev": _S["jev"]}
     # StartLux：与 System One 兼容的自部署服务，同一 SDK 换 base_url。默认关闭，先按 Jev 做原型；
-    # STARTLUX_ENABLED=1 打开，STARTLUX_URL 指定地址（默认自部署实例），STARTLUX_API_KEY 可选。
+    # STARTLUX_ENABLED=1 打开，STARTLUX_URL 指定地址（必填，不写进仓库），STARTLUX_API_KEY 可选。
     if os.environ.get("STARTLUX_ENABLED", "").lower() in ("1", "true", "yes", "on"):
-        sl = RealJev(os.environ.get("STARTLUX_MODEL", "startlux"), base_url=os.environ.get("STARTLUX_URL", "http://81.70.90.78:8090"),
+        if not os.environ.get("STARTLUX_URL"):
+            raise RuntimeError("STARTLUX_ENABLED=1 时必须设置 STARTLUX_URL")
+        sl = RealJev(os.environ.get("STARTLUX_MODEL", "startlux"), base_url=os.environ["STARTLUX_URL"],
                      api_key=os.environ.get("STARTLUX_API_KEY"), name="StartLux", billed=False)
         await sl.start()
         _S["backends"]["startlux"] = sl
