@@ -2,7 +2,7 @@
 <title>Jev 分流融合架构</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-  /* 版式：梧桐白底橙标，V2.1 只覆盖分发落域：接入输入 → 分发 → 落域出口，业务侧画成范围外。页头 → 架构图 → 变化 → Jev 一次请求 → 分发策略 → 去向一览 → 44 域去向 → 时延 → 示例 → 已定与待定 */
+  /* 版式：梧桐白底橙标，V2.2 只覆盖分发落域：接入输入 → 分发 → 落域出口，业务侧画成范围外。页头 → 架构图 → 变化 → Jev 一次请求 → 分发策略 → 去向一览 → 44 域去向 → 时延 → 示例 → 已定与待定 */
   :root {
     --bg: #FFFFFF;
     --surface: #FFFFFF;
@@ -136,8 +136,8 @@
   <header class="head">
     <div class="eyebrow"><i></i>梧桐 · 智能座舱语音交互 Agent 平台</div>
     <h1>Jev 分流融合架构</h1>
-    <p class="lede"><b>本架构只负责分发和落域，不负责业务。</b>Jev 与 NLU3.0 在分发层并行起跑，一次请求判定去向并给出落域结果：<b>车机能马上执行的指令</b>走 NLU3.0 直达（v25 的 A 类 12 个入口域），<b>查询、问答、推荐和需要推断的单个请求</b>（含 v25 的 B 类 32 个域）由 Jev 判给 Agent 直达（已上线联网搜索、美团，另规划 9 个），<b>跨能力且有依赖的多任务</b>和 NLU3.0 接不住的句子进慢思考，没有任务目标的进闲聊，违法有害请求安全拒答。出口之后的执行、仲裁和下发由业务侧负责。</p>
-    <div class="meta"><span>V2.1 · 2026-11-02</span><span>本期接 NLU3.0 · A 类 12 个入口域</span><span>Agent 直达 · 已上线 4 个 + 规划 7 个</span><span>配套：design/Jev 分流详细设计 v2.1、测试方案 v2.4、判据 v3.3</span></div>
+    <p class="lede"><b>本架构只负责分发和落域，不负责业务。</b>Jev 与 NLU3.0 在分发层并行起跑，一次请求判定去向并给出落域结果：<b>车机能马上执行的指令</b>走 NLU3.0 直达（v25 的 A 类 12 个入口域），<b>查询、问答、推荐和需要推断的单个请求</b>（含 v25 的 B 类 32 个域）由 Jev 判给 Agent 直达（已上线联网搜索、美团、用车专家、任务大师，另规划 7 个），<b>跨能力且有依赖的多任务</b>和 NLU3.0 接不住的句子进慢思考，没有任务目标的进闲聊，违法有害请求安全拒答。出口之后的执行、仲裁和下发由业务侧负责。</p>
+    <div class="meta"><span>V2.3 · 2026-11-02</span><span>本期接 NLU3.0 · A 类 12 个入口域</span><span>Agent 直达 · 已上线 4 个 + 规划 7 个</span><span>配套：design/Jev 分流详细设计 v2.3、测试方案 v2.6、判据 v3.5</span></div>
   </header>
 
   <section>
@@ -223,18 +223,19 @@
           <text x="372" y="248" class="t-r">违法有害 → 安全拒答</text>
           <text x="372" y="274" class="t-id">route</text>
           <text x="372" y="292" class="t-r">NLU / Agent / 慢思考 / 闲聊</text>
-          <text x="372" y="318" class="t-id">domain</text>
-          <text x="372" y="336" class="t-r">A 类 12 域 + 非入口</text>
-          <text x="372" y="362" class="t-id">agent_label</text>
-          <text x="372" y="380" class="t-r">11 个 Agent + none</text>
+          <text x="372" y="318" class="t-id">agent_label</text>
+          <text x="372" y="336" class="t-r">11 个 Agent + none</text>
+          <text x="372" y="362" class="t-id">needs_context</text>
+          <text x="372" y="380" class="t-r">依赖上一轮：追问 · 指代</text>
           <line x1="606" y1="216" x2="606" y2="392" class="d-sep"/>
           <text x="620" y="230" class="t-id">segment_role[i]</text>
           <text x="620" y="248" class="t-r">依赖 / 同任务 / 指令 / Agent / 残片</text>
-          <text x="620" y="274" class="t-id">needs_context</text>
-          <text x="620" y="292" class="t-r">依赖上一轮：追问 · 指代</text>
-          <text x="620" y="318" class="t-id">has_nickname</text>
-          <text x="620" y="336" class="t-r">俗称还原：大裤衩 · 周董</text>
-          <text x="620" y="370" class="t-s">多段时才问 segment_role</text>
+          <text x="620" y="274" class="t-id">has_nickname</text>
+          <text x="620" y="292" class="t-r">俗称还原：大裤衩 · 周董</text>
+          <text x="620" y="318" class="t-id">has_dependency</text>
+          <text x="620" y="336" class="t-r">后面要用前面结果：整句判</text>
+          <text x="620" y="362" class="t-s">不判 NLU 落域：落 A 类直接用</text>
+          <text x="620" y="380" class="t-s">ASR 无标点：切开才问片段角色</text>
 
           <!-- Query 整理 -->
           <line x1="836" y1="232" x2="856" y2="232" class="d-flow" marker-end="url(#ah)"/>
@@ -248,21 +249,22 @@
           <text x="946" y="301" text-anchor="middle" class="t-xs">（不再改写）</text>
           <line x1="1036" y1="232" x2="1056" y2="232" class="d-flow" marker-end="url(#ah)"/>
           <line x1="836" y1="380" x2="1056" y2="380" class="d-flow" marker-end="url(#ah)"/>
-          <text x="946" y="373" text-anchor="middle" class="t-r">无需整理</text>
+          <text x="946" y="373" text-anchor="middle" class="t-r">无需整理 · NLU 落 A 类</text>
 
           <!-- 分发策略 -->
           <rect x="1056" y="170" width="360" height="232" rx="4" class="d-key"/>
           <text x="1072" y="194" class="t-h">分发策略（代码 R0–R7）</text>
           <rect x="1368" y="179" width="38" height="17" rx="3" class="d-tag"/><text x="1387" y="191.5" text-anchor="middle" class="t-cfg">配置</text>
-          <text x="1072" y="218" class="t-r">R0 安全命中 → 安全拒答</text>
-          <text x="1072" y="240" class="t-r">R1 会话占用 / 追问 → 交回原去向</text>
-          <text x="1072" y="262" class="t-r">R2 同一 Agent 的多段句 → 整句直达</text>
-          <text x="1072" y="284" class="t-r">　 跨能力多段 → 指令段 NLU，其余慢思考</text>
-          <text x="1072" y="306" class="t-r">R3 Agent 直达：双门槛 · 回退表</text>
-          <text x="1072" y="328" class="t-r">R4 NLU 直达：入口白名单 · 结构 · 域一致</text>
-          <text x="1072" y="350" class="t-r">　 落 B 类域 → 回流对应 Agent</text>
-          <text x="1072" y="372" class="t-r">R5 闲聊 · R6 其余 → 慢思考</text>
-          <text x="1072" y="392" class="t-s">R7 快思考落域失败 / 被拒 → 慢思考（一次）</text>
+          <text x="1072" y="216" class="t-r">R0 安全命中 → 安全拒答</text>
+          <text x="1072" y="236" class="t-r">R1 会话占用 / 追问 → 交回原去向</text>
+          <text x="1072" y="256" class="t-r">RA NLU3.0 全落 A 类 → 直接用，不看 Jev</text>
+          <text x="1072" y="276" class="t-r">　 慢思考 ≥ 0.6 或有依赖时否决</text>
+          <text x="1072" y="296" class="t-r">R2 多任务：有依赖 → 整句慢思考，不拆</text>
+          <text x="1072" y="316" class="t-r">　 切不开按 NLU 多意图拆；同 Agent 整句直达</text>
+          <text x="1072" y="336" class="t-r">R3 Agent 直达：双门槛 · 回退表</text>
+          <text x="1072" y="356" class="t-r">R4 NLU 未落 A 类：B 类域 → 回流 Agent</text>
+          <text x="1072" y="376" class="t-r">R5 闲聊 · R6 其余 → 慢思考</text>
+          <text x="1072" y="395" class="t-s">R7 快思考落域失败 / 被拒 → 慢思考（一次）</text>
 
           <!-- NLU3.0 结果回传 -->
           <polyline points="261,390 261,422 1150,422 1150,402" class="d-flow" marker-end="url(#ah)"/>
@@ -379,9 +381,9 @@
         <tr><td class="br">NLU</td><td>现有 NLU 本期在用，NLU3.0 接入后替换；在快思考层串行调用</td><td><b>本期接 NLU3.0</b>，在分发层与 Jev 整句并行起跑；NLU 直达只落 A 类 12 个入口域，B 类 32 个域由 Jev 判给 Agent</td></tr>
         <tr><td class="br">Agent 直达</td><td>用车、400 客服、联网查询、三方生态（示例）</td><td>已上线：联网搜索、美团、用车专家、任务大师；规划中：出行规划、记忆、车外视觉、AI 创作、内容娱乐、应用调用、400 客服；出行规划未上线时回退联网搜索，其余落慢思考</td></tr>
         <tr><td class="br">慢思考范围</td><td>有依赖的多步任务、条件任务、任务大师、多日行程</td><td>只收跨能力且有依赖的多任务，以及 NLU3.0 接不住、又没有 Agent 能直达的句子。条件任务、行程、记忆调用都改为 Agent 直达</td></tr>
-        <tr><td class="br">domain 一致性</td><td>在仲裁层，执行后裁决；“以置信更高的为准”</td><td>在分发层，<b>落域前</b>校验；NLU3.0 不输出置信度，用 Jev 给 NLU 所选域的概率判断</td></tr>
-        <tr><td class="br">route 置信低</td><td>NLU 落域兜底</td><td>看 NLU3.0 能否接住：入口域、结构完整、域一致才落 NLU，否则慢思考</td></tr>
-        <tr><td class="br">Jev 问题</td><td>route、domain（45+none）、agent_label、segment_role（三类）、needs_rewrite、referent</td><td>is_unsafe、route、domain（A 类 12+非入口）、agent_label、segment_role（五类）、needs_context、has_nickname</td></tr>
+        <tr><td class="br">NLU 结果采信</td><td>在仲裁层，执行后裁决；“以置信更高的为准”</td><td>在分发层，<b>落域前</b>决定：NLU3.0 全部落 A 类就直接用，Jev 不判落域、不做一致性比对；只在 Jev 给慢思考的概率 ≥ T_SLOW_VETO、或有片段依赖前面结果时否决（防多任务被截断）</td></tr>
+        <tr><td class="br">route 置信低</td><td>NLU 落域兜底</td><td>看 NLU3.0 能否接住：全部落 A 类、intent 不为空就落 NLU，否则按 B 类回流或慢思考</td></tr>
+        <tr><td class="br">Jev 问题</td><td>route、domain（45+none）、agent_label、segment_role（三类）、needs_rewrite、referent</td><td>is_unsafe、route、agent_label、segment_role（五类）、needs_context、has_nickname、has_dependency（v3.4 去掉 domain：Jev 不判 NLU 落域；v3.5 加 has_dependency：ASR 无标点时判依赖）</td></tr>
         <tr><td class="br">会话</td><td>只有“上轮闲聊且追问 → 跟随闲聊”</td><td>加上慢思考占用、Agent 进行中（continue）交回同一 Agent、Agent 已结束但本轮依赖上文也交回</td></tr>
         <tr><td class="br">安全</td><td>无</td><td>is_unsafe + 干预表敏感词 → 安全拒答，优先于所有去向</td></tr>
         <tr><td class="br">时延目标</td><td>快思考整体 ≤ 800ms（含执行）</td><td>只约束分流落域 ≤ 800ms；执行和回复时延归业务侧</td></tr>
@@ -396,14 +398,14 @@
       <tbody>
         <tr><td><code>is_unsafe</code></td><td class="nw">Noul</td><td class="q">是否在求助违法犯罪、暴力伤害、毒品、自残等有害内容</td><td>达到阈值直接安全拒答，优先于所有去向</td></tr>
         <tr><td><code>route</code></td><td class="nw">Choice · 4 选 1</td><td class="q">NLU 直达 / Agent 直达 / 慢思考 / 闲聊</td><td>读最高项和置信；N 个选项时 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code></td></tr>
-        <tr><td><code>domain</code></td><td class="nw">Choice · 12 + 非入口</td><td class="q">属于 A 类 12 个 NLU 入口域中的哪个</td><td>与 NLU3.0 的 domain 做一致性校验；NLU 无置信度，这是校验 NLU 结果的唯一依据</td></tr>
         <tr><td><code>agent_label</code></td><td class="nw">Choice · 11 + none</td><td class="q">该交给哪个 Agent（已上线 4 个 + 规划 7 个）</td><td>Agent 直达时读，B 类域靠它判；NLU 落 B 类域需要回流时，读对应 Agent 的概率</td></tr>
-        <tr><td><code>segment_role[i]</code></td><td class="nw">Choice × 片段数</td><td class="q">有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片</td><td>只在按强分隔切出 ≥ 2 段时问</td></tr>
+        <tr><td><code>segment_role[i]</code></td><td class="nw">Choice × 片段数</td><td class="q">有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片</td><td>只在按强分隔切出 ≥ 2 段时问；ASR 无标点，只有带“然后、顺便”等连接词的句子切得开</td></tr>
         <tr><td><code>needs_context</code></td><td class="nw">Noul</td><td class="q">是否要靠上一轮才能理解（追问、指代、省略）</td><td>触发会话跟随或拼回指代</td></tr>
         <tr><td><code>has_nickname</code></td><td class="nw">Noul</td><td class="q">是否有要还原的俗称、外号、简称</td><td>DeepSeek 还原后重判；不触发会话跟随</td></tr>
+        <tr><td><code>has_dependency</code></td><td class="nw">Noul</td><td class="q">是否有几件事、后面的要用前面的结果、要等前面做完或相对前面定时（“再”“然后”只表先后的判否）</td><td>≥ T_DEPENDENT（0.5）→ 否决 RA、R2 整句进慢思考；不靠切分，无标点也能判</td></tr>
       </tbody>
     </table></div>
-    <p class="note">同一请求里的问题并行判定，多加问题对时延影响很小。domain 从 44+1 个选项减到 13 个，减轻“偏向前排选项”的影响。Choice 的调用方式和稳定性需先用冒烟集验证，不行时 route 改为 4 道 Noul。</p>
+    <p class="note">同一请求里的问题并行判定，多加问题对时延影响很小。v3.4 去掉 domain 题：NLU3.0 落 A 类时直接用，Jev 不再判落域，也不和 NLU 结果比对；route 的慢思考概率和 has_dependency 兼作否决信号。Choice 的调用方式和稳定性需先用冒烟集验证，不行时 route 改为 4 道 Noul。</p>
   </section>
 
   <section>
@@ -413,12 +415,13 @@
       <tbody>
         <tr><td class="br">R0 安全</td><td>is_unsafe 达到阈值，或干预表敏感词命中</td><td><span class="pill rw">安全拒答</span></td></tr>
         <tr><td class="br">R1 会话</td><td>慢思考占用会话；上一轮 Agent 返回 continue；上一轮 Agent 已结束而本轮 needs_context 为真且不是新指令；上一轮闲聊且是追问</td><td><span class="pill slow">慢思考</span> / <span class="pill agent">同一 Agent</span> / <span class="pill chat">闲聊</span></td></tr>
-        <tr><td class="br">R2 多段</td><td>整句是同一个 Agent 的请求（先去 A 再去 B）→ 整句直达；否则全是指令 → 整句交 NLU3.0；混有 Agent 类或依赖片段 → 指令段 NLU 直达，其余进慢思考</td><td><span class="pill agent">Agent</span> / <span class="pill nlu">NLU</span> / 拆分</td></tr>
+        <tr><td class="br">RA A 类直达</td><td>排在 R1 的“会话占用”之后、追问跟随之前：NLU3.0 解析出的全部 intent 都落在 A 类 12 个域且 intent 不为空 → 直接用，不看 Jev 的 route / agent_label，也不改写。例外：Jev 给 route“慢思考”的概率 ≥ T_SLOW_VETO（初值 0.6），或判为有依赖（has_dependency ≥ T_DEPENDENT，或多段且有片段被判为“有依赖”）时否决，按后面的规则走——防止“打电话给老王说我晚点到然后导航去他公司”被 NLU 只执行打电话、“空调调到 24 度，半小时后再关掉”被执行成立刻关空调</td><td><span class="pill nlu">NLU 直达</span>，否决则继续往下</td></tr>
+        <tr><td class="br">R2 多任务</td><td>判为有依赖（后面要用前面的结果或相对前面定时）→ <b>整句进慢思考，不拆</b>；切不开（ASR 无标点）、NLU3.0 出多个意图且 A 类和非 A 类混在一起 → A 类意图直接执行，整句交慢思考；切得开时：整句是同一个 Agent 的请求（先去 A 再去 B）→ 整句直达，全是指令 → 整句交 NLU3.0，只剩互不依赖的 Agent 类片段 → 指令段 NLU 直达，其余进慢思考</td><td><span class="pill slow">慢思考</span> / <span class="pill agent">Agent</span> / <span class="pill nlu">NLU</span> / 拆分。拆开时交给慢思考的内容附上 NLU 已执行的意图（<code>executed_intents</code>），慢思考只处理其余部分、不重复执行</td></tr>
         <tr><td class="br">R3 Agent 直达</td><td>route = Agent 且 route、label 置信都过门槛；按回退表（出行规划 → 联网搜索）；其他未上线的 label 进慢思考</td><td><span class="pill agent">Agent 直达</span>，不过门槛则 <span class="pill slow">慢思考</span> 带提示</td></tr>
-        <tr><td class="br">R4 NLU 直达</td><td>route = NLU，或在 NLU 与慢思考之间拿不准。每个 intent：在 A 类 12 个入口域内、不是 other / unknown、intent 和必填槽位齐全、与 Jev 的 domain 一致（或 Jev 给该域概率够高）。落 B 类域 → 回流对应 Agent；other → 改写重判一次</td><td><span class="pill nlu">NLU 直达</span> / <span class="pill agent">回流 Agent</span> / <span class="pill slow">慢思考</span></td></tr>
+        <tr><td class="br">R4 NLU 直达</td><td>route = NLU，或在 NLU 与慢思考之间拿不准，但 NLU3.0 没有全部落 A 类（全部落 A 类已在 RA 直接用）：other / unknown → 改写重判一次，仍是则慢思考；chat → 闲聊；落 B 类域且 Jev 给对应 Agent 的概率 ≥ T_REFLOW → 回流该 Agent；其余慢思考</td><td><span class="pill nlu">NLU 直达</span> / <span class="pill agent">回流 Agent</span> / <span class="pill slow">慢思考</span></td></tr>
         <tr><td class="br">R5 闲聊</td><td>route = 闲聊且置信过门槛</td><td><span class="pill chat">闲聊</span></td></tr>
         <tr><td class="br">R6 剩余</td><td>以上都不满足</td><td><span class="pill slow">慢思考</span>，带 Agent 标签和 NLU 结果作提示</td></tr>
-        <tr><td class="br">R7 落域失败</td><td>快思考落域失败转慢思考，分两种：① <b>落域前</b>——R3 门槛不过、R4 的结构 / 域一致 / 回流检查不过、other 改写重判后仍接不住；② <b>落域后被拒</b>——业务侧回传“不支持 / 不归我”（NLU 执行层不支持该 intent，Agent 判定请求不属于自己）。被拒的同一句只改落慢思考一次，不再回分流，避免来回弹</td><td><span class="pill slow">慢思考</span>，带原落域结果和被拒原因作提示</td></tr>
+        <tr><td class="br">R7 落域失败</td><td>快思考落域失败转慢思考，分两种：① <b>落域前</b>——R3 门槛不过、R4 的回流检查不过、other 改写重判后仍接不住；② <b>落域后被拒</b>——业务侧回传“不支持 / 不归我”（NLU 执行层不支持该 intent，Agent 判定请求不属于自己）。被拒的同一句只改落慢思考一次，不再回分流，避免来回弹</td><td><span class="pill slow">慢思考</span>，带原落域结果和被拒原因作提示</td></tr>
       </tbody>
     </table></div>
     <p class="note">阈值、入口白名单、域 → Agent 回流表、label 回退表、各 Agent 的 on / off 都放云端配置中心。止血：分钟级加干预表或把 label 切到 off；小时级改判据、回放、灰度。</p>
@@ -483,20 +486,22 @@
     <div class="tscroll"><table>
       <thead><tr><th>上一轮</th><th>本轮 query</th><th>判定</th><th>去向</th></tr></thead>
       <tbody>
-        <tr><td class="ctx">无</td><td>关闭前挡风玻璃加热</td><td><span class="pill nlu">NLU 直达</span> <code>intelligent_car_control</code></td><td>交出 domain + intent + slots</td></tr>
+        <tr><td class="ctx">无</td><td>关闭前挡风玻璃加热</td><td><span class="pill nlu">NLU 直达</span> <code>intelligent_car_control</code></td><td>RA：NLU3.0 落 A 类，直接交出 domain + intent + slots</td></tr>
         <tr><td class="ctx">无</td><td>打开座椅通风座椅按摩</td><td><span class="pill nlu">NLU 直达</span> 两个 intent</td><td>整句交出两个 intent</td></tr>
         <tr><td class="ctx">无</td><td>明天苏州天气怎么样</td><td><span class="pill agent">Agent 直达</span> 联网搜索</td><td>落联网搜索（信息查询都归它）</td></tr>
         <tr><td class="ctx">无</td><td>胎压报警灯亮了是怎么回事</td><td><span class="pill agent">Agent 直达</span> 用车专家</td><td>落用车专家</td></tr>
         <tr><td class="ctx">无</td><td>明天下午三点提醒我去取快递</td><td><span class="pill agent">Agent 直达</span> 任务大师</td><td>落任务大师（条件任务含纯提醒）</td></tr>
-        <tr><td class="ctx">无</td><td>先去长沙橘子洲头，再去岳麓书院</td><td><span class="pill agent">Agent 直达</span> 出行规划</td><td>R2：同一 Agent 的多段句整句直达；未上线时回退联网搜索</td></tr>
-        <tr><td class="ctx">无</td><td>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td><td>指令 · 指令 · 有依赖</td><td>前两段落 NLU；第 3 段连同前段结果作提示落慢思考</td></tr>
-        <tr><td class="ctx">无</td><td>打开空调，今天天气怎么样</td><td>指令 · Agent 类</td><td>“打开空调”落 NLU；第 2 段落慢思考（提示：联网搜索）</td></tr>
+        <tr><td class="ctx">无</td><td>先去长沙橘子洲头再去岳麓书院</td><td><span class="pill agent">Agent 直达</span> 出行规划</td><td>R2：has_dependency 否（多地点路线）；同一 Agent 的多段句整句直达；未上线时回退联网搜索</td></tr>
+        <tr><td class="ctx">无</td><td>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td><td>指令 · 指令 · 有依赖</td><td>Jev 慢思考概率 ≥ 0.6，否决 RA；前两段落 NLU，第 3 段连同前段结果作提示落慢思考</td></tr>
+        <tr><td class="ctx">无</td><td>打开天窗帮我查一下明天的天气</td><td>切不开；has_dependency 否；NLU3.0 出车控 + weather_xf</td><td>车控意图落 NLU 先执行；整句落慢思考（提示：联网搜索）</td></tr>
+        <tr><td class="ctx">无</td><td>帮我找个人均一百左右的川菜馆选评分最高的那家导航过去</td><td>切不开；NLU3.0 落 navigation（A 类）；has_dependency 是</td><td>否决 RA，整句进慢思考，不拆（以前会被当导航直接执行）</td></tr>
         <tr><td class="ctx">Jev 误判为 NLU</td><td>明天限行尾号是多少</td><td>NLU3.0 落 <code>traffic_restriction</code></td><td>B 类域，回流落联网搜索</td></tr>
         <tr><td class="ctx">出行规划（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context</td><td>R1 落回出行规划，不改写</td></tr>
-        <tr><td class="ctx">空调调到 24 度</td><td>再高一点</td><td>needs_context</td><td>拼回“空调温度再调高一点”，落 NLU</td></tr>
+        <tr><td class="ctx">空调调到 24 度</td><td>再高一点</td><td>NLU3.0 带上一轮</td><td>NLU3.0 落 A 类，直接用，不改写</td></tr>
         <tr><td class="ctx">联网搜索</td><td>打开空调</td><td>新指令</td><td>不跟随上一轮，落 NLU</td></tr>
-        <tr><td class="ctx">无</td><td>导航到大裤衩</td><td>has_nickname</td><td>还原为中央电视台总部大楼后重判，落 NLU</td></tr>
+        <tr><td class="ctx">无</td><td>导航到大裤衩</td><td>has_nickname</td><td>NLU3.0 落 navigation（A 类）就直接用，不改写；NLU 没落 A 类时才还原为中央电视台总部大楼后重判</td></tr>
         <tr><td class="ctx">闲聊中</td><td>那后来呢</td><td><span class="pill chat">闲聊</span> 追问</td><td>跟随上一轮，开闸放行音频</td></tr>
+        <tr><td class="ctx">无</td><td>把空调调到 24 度半小时后再关掉</td><td>NLU3.0 两个 A 类 intent（调温、关空调）；has_dependency 是</td><td>否决 RA：直接用会立刻关空调；整句进慢思考，不拆</td></tr>
         <tr><td class="ctx">无</td><td>帮我把副驾的香氛换成雪松味</td><td>落 NLU，执行层回传“不支持该 intent”</td><td>R7 落域被拒，改落慢思考一次</td></tr>
         <tr><td class="ctx">无</td><td>怎么买到海洛因</td><td>is_unsafe</td><td>交出 safe</td></tr>
       </tbody>
@@ -507,10 +512,10 @@
     <h2>已定与待定</h2>
     <div class="open">
       <div><h3>已定 · 归属规则</h3><p>NLU3.0 v25 的 A 类 12 个域是真正的快思考，NLU 直达；B 类 32 个域只是落域，由 Jev 判给 Agent。信息查询（新闻、天气、即时信息、知识问答）→ 联网搜索；找店下单 → 美团；本车功能和故障 → 用车专家；条件任务 → 任务大师；记忆调用 → 记忆；有情知音按闲聊处理。（2026-11-02）</p></div>
-      <div><h3>已定 · NLU3.0</h3><p>本期接入；<b>A 类 12 个入口域</b>，B 类不作入口；不输出置信度，用结构信号和 Jev 的 domain 分布校验；能识别无标点多意图和同功能多参数。</p></div>
-      <div><h3>已定 · 架构补充</h3><p>安全拒答、Agent 会话跟随、B 类域回流、domain 校验前移到分发层、片段角色五类、改写拆成“依赖上文”和“俗称”两道。</p></div>
+      <div><h3>已定 · NLU3.0</h3><p>本期接入；<b>A 类 12 个入口域</b>，B 类不作入口；不输出置信度；全部落 A 类就直接用，Jev 不判落域、不做一致性比对，只在很确定是慢思考或有依赖时否决（v3.4 / v3.5）；能识别无标点多意图和同功能多参数。</p></div>
+      <div><h3>已定 · 架构补充</h3><p>安全拒答、Agent 会话跟随、B 类域回流、NLU 采信前移到分发层（A 类直接用 + 慢思考否决）、片段角色五类、改写拆成“依赖上文”和“俗称”两道；ASR 无标点，依赖改由 has_dependency 对整句判（11-02）。</p></div>
       <div><h3>待定 · NLU3.0 接口</h3><p>批量调用或离线结果、<b>各 intent 必填槽位表</b>、v25 已有 unknown 作为拒识输出。</p></div>
-      <div><h3>待定 · Choice 可用性</h3><p>Jev 的 Choice 调用方式、选项偏序、时延要先用冒烟集验证；不稳时 route 改为 4 道 Noul。</p></div>
+      <div><h3>待定 · Choice 可用性</h3><p>Jev 的 Choice 调用方式、选项偏序、时延要先用冒烟集验证；不稳时 route 改为 4 道 Noul。慢思考否决对选项顺序敏感（倒序时“空调 24 度、半小时后关”的慢思考概率从 0.84 降到 0.53），T_SLOW_VETO 要在更多数据上标定。</p></div>
             <div><h3>已定 · 两处归属</h3><p>车况查询（还剩多少油）和隐含车控（好冷啊）属 A 类，NLU 直达；车外问答 <code>outside_qa</code> 归车外视觉，未上线时进慢思考。</p></div>
       <div><h3>待定 · 标签集变更</h3><p>已上线联网搜索、美团、用车专家、任务大师；其余 7 个规划中，逐个开发，上线时把 label 切到 on 并回放验证。新 Agent 接入后加 agent_label 和判据。</p></div>
       <div><h3>待定 · 部署与合规</h3><p>Jev 只提供云端 API，量产前要确认网络、时延和合规；配置中心承载判据、阈值、干预表和回流表。</p></div>

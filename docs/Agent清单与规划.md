@@ -1,6 +1,6 @@
 # Jev 分流 Agent 清单与规划
 
-- 日期：2026-11-02；判据 `docs/share/criteria_v3.json` v3.3
+- 日期：2026-11-02；判据 `docs/share/criteria_v3.json` v3.5
 - 依据：《NLU3.0 输出域清单（v25 简明版）》的 A/B 分类（见 `docs/NLU3.0-v25_domain清单.md`）
 - 原则：A 类 12 个域是真正的快思考，NLU 直达；B 类 32 个域只是落域，由 Jev 判断，都交给 Agent；信息查询都归联网搜索 Agent
 

@@ -1,9 +1,8 @@
 """生成 Jev 前置分流的判据 criteria_v3.json（对应《Jev 分流详细设计 v2》第 04、05 节、融合架构 v6）。
 
-一次请求里 7 个问题并行判定：
+一次请求里 6 个问题并行判定（Jev 不判 NLU 落域：NLU3.0 落 A 类就直接用，见 config.nlu_entry）：
   is_unsafe        Noul    违法有害 → 安全拒答（R0）
   route            Choice  4 选 1：慢思考 / NLU直达 / Agent直达 / 闲聊（R2–R6）
-  domain           Choice  12 个 NLU 入口域（v25 的 A 类）+ 非入口（R4 一致性校验）
   agent_label      Choice  11 个 Agent 标签 + none（R3、R4 回流；v25 的 B 类域都归到 Agent）
   needs_context    Noul    是否要靠上一轮才能理解（R1 会话跟随）
   has_nickname     Noul    是否有要还原的俗称（Query 整理）
@@ -14,7 +13,7 @@
   - Noul 一律“概率高 = 是”，true / false 的说明和问题方向一致，不用否定句。
   - Choice 每个选项用同一组字段 what / not_for / examples；易混的选项在 not_for 里点名对方。
   - 模型偏向排在第一位的选项，所以每道 Choice 都把“安全兜底”的选项放第一：
-    route 的慢思考、domain 的非入口、agent_label 的 none、segment_role 的有依赖。改判据后要乱序重跑看是否翻转。
+    route 的慢思考、agent_label 的 none、segment_role 的有依赖。改判据后要乱序重跑看是否翻转。
   - 例句 3–6 条，先典型后边界。例句里凡是出现在评测数据中的句子，切分时必须固定进 dev（--check 会列出来）。
   - 日期、计数、时长不让 Jev 算：任务大师只判“有没有触发时间或条件”。
   - 评测和上线固定模型版本，不用 jev-latest 别名。
@@ -38,7 +37,7 @@ V25_B = ["unknown", "video_qa", "chat", "poi_recommend", "app_call", "music_qa",
          "train", "audio_book", "painting", "flight", "similar_poi", "theme_gen", "traffic_restriction"]
 V25_DOMAINS = V25_A + V25_B
 REPO = HERE.parents[1]
-VERSION = "v3.3 2026-11-02 按 NLU3.0 v25 的 A/B 分类：A 类 12 个域 NLU 直达，B 类 32 个域由 Jev 判给 Agent；已上线 Agent：联网搜索、美团、用车专家、任务大师，其余规划中（未上线时按回退表）；信息查询都归联网搜索"
+VERSION = "v3.5 2026-11-02 ASR 文本没有标点、切不开片段：新增 has_dependency 对整句判依赖，有依赖整句慢思考；无标点的互不依赖多任务按 NLU3.0 多意图拆；v3.4 去掉 domain 题：NLU3.0 落 A 类直接用，Jev 不判 NLU 落域、不做一致性校验；只在 Jev 给慢思考的概率 ≥ T_SLOW_VETO 时否决，防止多任务被 NLU 截断；v3.3 按 NLU3.0 v25 的 A/B 分类：A 类 12 个域 NLU 直达，B 类 32 个域由 Jev 判给 Agent；已上线 Agent：联网搜索、美团、用车专家、任务大师，其余规划中（未上线时按回退表）；信息查询都归联网搜索"
 MODEL = "jev-1.14.0"
 
 
@@ -110,40 +109,6 @@ ROUTE = {
     },
 }
 
-# =========================== 3. domain ===========================
-NLU_ENTRY = {   # 12 个入口域 = v25 的 A 类（带独立意图和槽位），说明参考简明版清单，收窄到直接指令
-    "intelligent_car_control": opt("车身与座舱硬件控制：空调、座椅、车窗、天窗、灯光、音量、屏幕、后视镜、驾驶模式等。",
-                                   "只说感受、没点功能名的（intelligent_car_scenario）；跨应用通用的返回、翻页、播放控制（global_control）；打开关闭应用和系统开关（app_control）。",
-                                   ["关闭前挡风玻璃加热", "空调温度调到23度风量调到2挡"]),
-    "intelligent_car_scenario": opt("不点功能名的隐含车控：只说冷、热、闷、暗、看天空这类感受或场景，由车推断该调什么。",
-                                    "说出了具体功能的（intelligent_car_control）。", ["车里好热啊", "太暗啦", "咋突然这么冷了"]),
-    "intelligent_car_info": opt("查车况：油量、电量、续航、里程、胎压、能耗趋势、门窗和空调的当前状态。",
-                                "功能怎么用、故障报警是什么意思（非入口，用车专家）。", ["还剩多少电", "后备箱关好了吗", "查看100公里耗油"]),
-    "global_control": opt("跨应用通用的系统级指令：返回、主页、翻页、快进快退、倍速、上一个下一个、选第几个。",
-                          "具体硬件的控制（intelligent_car_control）。", ["返回到上一页", "快进到四十分钟"]),
-    "app_control": opt("打开关闭车机应用、页面和系统开关：蓝牙、WiFi、流量、语音助手、设置页。",
-                       "在第三方 App 或小程序里使用某个功能（非入口，应用调用）。", ["关闭蓝牙", "打开座椅通风页面"]),
-    "music": opt("音乐的点播和播放控制：歌名、歌手、专辑、歌单、风格、年代、场景，收藏、切歌、MV、音效。",
-                 "歌曲相关的问答（非入口，联网搜索）；车内 KTV（KTV）；唱吧、有声书（非入口）。", ["放一首稻香", "播放70年代的歌"]),
-    "video": opt("视频的点播和播放控制：片名、频道、演员、导演，打开关闭视频应用。",
-                 "影视问答和推荐（非入口，联网搜索）；短视频（非入口）。", ["用哔哩哔哩播放凡人修仙传", "播放刘德华的电影"]),
-    "fm": opt("FM / AM 调频、电台节目和广播的播放控制、收藏。", examples=["播放调频交通广播"]),
-    "KTV": opt("车内 KTV：点歌、打开、关闭。", "唱吧（非入口）。", ["来一首陈奕迅的浮夸"]),
-    "phone_call": opt("打电话、查号码、通话记录，含卡一卡二和尾号指定。", "微信消息和微信通话（非入口）。", ["给霞霞打电话", "查看二卡的电话记录"]),
-    "navigation": opt("导航去说得出名字的地点、回家、去公司，以及导航过程中的控制：路线偏好、途经点、播报、放大缩小、取消导航、查剩余距离和时间。",
-                      "按条件找店找景点、多地点路线、行程规划（非入口）。", ["导航去中山公园", "走高速优先", "取消导航"]),
-    "home_agent": opt("控制家里的智能设备：空调、窗帘、灯和家电开关。", examples=["关闭主卧的窗帘", "打开客厅的灯"]),
-}
-DOMAIN = {
-    "type": "choice",
-    "instructions": {
-        "question": "如果把 `query` 当作一条交给 NLU 直接执行的指令，它属于下面哪个 NLU 域？都不是就选“非入口”。",
-        "context": "这里只列出车机能直接执行的域。查询、问答、推荐、天气新闻、提醒和定时任务、找店找景点、画画和换壁纸、有声书和短视频、聊天都不在这些域里。",
-    },
-    "criteria": {"非入口": opt("不是下面任何一个域的直接指令。", examples=["明天会下雨吗", "附近有什么好吃的", "换个壁纸", "五分钟后打电话"]),
-                 **NLU_ENTRY},
-}
-
 # =========================== 4. agent_label ===========================
 AGENT_LABELS = {   # 顺序：none 放第一（兜底），其后已上线 → 规划中
     "none": opt("不交给任何 Agent：车机能直接执行的指令、跨能力的多任务、纯聊天。", examples=["关闭车窗", "车里好热啊", "给我讲个笑话"]),
@@ -201,6 +166,23 @@ NEEDS_CONTEXT = {
 }
 
 # =========================== 6. has_nickname ===========================
+# =========================== 6b. has_dependency ===========================
+# ASR 文本没有标点，切不出片段时 segment_role 用不上；这道题对整句判“有没有依赖前面的后续任务”
+HAS_DEPENDENCY = {
+    "type": "noul",
+    "instructions": "`query` 是语音识别出的一句话，没有标点。这句话里是否有两件以上要做的事，而且后面的事要用到前面那件事的结果、要等前面的事做完才做，或者要在前面的事之后隔一段时间再做？",
+    "criteria": {
+        "true": opt("是：后面的事依赖前面。比如要用前面找到的店、地点、联系人、查询结果（常用“那家”“那里”“过去”“他”“她”指代）；"
+                    "或者“加完油再…”“看完之后…”“等它播完…”；或者先做一个动作，隔一段时间再做另一个动作。",
+                    examples=["帮我搜一家附近的烤肉店然后导航到那里", "查查老李的手机号再给他发个短信",
+                              "先开到最近的充电站充满电再导航去公司", "把座椅加热打开十分钟后再关掉", "看看哪个停车场还有车位有的话带我过去"]),
+        "false": opt("否：只有一件事；或者几件事互不相关、各做各的，即使中间用了“再”“然后”，只要后面的事不用前面的结果；或者是同一个功能的几个参数；"
+                     "或者整句只有一个定时任务或一条长期规则；或者是一条依次经过几个地点的路线。",
+                     examples=["打开座椅加热顺便查一下今天的限行", "空调调到26度风量调到3档", "五分钟后给我打电话",
+                               "每天上车就打开座椅加热", "先去天安门再去故宫最后去王府井", "打开车窗再放点音乐"]),
+    },
+}
+
 HAS_NICKNAME = {
     "type": "noul",
     "instructions": "`query` 里是否用俗称、外号、简称、昵称来指一个地点、人物或作品，而且靠常识能把它还原成唯一的标准名称？",
@@ -244,7 +226,7 @@ def segment_question(i: int) -> dict:
 
 # =========================== 配置（代码用，不发给模型） ===========================
 CONFIG = {
-    "nlu_entry": list(NLU_ENTRY),
+    "nlu_entry": V25_A,   # NLU3.0 全部 intent 落在这 12 个 A 类域 → 直接用 NLU 结果，不看 Jev
     "domain_to_agent": {   # B 类 32 个域 → Agent / 闲聊 / 接不住；NLU3.0 落到这些域时按此回流
         **{d: "联网搜索" for d in ["news", "weather_xf", "life_suggestion", "datetime_info", "stock", "flight", "train",
                                  "traffic_restriction", "calculator", "music_qa", "video_qa"]},
@@ -263,7 +245,7 @@ CONFIG = {
                      **{k: "off" for k in ["出行规划", "记忆", "车外视觉", "AI创作", "内容娱乐", "应用调用", "400客服"]}},
     "thresholds": {   # 初值，未实测；在 val 上标定
         "T_UNSAFE": 0.5, "T_AGENT_ROUTE": 0.7, "T_AGENT_LABEL": 0.7, "T_SLOW_SURE": 0.6,
-        "T_DOMAIN_AGREE": 0.2, "T_REFLOW": 0.2, "T_CHAT": 0.6, "T_CONTEXT": 0.5, "T_NICKNAME": 0.5,
+        "T_REFLOW": 0.2, "T_SLOW_VETO": 0.6, "T_CHAT": 0.6, "T_CONTEXT": 0.5, "T_NICKNAME": 0.5, "T_DEPENDENT": 0.5,
     },
     "segment_split": {"max_segments": 4, "separators": "，,。；;！!？? 然后 再 之后 接着 顺便 另外 还有"},
 }
@@ -281,7 +263,7 @@ def build() -> dict:
         "version": VERSION,
         "model": MODEL,
         "notes": [
-            "questions 里的 7 道题在同一次请求里发出；segment_role 只在切出 ≥2 段时按片段数生成 segment_role_0…。",
+            "questions 里的 6 道题在同一次请求里发出（v3.4 起去掉 domain：NLU3.0 落 A 类直接用，Jev 不判落域）；segment_role 只在切出 ≥2 段时按片段数生成 segment_role_0…。",
             "每道 Choice 把兜底选项放第一（慢思考 / 非入口 / none / 有依赖），利用选项偏序让误差往安全方向走。",
             "config 只给代码用，不发给模型；阈值为初值。",
             "例句中出现在评测数据里的句子，切分时必须固定进 dev，见 --check 输出。",
@@ -290,10 +272,10 @@ def build() -> dict:
         "questions": {
             "is_unsafe": IS_UNSAFE,
             "route": ROUTE,
-            "domain": DOMAIN,
             "agent_label": AGENT_LABEL,
             "needs_context": NEEDS_CONTEXT,
             "has_nickname": HAS_NICKNAME,
+            "has_dependency": HAS_DEPENDENCY,
         },
         "segment_role_template": segment_question(0),
         "config": CONFIG,
@@ -318,23 +300,21 @@ def all_examples(doc: dict) -> list[str]:
 
 def check(doc: dict) -> int:
     problems = 0
-    first = {"route": "慢思考", "domain": "非入口", "agent_label": "none"}
+    first = {"route": "慢思考", "agent_label": "none"}
     for q, want in first.items():
         got = next(iter(doc["questions"][q]["criteria"]))
         if got != want:
             print(f"[顺序] {q} 第一个选项是 {got}，应为 {want}"); problems += 1
     if next(iter(SEGMENT_ROLES)) != "有依赖" or len(SEGMENT_ROLES) != 5:
         print("[顺序] segment_role 第一个选项应为 有依赖"); problems += 1
-    if list(NLU_ENTRY) != V25_A and set(NLU_ENTRY) != set(V25_A):
-        print(f"[数量] NLU 入口域应为 v25 A 类 12 个，现为 {list(NLU_ENTRY)}"); problems += 1
     if set(CONFIG["domain_to_agent"]) != set(V25_B):
         print(f"[清单] 回流表应正好覆盖 v25 B 类：多 {set(CONFIG['domain_to_agent']) - set(V25_B)}，少 {set(V25_B) - set(CONFIG['domain_to_agent'])}"); problems += 1
     v25 = set(V25_DOMAINS)
-    bad = [d for d in list(NLU_ENTRY) + list(CONFIG["domain_to_agent"]) if d not in v25]
+    bad = [d for d in CONFIG["nlu_entry"] + list(CONFIG["domain_to_agent"]) if d not in v25]
     if bad:
         print(f"[清单] 不在 NLU3.0 v25 的 44 个域里：{bad}"); problems += 1
-    if v25 - set(NLU_ENTRY) - set(CONFIG["domain_to_agent"]):
-        print(f"[清单] v25 里有、但入口域和回流表都没覆盖：{sorted(v25 - set(NLU_ENTRY) - set(CONFIG['domain_to_agent']))}"); problems += 1
+    if v25 - set(CONFIG["nlu_entry"]) - set(CONFIG["domain_to_agent"]):
+        print(f"[清单] v25 里有、但入口域和回流表都没覆盖：{sorted(v25 - set(CONFIG['nlu_entry']) - set(CONFIG['domain_to_agent']))}"); problems += 1
     targets = {t for t in CONFIG["domain_to_agent"].values() if not t.startswith("__")} | set(CONFIG["label_fallback"].values())
     if targets - set(AGENT_LABELS):
         print("[标签] 回流表或回退表指向判据里没有的标签：", targets - set(AGENT_LABELS)); problems += 1

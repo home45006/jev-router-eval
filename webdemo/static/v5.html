@@ -59,6 +59,14 @@ main{max-width:1280px;margin:0 auto;padding:18px 16px 60px}
 .hint{color:var(--text-3);font-size:12.5px;margin:6px 0}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 .chip{border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:12.5px;color:var(--text-2);background:var(--surface-2);cursor:pointer}
+.chip-groups{margin-top:10px;display:grid;gap:8px}
+.chip-group{display:flex;gap:10px;align-items:flex-start}
+.chip-group .chips{margin-top:0;flex:1}
+.chip-label{flex:0 0 72px;font-size:12px;color:var(--text-3);padding-top:3px}
+.chip-subs{flex:1;display:grid;gap:4px}
+.chip-sub{display:flex;gap:8px;align-items:flex-start}
+.chip-sublabel{flex:0 0 206px;font-size:11.5px;color:var(--text-3);padding-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:640px){.chip-group,.chip-sub{flex-direction:column;gap:4px}.chip-label,.chip-sublabel{flex:none}}
 .chip:hover{border-color:var(--acc);color:var(--text)}
 .qin{flex:1;min-width:240px;font-size:15px;padding:9px 12px}
 .turn{display:flex;align-items:center;gap:8px;margin:18px 0 6px;color:var(--text-3);font-size:12.5px}
@@ -93,6 +101,21 @@ main{max-width:1280px;margin:0 auto;padding:18px 16px 60px}
 .rule{display:grid;grid-template-columns:44px 64px 1fr;gap:8px;align-items:baseline;font-size:13px;padding:4px 8px;border-radius:6px}
 .rule.hit{background:var(--good-bg)} .rule.fail{background:var(--bad-bg)}
 .rule .s{font-size:12px;color:var(--text-3)}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:4px 2px;margin:4px 0 8px}
+.fnode{border:1px solid var(--line);border-radius:8px;padding:5px 8px;min-width:76px;max-width:190px;font-size:12px;background:var(--surface-2);display:flex;flex-direction:column;gap:2px;cursor:default}
+.fnode .n{font-weight:700;white-space:nowrap} .fnode .n small{font-weight:400;color:var(--text-3);margin-left:4px}
+.fnode .v{color:var(--text-3);font-size:11.5px;line-height:1.35;word-break:break-all}
+.fnode .st{font-size:11px;font-weight:700}
+.fnode.hit{border-color:var(--good);background:var(--good-bg)} .fnode.hit .st{color:var(--good)}
+.fnode.fail{border-color:var(--bad);background:var(--bad-bg)} .fnode.fail .st{color:var(--bad)}
+.fnode.pass .st,.fnode.skip .st{color:var(--text-3)}
+.fnode.skip{border-style:dashed}
+.fnode.none{opacity:.38;border-style:dashed}
+.fnode.src{border-color:var(--text-3)}
+.fnode.exit{border-width:2px;border-color:var(--acc);min-width:110px}
+.farr{align-self:center;color:var(--text-3);font-size:13px;padding:0 1px}
+.farr.on{color:var(--good);font-weight:700}
+@media (max-width:640px){.fnode{min-width:0;max-width:none;flex:1 1 40%}.farr{display:none}}
 .rule.hit .s{color:var(--good);font-weight:700} .rule.fail .s{color:var(--bad);font-weight:700}
 .wf{position:relative;border:1px solid var(--line);border-radius:8px;padding:8px 10px}
 .wf-row{display:grid;grid-template-columns:150px 1fr 150px;gap:8px;align-items:center;font-size:12.5px;margin:3px 0}
@@ -175,12 +198,12 @@ tr.clk{cursor:pointer} tr.clk:hover td{background:var(--surface-2)}
 <section class="tab on" id="tab-single">
   <div class="panel">
     <div class="row">
-      <input id="q" class="qin" placeholder="输入一句话，回车发送（每句独立，没有上一轮）" autocomplete="off">
+      <input id="q" class="qin" placeholder="输入一句话，回车发送（每句独立，没有上一轮；ASR 文本没有标点，建议不带标点）" autocomplete="off">
       <button id="sendBtn">发送</button>
       <button class="ghost" id="clearSingle">清空</button>
       <label class="sl-only"><input type="checkbox" id="cmpSingle"> Jev 和 StartLux 对比</label>
     </div>
-    <div class="chips" id="chips"></div>
+    <div id="chips" class="chip-groups"></div>
     <div class="hint">单轮：每句都用新会话判定，不带上一轮。概率条上的竖线是阈值。每个 Choice 卡片下“全部 N 个选项”可展开看完整概率。 <label><input type="checkbox" class="expandAll"> 默认展开全部选项</label></div>
   </div>
   <div id="results"></div>
@@ -348,7 +371,7 @@ function judgCard(key, a, th, used, reverse = false) {
 }
 function usedKeys(r) {
   const s = new Set(["is_unsafe", "route", "needs_context"]);
-  r.trace.forEach(t => { if (t.rule === "R3" || t.rule === "R2") s.add("agent_label"); if (t.rule === "R4") { s.add("domain"); s.add("agent_label"); } });
+  r.trace.forEach(t => { if (t.rule === "R3" || t.rule === "R2") s.add("agent_label"); if (t.rule === "R4") s.add("agent_label"); });
   if (r.rewritten) s.add("has_nickname");
   Object.keys(r.jev.answers).filter(k => k.startsWith("segment_role_")).forEach(k => s.add(k));
   return s;
@@ -364,7 +387,7 @@ function nluTable(n) {
   const rows = (n.intents || []).map(it => `<tr><td><code>${esc(it.domain)}</code> ${CFG.nlu_entry.includes(it.domain) ? '<span class="tag entry">入口</span>' : `<span class="tag non">非入口${CFG.domain_to_agent[it.domain] ? " → " + esc(TGT_NAME[CFG.domain_to_agent[it.domain]] || CFG.domain_to_agent[it.domain]) : ""}</span>`}</td>
     <td>${esc(it.intent || "—")}</td><td class="mono">${esc(JSON.stringify(it.slots || {}))}</td><td>${it.complete === false ? '<span class="bad">不完整</span>' : "完整"}</td></tr>`).join("");
   return `<table><thead><tr><th>domain</th><th>intent</th><th>slots</th><th>结构</th></tr></thead><tbody>${rows || '<tr><td colspan="4">无</td></tr>'}</tbody></table>
-    <div class="hint">NLU3.0（${n.kind === "real" ? "真实" : "模拟"}）· ${n.ms.toFixed(0)}ms</div>`;
+    <div class="hint">NLU3.0（${n.kind === "real" ? "真实 v25" : "模拟"}）· ${n.ms.toFixed(0)}ms${n.text ? ` · 原始输出 <code>${esc(n.text)}</code>` : ""}${n.error ? ` · <span class="bad">调用失败：${esc(n.error)}</span>` : ""}</div>`;
 }
 let RAW_ID = 0; const RAW = {};
 function rawBlock(title, obj, note = "") {
@@ -437,32 +460,75 @@ function costTable(r) {
     <tr><td><b>本句合计</b></td><td class="mono">Jev ${c.jev_calls} 次 · 改写 ${c.llm_calls} 次</td><td class="mono">${usd(c.jev_usd)}</td><td class="mono"><b>${yuan(c.total_yuan)}</b></td></tr></tbody></table>
     <div class="hint">折合每千句 ${perK(c.total_yuan)}（Jev ${perK(c.jev_yuan)}，改写 ${perK(c.llm_yuan)}）。Jev 只按输入 token 计费，汇率 ${CFG.pricing.usd_cny}；${esc(CFG.pricing.jev)}；DeepSeek 按 ${esc(CFG.pricing.deepseek)}。</div>`;
 }
+const splitNlu = d => d.nlu_text || (d.nlu_intents || []).map(i => `${i.domain}+${i.intent}`).join("；");
+// 分发策略执行过程：按规则顺序画出每一步，命中的节点接到出口
+const FLOW_RULES = [["R0", "安全拒答"], ["R1", "会话"], ["RA", "A 类直达"], ["R2", "多任务"], ["R3", "Agent 直达"],
+                    ["R4", "NLU 兜底"], ["R5", "闲聊"], ["R6", "慢思考兜底"]];
+const ST_NAME = { hit: "命中", pass: "通过", fail: "未过", skip: "跳过", none: "未经过" };
+function flowViz(r) {
+  const a = r.jev.answers, n = r.nlu || {}, d = r.decision, th = r.thresholds || {};
+  const f2 = x => (x ?? 0).toFixed(2);
+  const doms = (n.intents || []).map(i => i.domain).filter(Boolean);
+  const pSlow = a.route?.probs?.["慢思考"];
+  const val = {
+    R0: `is_unsafe ${f2(a.is_unsafe?.p)} / 门槛 ${th.T_UNSAFE}`,
+    R1: r.previous_turn ? `上一轮 ${ROUTE_NAME[r.previous_turn.route] || r.previous_turn.route}（${r.previous_turn.status}）· 依赖上文 ${f2(a.needs_context?.p)}` : "无上一轮",
+    RA: `NLU：${[...new Set(doms)].join("、") || "无 intent"}${pSlow != null ? ` · 慢思考 ${f2(pSlow)} / 否决 ${th.T_SLOW_VETO}` : ""}`,
+    R2: `${r.segments?.length ? r.segments.length + " 段" : "切不开"} · 依赖 ${f2(a.has_dependency?.p)} / ${th.T_DEPENDENT ?? 0.5}${doms.length > 1 ? ` · NLU ${doms.length} 个意图` : ""}`,
+    R3: `route ${a.route?.top} ${f2(a.route?.conf)} · ${a.agent_label?.top} ${f2(a.agent_label?.conf)}`,
+    R4: `NLU：${[...new Set(doms)].join("、") || "无 intent"}`,
+    R5: `闲聊 ${f2(a.route?.probs?.["闲聊"])} / 门槛 ${th.T_CHAT}`,
+    R6: "以上都不满足",
+  };
+  const by = {};
+  r.trace.forEach(t => (by[t.rule] = by[t.rule] || []).push(t));
+  const status = k => { const ts = by[k]; if (!ts) return "none"; if (ts.some(t => t.status === "hit")) return "hit"; return ts[ts.length - 1].status; };
+  const last = r.trace[r.trace.length - 1]?.rule;
+  const nodes = [];
+  // 输入：Jev ∥ NLU3.0 并行，改写时多一步
+  const nluShort = n.error ? "调用失败" : (n.intents || []).map(i => i.intent && i.intent !== i.domain ? `${i.domain}+${i.intent}` : i.domain).join("；") || "无 intent";
+  nodes.push(`<div class="fnode src" title="两路同时起跑&#10;NLU3.0 原始输出：${esc(n.text || n.error || "—")}"><span class="n">并行判定</span><span class="v">${esc(r.backend?.name || "Jev")} ${Object.keys(a).length} 题 · ${r.jev.ms.toFixed(0)}ms</span><span class="v">NLU3.0${n.kind === "real" ? "" : "（模拟）"} ${(n.ms || 0).toFixed(0)}ms · ${esc(nluShort)}</span></div>`);
+  if (r.rewritten) nodes.push(`<span class="farr on">→</span><div class="fnode src" title="has_nickname 或 needs_context 触发"><span class="n">Query 改写</span><span class="v">${esc(r.rewritten)}</span><span class="v">${r.rewritten !== r.query ? "已回 Jev 和 NLU 重判" : "未变化"}</span></div>`);
+  const lastIdx = Math.max(...FLOW_RULES.map(([k], i) => (by[k] ? i : -1)));
+  FLOW_RULES.forEach(([k, name], idx) => {
+    const st = status(k), tip = (by[k] || []).map(t => `${t.rule} ${ST_NAME[t.status]}：${t.text}`).join("\n") || "这一句没有走到这条规则";
+    const isEnd = k === last;
+    nodes.push(`<span class="farr${idx <= lastIdx ? " on" : ""}">→</span><div class="fnode ${st}" title="${esc(tip)}"><span class="n">${k}<small>${name}</small></span><span class="st">${ST_NAME[st]}${isEnd && st !== "hit" ? " · 结束" : ""}</span><span class="v">${esc(val[k])}</span></div>`);
+  });
+  let out = ROUTE_NAME[d.route] || d.route;
+  if (d.route === "agent") out += " · " + d.agent;
+  const sub = d.route === "split" ? `NLU：${splitNlu(d)} ／ 慢思考：${d.slow_text}${d.slow_input?.executed_intents?.length ? `（附已执行 ${d.slow_input.executed_intents.length} 个意图）` : ""}` : d.intended && d.intended !== d.agent ? `Jev 判给 ${d.intended}（未上线）` : d.why || "";
+  nodes.push(`<span class="farr on">⇒</span><div class="fnode exit" title="${esc(d.why || "")}"><span class="n">出口</span>${routeBadge(d)}<span class="v">${esc(sub)}</span></div>`);
+  return `<div class="flow">${nodes.join("")}</div>`;
+}
 function renderResult(r, { compact = false } = {}) {
   if (r.error) return `<div class="card"><div class="card-b err">${esc(r.error)}</div></div>`;
   const d = r.decision, used = usedKeys(r);
   const segs = r.segments && r.segments.length ? `<div class="hint">切分：${r.segments.map((s, i) => `<span class="seg">${i + 1}. ${esc(s)}</span>`).join("")}</div>` : "";
   const rw = r.rewritten ? `<div class="hint">改写：${esc(r.query)} → <b>${esc(r.rewritten)}</b>${r.rewritten !== r.query ? "，已回 Jev 重判" : "（未变化）"}</div>` : "";
   let extra = "";
-  if (d.route === "split") extra = `<div class="hint">指令片段 → NLU：<b>${esc(d.nlu_text)}</b>　其余 → 慢思考：<b>${esc(d.slow_text)}</b></div>`;
+  if (d.route === "split") extra = `<div class="hint">${d.nlu_text ? "指令片段" : "A 类意图"} → NLU：<b>${esc(splitNlu(d))}</b>　→ 慢思考：<b>${esc(d.slow_text)}</b>${d.slow_input?.executed_intents?.length ? `，并告知已执行：<code>${esc(d.slow_input.executed_intents.join("；"))}</code>（不要重复执行）` : ""}</div>`;
   if (d.hint && d.hint !== "none" && d.route !== "agent") extra += `<div class="hint">带给慢思考的提示：${esc(d.hint)}</div>`;
   if (d.intended && d.intended !== d.agent) extra += `<div class="hint">Jev 判给 <b>${esc(d.intended)}</b>（未上线），实际${d.route === "agent" ? "回退到 " + esc(d.agent) : "落慢思考"}；批量按 ${esc(d.intended)} 对期望</div>`;
   const ans = r.jev.answers;
-  const order = ["is_unsafe", "route", "domain", "agent_label", "needs_context", "has_nickname", ...Object.keys(ans).filter(k => k.startsWith("segment_role_")).sort()];
+  const order = ["is_unsafe", "route", "agent_label", "needs_context", "has_nickname", ...Object.keys(ans).filter(k => k.startsWith("segment_role_")).sort()].filter(k => k in ans);
   return `<div class="card">
     <div class="card-h">${r.backend ? `<span class="be be-${r.backend.id}">${esc(r.backend.name)}</span>` : ""}<span class="q">${esc(r.query)}</span>${routeBadge(d)}<span class="why">${esc(d.why || "")}</span>
       <span class="ms">${esc(r.backend?.name || "Jev")} ${r.jev.ms.toFixed(0)}ms · NLU ${r.nlu.ms.toFixed(0)}ms · 共 ${r.total_ms.toFixed(0)}ms${r.jev.input_tokens ? ` · ${r.jev.input_tokens} tokens` : ""}${r.cost ? ` · 费用 ${yuan(r.cost.total_yuan)}${r.cost.billed ? "" : "（决策不计费）"}` : ""}${r.reverse ? " · 倒序" : ""}${r.custom_prompts ? " · 自定义提示词" : ""}</span></div>
     <div class="card-b">
       ${r.previous_turn ? `<div class="hint">上一轮：${esc(r.previous_turn.query)} → ${esc(r.previous_turn.route)}${r.previous_turn.agent ? " · " + esc(r.previous_turn.agent) : ""}（${esc(r.previous_turn.status)}）</div>` : ""}
       ${rw}${segs}${extra}
-      <div class="sec">分发规则（按顺序匹配，命中即停）</div>
-      <div class="rules">${r.trace.map(t => `<div class="rule ${t.status}"><b>${t.rule}</b><span class="s">${{hit:"命中",pass:"通过",fail:"未过",skip:"跳过"}[t.status]}</span><span>${esc(t.text)}</span></div>`).join("")}</div>
-      <div class="sec">Jev 一次请求 · 7 个判定 ${r.jev.model ? `<span class="hint">（${esc(r.jev.model)}）</span>` : ""}</div>
+      ${d.slow_input ? `<div class="sec">交给慢思考的内容 <span class="hint">（slow_input）</span></div><pre class="slow-in">${esc(JSON.stringify(d.slow_input, null, 1))}</pre>` : ""}
+      <div class="sec">分发策略执行过程 <span class="hint">（按顺序匹配，命中即停；悬停节点看判断依据）</span></div>
+      ${flowViz(r)}
+      <details class="rules-d"${compact ? "" : " open"}><summary class="hint">执行明细</summary><div class="rules">${r.trace.map(t => `<div class="rule ${t.status}"><b>${t.rule}</b><span class="s">${{hit:"命中",pass:"通过",fail:"未过",skip:"跳过"}[t.status]}</span><span>${esc(t.text)}</span></div>`).join("")}</div></details>
+      <div class="sec">Jev 一次请求 · ${Object.keys(r.jev.answers).length} 个判定 ${r.jev.model ? `<span class="hint">（${esc(r.jev.model)}）</span>` : ""}</div>
       <div class="grid">${order.filter(k => ans[k]).map(k => judgCard(k, ans[k], r.thresholds, used.has(k), r.reverse)).join("")}</div>
       ${compact ? "" : `<div class="sec">NLU3.0 解析</div>${nluTable(r.nlu)}
       ${d.nlu_intents ? `<div class="sec">指令片段的 NLU3.0 解析</div>${nluTable({ intents: d.nlu_intents, kind: r.nlu.kind, ms: 0 })}` : ""}
       <div class="sec">费用</div>${costTable(r)}
       <div class="sec">耗时</div>${waterfall(r)}`}
-      ${rawBlock("完整 Jev 请求" + (r.first ? "（改写后重判的那次）" : ""), r.jev.request, "HTTP API 请求体：model + state + questions（7 道题的 instructions / criteria，选项顺序即发送顺序）。API 密钥在服务端，不在请求体里。")}
+      ${rawBlock("完整 Jev 请求" + (r.first ? "（改写后重判的那次）" : ""), r.jev.request, "HTTP API 请求体：model + state + questions（各道题的 instructions / criteria，选项顺序即发送顺序）。API 密钥在服务端，不在请求体里。")}
       ${rawBlock("Jev 原始返回", r.jev.raw, "SDK 返回的原样结构：answers（choice / confidence / probabilities 或 noul）+ usage。卡片上的置信度是页面按同一公式重算的。")}
       ${r.first ? rawBlock("改写前的第一次 Jev 请求", r.first.jev.request, "has_nickname 或 needs_context 触发改写之前发出的请求。") + rawBlock("改写前的第一次 Jev 返回", r.first.jev.raw) : ""}
       ${rawBlock("NLU3.0 返回" + (r.nlu.kind === "real" ? "" : "（模拟）"), r.nlu)}
@@ -802,7 +868,7 @@ function renderPEdit() {
   } else {
     const names = Object.keys(q.criteria);
     html += `<div class="sec">criteria（选项说明，顺序即发送顺序）</div>` + names.map((n, i) => {
-      const locked = req.includes(n) || (k === "domain") || (k === "agent_label" && n in (CFG.label_status || {}));
+      const locked = req.includes(n) || (k === "agent_label" && n in (CFG.label_status || {}));
       return `<div class="opt"><div class="opt-h"><span class="no">${i + 1}</span>
         <input value="${esc(n)}" data-rename="${esc(n)}" ${locked ? "disabled" : ""}>${locked ? "🔒" : ""}
         <button class="ghost sm" data-move="${i}" data-d="-1" ${i === 0 ? "disabled" : ""}>↑</button>
@@ -891,7 +957,19 @@ async function initPrompts() {
   $("#priceInfo").insertAdjacentHTML("afterend", `<div class="sec">决策后端</div><div class="hint">当前：Jev（${esc(CFG.jev_model)}）。StartLux ${SL_ON ? "已开启：" + esc(CFG.backends.startlux.url) + "，页头可切换、单轮和批量可对比" : "默认关闭；要开启，启动服务前设环境变量 <code>STARTLUX_ENABLED=1</code>（可选 <code>STARTLUX_URL</code>、<code>STARTLUX_API_KEY</code>）后重启"}。</div>`);
   $("#priceInfo").innerHTML = `Jev：${esc(CFG.pricing.jev)}，换算汇率 ${CFG.pricing.usd_cny}（环境变量 USD_CNY 可改）。DeepSeek 改写：${esc(CFG.pricing.deepseek)}，分高峰 / 空闲时段。价格表在 webdemo/pricing.py。`;
   const s = await samples();
-  $("#chips").innerHTML = s.builtin.map(i => `<span class="chip" title="期望：${esc((i.expect || []).join(" | "))}">${esc(i.query)}</span>`).join("");
+  // 按期望的第一项分组：NLU3.0（再按落域）/ Agent直达（再按 Agent）/ 慢思考 / 闲聊（安全拒答放最后）
+  const GROUPS = [["NLU3.0", e => e === "nlu"], ["Agent直达", e => e.startsWith("agent:")], ["慢思考", e => e === "slow" || e === "split"],
+                  ["闲聊", e => e === "chat"], ["安全拒答", e => e === "safe"]];
+  const chip = i => `<span class="chip" title="期望：${esc((i.expect || []).join(" | "))}">${esc(i.query)}</span>`;
+  const sub = xs => {   // 有 group 的按 group 再分一层，保持出现顺序
+    if (!xs.some(i => i.group)) return `<div class="chips">${xs.map(chip).join("")}</div>`;
+    const by = new Map(); xs.forEach(i => { const g = i.group || "其他"; by.set(g, [...(by.get(g) || []), i]); });
+    return `<div class="chip-subs">${[...by].map(([g, ys]) => `<div class="chip-sub"><span class="chip-sublabel">${esc(g)}</span><div class="chips">${ys.map(chip).join("")}</div></div>`).join("")}</div>`;
+  };
+  $("#chips").innerHTML = GROUPS.map(([name, f]) => {
+    const xs = s.builtin.filter(i => f((i.expect || [""])[0]));
+    return xs.length ? `<div class="chip-group"><span class="chip-label">${esc(name)}</span>${sub(xs)}</div>` : "";
+  }).join("");
   $("#chips").onclick = e => { const c = e.target.closest(".chip"); if (c) send(c.textContent); };
   $("#dialogs").innerHTML = DIALOGS.map((d, i) => `<span class="chip" data-i="${i}" title="${esc(d.steps.map(x => typeof x === "string" ? x : x.status ? "回传 " + x.status : "落域被拒").join(" → "))}">${esc(d.name)}</span>`).join("");
   $("#dialogs").onclick = e => { const c = e.target.closest(".chip"); if (c) runDialog(DIALOGS[+c.dataset.i]); };
