@@ -115,7 +115,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
 <div class="tablewrap"><table>
   <tr><th>题型</th><th>回答什么</th><th>代码读什么</th></tr>
   <tr><td><b>Noul</b>（是非题）</td><td>“是”的概率，0–1</td><td>和阈值比，过了就算“是”</td></tr>
-  <tr><td><b>Choice</b>（单选题）</td><td>每个选项的概率，加起来为 1</td><td>最高的选项和它的置信 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code>，N 为选项数。这样换算后，4 选项和 20 选项的置信可以用同一套阈值比较</td></tr>
+  <tr><td><b>Choice</b>（单选题）</td><td>每个选项的概率，加起来为 1</td><td>最高的选项和它的置信 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code>，N 为选项数。这样换算后，4 选项和 19 选项的置信可以用同一套阈值比较</td></tr>
 </table></div>
 <p class="small muted">Choice 题在仓库里还没用过，需先用冒烟集验证调用方式、选项偏序和时延；不稳时 route 改为 4 道 Noul。</p>
 
@@ -144,7 +144,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
       <dt>问什么</dt><dd>这句话该去哪：<span class="pill p-nlu">NLU 直达</span> <span class="pill p-agent">Agent 直达</span> <span class="pill p-slow">慢思考</span> <span class="pill p-chat">闲聊</span></dd>
       <dt>作用</dt><dd><b>主判定，决定走哪条路。</b>其他题大多是给它补细节：route 说 NLU，才去看 domain；说 Agent，才去看 agent_label。</dd>
       <dt>判据要点</dt><dd>
-        NLU 直达：说清楚的指令（车控、说出名字或风格的点播、电话微信、导航去具名地点、车家、生成、计算），多条指令和同功能多参数也算。<br>
+        NLU 直达：说清楚的指令（车控、说出名字或风格的点播、电话、导航去具名地点、车家、生成、计算），多条指令和同功能多参数也算。<br>
         Agent 直达：单个查询、问答、推荐或需要推断的请求，一个 Agent 一次能答完（新闻、天气、即时信息、用车问题、条件任务、记忆、找歌找片、找店和行程、只说感受）。<br>
         慢思考：多个任务分属不同能力且有依赖。<br>
         闲聊：没有任务目标（讲故事、陪聊、情绪）。</dd>
@@ -161,17 +161,17 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
 
 <!-- 3 -->
 <div class="q" id="q3">
-  <div class="q-head"><span class="no">03</span><code>domain</code><span class="type">Choice · 19 个入口域 + 非入口（20 选项）</span></div>
+  <div class="q-head"><span class="no">03</span><code>domain</code><span class="type">Choice · 18 个入口域 + 非入口（19 选项）</span></div>
   <div class="q-body">
     <dl class="kv">
-      <dt>问什么</dt><dd>如果这是一条 NLU 指令，它属于 19 个入口域里的哪一个；都不是就选“非入口”。</dd>
+      <dt>问什么</dt><dd>如果这是一条 NLU 指令，它属于 18 个入口域里的哪一个；都不是就选“非入口”。</dd>
       <dt>作用</dt><dd><b>校验 NLU3.0 落的域对不对。</b>NLU3.0 不输出置信度，自己判错了不会说；Jev 的 domain 分布是<b>唯一</b>能用来复核它的依据。同时，两边不一致的比例是监控指标，能最早发现哪一边漂了。</dd>
       <dt>代码怎么用</dt><dd>
         只在 R4（走 NLU 直达）时读：<br>
         · Jev 选“非入口” → 不落 NLU，进慢思考；<br>
         · NLU3.0 的 domain 与 Jev 最高项相同或是近邻对（如 <code>intelligent_car_control</code>↔<code>global_control</code>）→ 通过；<br>
         · 不一致时，Jev 给 NLU 所选域的概率 ≥ T_DOMAIN_AGREE（0.2）→ 仍按 NLU 落域，否则进慢思考。</dd>
-      <dt>为什么只问 19 个</dt><dd>NLU3.0 有 45 个域，但只有 19 个作为入口；其余 26 个不会被直达执行。选项从 46 个减到 20 个，降时延，也减轻 Choice 偏向排在前面选项的问题。</dd>
+      <dt>为什么只有 19 个选项</dt><dd>NLU3.0 有 45 个域，但只有 18 个作为入口；其余 27 个不会被直达执行。选项从 46 个减到 19 个，降时延，也减轻 Choice 偏向排在前面选项的问题。</dd>
     </dl>
     <div class="ex"><div class="y"><b>例</b>关闭前挡风玻璃加热 → <code>intelligent_car_control</code>；放一首稻香 → <code>music</code></div><div class="n"><b>非入口</b>明天苏州天气怎么样；附近有什么好吃的</div></div>
     <div class="warn">去掉它的后果：NLU3.0 把“打开氛围灯”误落成 <code>music</code> 时没人发现，错的指令会直接执行。</div>
@@ -291,7 +291,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
 questions = {
   "is_unsafe":     Noul(...),
   "route":         Choice(options=["NLU直达","Agent直达","慢思考","闲聊"], ...),
-  "domain":        Choice(options=NLU_ENTRY_19 + ["非入口"], ...),
+  "domain":        Choice(options=NLU_ENTRY_18 + ["非入口"], ...),
   "agent_label":   Choice(options=AGENT_LABELS + ["none"], ...),
   "needs_context": Noul(...),
   "has_nickname":  Noul(...),

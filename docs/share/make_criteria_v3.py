@@ -3,7 +3,7 @@
 一次请求里 7 个问题并行判定：
   is_unsafe        Noul    违法有害 → 安全拒答（R0）
   route            Choice  4 选 1：慢思考 / NLU直达 / Agent直达 / 闲聊（R2–R6）
-  domain           Choice  19 个 NLU 入口域 + 非入口（R4 一致性校验）
+  domain           Choice  18 个 NLU 入口域 + 非入口（R4 一致性校验；域清单以 NLU3.0 v25 为准）
   agent_label      Choice  12 个 Agent 标签 + none（R3、R4 回流）
   needs_context    Noul    是否要靠上一轮才能理解（R1 会话跟随）
   has_nickname     Noul    是否有要还原的俗称（Query 整理）
@@ -27,8 +27,15 @@ import argparse, glob, json, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+# NLU3.0 v25 训练集的 45 个域（nlu3/NLU3.0大模型接口使用说明1030固定版本.md 第六节），以此为准
+V25_DOMAINS = ["music", "intelligent_car_control", "phone_call", "navigation", "global_control", "fm", "unknown", "video_qa",
+               "chat", "video", "other", "poi_recommend", "app_control", "app_call", "intelligent_car_info", "help", "weather_xf",
+               "music_qa", "short_video", "reminder", "view_poi_recommend", "outside_qa", "home_agent", "travel_plan", "agent_task",
+               "task_setting", "datetime_info", "stock", "view_poi_introduction", "news", "intelligent_car_scenario", "life_suggestion",
+               "outgoing_eta", "changba", "wallpaper", "calculator", "train", "audio_book", "painting", "KTV", "similar_poi",
+               "theme_gen", "flight", "traffic_restriction", "row_column_position"]
 REPO = HERE.parents[1]
-VERSION = "v3.1 2026-10-29 片段角色加“同一任务”； 对应设计 v2 / 架构 v6：7 道题一次请求；19 个 NLU 入口域；10 个 Agent 上线"
+VERSION = "v3.2 2026-10-31 域清单改以 NLU3.0 v25 为准：入口域 18 个（去掉 wechat_on_car），unknown 按接不住处理；v3.1 片段角色加“同一任务”；对应设计 v2 / 架构 v6：7 道题一次请求；10 个 Agent 上线"
 MODEL = "jev-1.14.0"
 
 
@@ -77,9 +84,9 @@ ROUTE = {
              "打开空调1分钟之后播放薛之谦的歌"]),
         "NLU直达": opt(
             "说清楚了的直接指令：车控和车辆设置、打开关闭应用和页面；说出歌名、歌手、专辑、片名、电台名，或说出风格、年代的点播，以及播放控制；"
-            "打电话、发微信；导航去说得出名字的地点、回家、去公司，导航中的设置；控制家里的设备；换壁纸、换主题、画一幅画；算术。"
+            "打电话；导航去说得出名字的地点、回家、去公司，导航中的设置；控制家里的设备；换壁纸、换主题、画一幅画；算术。"
             "可以是连着说的几条，也可以是同一个功能带几个参数。",
-            "查询、问答、推荐，或者要推断才知道该做什么的请求（Agent直达）；带执行时间或触发条件的（Agent直达，任务大师）；只说感受的（Agent直达，自适应车控）。",
+            "发微信、微信通话（NLU3.0 v25 不支持，交慢思考）；查询、问答、推荐，或者要推断才知道该做什么的请求（Agent直达）；带执行时间或触发条件的（Agent直达，任务大师）；只说感受的（Agent直达，自适应车控）。",
             ["关闭前挡风玻璃加热", "用哔哩哔哩播放凡人修仙传", "给霞霞打电话",
              "空调温度调到23度风量调到2挡", "继续导航关闭双闪关闭车门", "打开座椅通风页面"]),
         "Agent直达": opt(
@@ -100,7 +107,7 @@ ROUTE = {
 }
 
 # =========================== 3. domain ===========================
-NLU_ENTRY = {   # 19 个入口域：说明取自《车机 NLU3.0 大模型支持 Domain 清单（v13）》，收窄到直接指令
+NLU_ENTRY = {   # 18 个入口域：域以 NLU3.0 v25 训练集为准（docs/NLU3.0-v25_domain清单.md），说明参考清单 v13，收窄到直接指令
     "intelligent_car_control": opt("车身与座舱硬件控制：空调、座椅、车窗、天窗、灯光、音量、屏幕、后视镜、驾驶模式等。",
                                    "跨应用通用的返回、翻页、播放控制（global_control）；打开关闭应用和系统开关（app_control）。",
                                    ["关闭前挡风玻璃加热", "空调温度调到23度风量调到2挡"]),
@@ -117,8 +124,7 @@ NLU_ENTRY = {   # 19 个入口域：说明取自《车机 NLU3.0 大模型支持
     "short_video": opt("短视频的查找和播放。", examples=["找一些关于聚会的短片"]),
     "changba": opt("唱吧 K 歌：点歌、开唱、关闭唱吧。", "车内 KTV（KTV）。", ["来一首晴天我唱一下"]),
     "KTV": opt("车内 KTV 点歌和演唱控制。", "唱吧（changba）。", ["来一首陈奕迅的浮夸"]),
-    "phone_call": opt("打电话、接听挂断、通话记录，含卡一卡二和尾号指定。", "微信语音、视频通话（wechat_on_car）。", ["给霞霞打电话", "查看二卡的电话记录"]),
-    "wechat_on_car": opt("车载微信：发消息、语音或视频通话、位置分享。", examples=["用微信给李四发消息", "我要打视频给小阿萨"]),
+    "phone_call": opt("打电话、接听挂断、通话记录，含卡一卡二和尾号指定。", "微信消息和微信通话不在入口域内（非入口）。", ["给霞霞打电话", "查看二卡的电话记录"]),
     "app_call": opt("打开或使用第三方 App、小程序里的具体页面和功能。", "打开关闭车机自带应用（app_control）。", ["查看我订的航班信息"]),
     "navigation": opt("导航去说得出名字的地点、回家、去公司，以及导航过程中的控制：路线偏好、途经点、播报、放大缩小、取消导航。",
                       "按条件找店、找景点、多地点路线、行程规划不在入口域内（非入口）。", ["导航去中山公园", "走高速优先", "取消导航"]),
@@ -253,8 +259,9 @@ CONFIG = {
         "poi_recommend": "出行导航", "view_poi_recommend": "出行导航", "view_poi_introduction": "出行导航",
         "similar_poi": "出行导航", "outgoing_eta": "出行导航", "travel_plan": "出行导航",
         "intelligent_car_scenario": "自适应车控", "reminder": "任务大师", "task_setting": "任务大师",
-        "agent_task": "代办点单", "app_agent": "代办点单",
+        "agent_task": "代办点单",
         "chat": "__chat__", "outside_qa": "__slow__", "other": "__rewrite__",
+        "unknown": "__slow__", "row_column_position": "__slow__",   # v25 新增：unknown 为拒识，按接不住处理；row_column_position 含义待确认
     },
     "label_fallback": {"新闻": "联网搜索", "天气": "联网搜索"},
     "label_status": {**{k: "on" for k in ["新闻", "天气", "联网搜索", "用车专家", "任务大师", "记忆", "音乐", "影视", "出行导航", "自适应车控"]},
@@ -323,8 +330,14 @@ def check(doc: dict) -> int:
             print(f"[顺序] {q} 第一个选项是 {got}，应为 {want}"); problems += 1
     if next(iter(SEGMENT_ROLES)) != "有依赖" or len(SEGMENT_ROLES) != 5:
         print("[顺序] segment_role 第一个选项应为 有依赖"); problems += 1
-    if len(NLU_ENTRY) != 19:
-        print(f"[数量] NLU 入口域应为 19 个，现为 {len(NLU_ENTRY)}"); problems += 1
+    if len(NLU_ENTRY) != 18:
+        print(f"[数量] NLU 入口域应为 18 个，现为 {len(NLU_ENTRY)}"); problems += 1
+    v25 = set(V25_DOMAINS)
+    bad = [d for d in list(NLU_ENTRY) + list(CONFIG["domain_to_agent"]) if d not in v25]
+    if bad:
+        print(f"[清单] 不在 NLU3.0 v25 的 45 个域里：{bad}"); problems += 1
+    if v25 - set(NLU_ENTRY) - set(CONFIG["domain_to_agent"]):
+        print(f"[清单] v25 里有、但入口域和回流表都没覆盖：{sorted(v25 - set(NLU_ENTRY) - set(CONFIG['domain_to_agent']))}"); problems += 1
     missing = set(CONFIG["label_status"]) - set(AGENT_LABELS)
     if missing:
         print("[标签] label_status 里有判据没有的标签：", missing); problems += 1

@@ -1,5 +1,8 @@
 # 车机 NLU3.0大模型支持Domain 清单（v13）
 
+> ⚠ 这是低版本清单 v13，**仅供参考**。域清单以 v25 为准，见 `docs/NLU3.0-v25_domain清单.md`（v25 没有 `wechat_on_car`、`app_agent`，新增 `unknown`、`row_column_position`）。
+
+
 总共包含45个域
 
 ## 主力域（≥1,000 块）（8 个）
