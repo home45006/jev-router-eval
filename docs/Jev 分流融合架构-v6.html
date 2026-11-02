@@ -2,7 +2,7 @@
 <title>Jev 分流融合架构</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-  /* 版式：梧桐白底橙标，V2.0 只覆盖分发落域：接入输入 → 分发 → 落域出口，业务侧画成范围外。页头 → 架构图 → 变化 → Jev 一次请求 → 分发策略 → 去向一览 → 45 域去向 → 时延 → 示例 → 已定与待定 */
+  /* 版式：梧桐白底橙标，V2.1 只覆盖分发落域：接入输入 → 分发 → 落域出口，业务侧画成范围外。页头 → 架构图 → 变化 → Jev 一次请求 → 分发策略 → 去向一览 → 44 域去向 → 时延 → 示例 → 已定与待定 */
   :root {
     --bg: #FFFFFF;
     --surface: #FFFFFF;
@@ -136,15 +136,15 @@
   <header class="head">
     <div class="eyebrow"><i></i>梧桐 · 智能座舱语音交互 Agent 平台</div>
     <h1>Jev 分流融合架构</h1>
-    <p class="lede"><b>本架构只负责分发和落域，不负责业务。</b>Jev 与 NLU3.0 在分发层并行起跑，一次请求判定去向并给出落域结果：<b>说清楚的指令</b>走 NLU3.0 直达（18 个入口域），<b>查询、问答、推荐和需要推断的单个请求</b>走 Agent 直达（本期 10 个 Agent），<b>跨能力且有依赖的多任务</b>和 NLU3.0 接不住的句子进慢思考，没有任务目标的进闲聊，违法有害请求安全拒答。出口之后的执行、仲裁和下发由业务侧负责。</p>
-    <div class="meta"><span>V2.0 · 2026-10-29</span><span>本期接 NLU3.0 · 18 个入口域</span><span>Agent 直达 · 10 个</span><span>配套：design/Jev 分流详细设计 v2、测试方案 v2.3</span></div>
+    <p class="lede"><b>本架构只负责分发和落域，不负责业务。</b>Jev 与 NLU3.0 在分发层并行起跑，一次请求判定去向并给出落域结果：<b>车机能马上执行的指令</b>走 NLU3.0 直达（v25 的 A 类 12 个入口域），<b>查询、问答、推荐和需要推断的单个请求</b>（含 v25 的 B 类 32 个域）由 Jev 判给 Agent 直达（已上线联网搜索、美团，另规划 9 个），<b>跨能力且有依赖的多任务</b>和 NLU3.0 接不住的句子进慢思考，没有任务目标的进闲聊，违法有害请求安全拒答。出口之后的执行、仲裁和下发由业务侧负责。</p>
+    <div class="meta"><span>V2.1 · 2026-11-02</span><span>本期接 NLU3.0 · A 类 12 个入口域</span><span>Agent 直达 · 已上线 4 个 + 规划 7 个</span><span>配套：design/Jev 分流详细设计 v2.1、测试方案 v2.4、判据 v3.3</span></div>
   </header>
 
   <section>
     <h2>分发落域架构</h2>
     <figure>
       <div class="scroll">
-        <svg viewBox="0 0 1500 800" role="img" aria-label="三层：接入层把文本、会话状态和车辆状态送入分发层；分发层先查干预表和敏感词，未命中时 Jev 一次请求与 NLU3.0 整句解析并行起跑，经 Query 整理和分发策略落到五个出口：NLU 直达（18 个入口域的 intents）、Agent 直达（agent_label）、慢思考（route=slow、片段组和提示）、安全拒答、闲聊（放行音频）。出口之后的执行、仲裁和下发由业务侧负责，不在本架构范围；业务侧把会话状态回传给会话管理。">
+        <svg viewBox="0 0 1500 800" role="img" aria-label="三层：接入层把文本、会话状态和车辆状态送入分发层；分发层先查干预表和敏感词，未命中时 Jev 一次请求与 NLU3.0 整句解析并行起跑，经 Query 整理和分发策略落到五个出口：NLU 直达（A 类 12 个入口域的 intents）、Agent 直达（agent_label）、慢思考（route=slow、片段组和提示）、安全拒答、闲聊（放行音频）。出口之后的执行、仲裁和下发由业务侧负责，不在本架构范围；业务侧把会话状态回传给会话管理。">
           <defs>
             <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-fg"/></marker>
             <marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="m-blue"/></marker>
@@ -156,7 +156,7 @@
           <rect x="160" y="13" width="26" height="15" rx="2" class="d-box"/><text x="194" y="25" class="t-s">自研</text>
           <rect x="240" y="13" width="26" height="15" rx="2" class="d-third"/><text x="274" y="25" class="t-s">三方 / 供应商</text>
           <rect x="370" y="13" width="26" height="15" rx="2" class="d-key"/><text x="404" y="25" class="t-s">关键节点</text>
-          <rect x="474" y="13" width="26" height="15" rx="2" class="d-plan"/><text x="508" y="25" class="t-s">shadow / 待接入 / 范围外</text>
+          <rect x="474" y="13" width="26" height="15" rx="2" class="d-plan"/><text x="508" y="25" class="t-s">规划中 / 范围外</text>
           <line x1="680" y1="20" x2="712" y2="20" class="d-flow"/><text x="720" y="25" class="t-s">文本 / 结构化数据</text>
           <line x1="840" y1="20" x2="872" y2="20" class="d-audio"/><text x="880" y="25" class="t-s">音频流</text>
           <line x1="940" y1="20" x2="972" y2="20" class="d-ctrl"/><text x="980" y="25" class="t-s">控制信号</text>
@@ -224,9 +224,9 @@
           <text x="372" y="274" class="t-id">route</text>
           <text x="372" y="292" class="t-r">NLU / Agent / 慢思考 / 闲聊</text>
           <text x="372" y="318" class="t-id">domain</text>
-          <text x="372" y="336" class="t-r">18 个入口域 + 非入口</text>
+          <text x="372" y="336" class="t-r">A 类 12 域 + 非入口</text>
           <text x="372" y="362" class="t-id">agent_label</text>
-          <text x="372" y="380" class="t-r">10 个 Agent + 代办 + none</text>
+          <text x="372" y="380" class="t-r">11 个 Agent + none</text>
           <line x1="606" y1="216" x2="606" y2="392" class="d-sep"/>
           <text x="620" y="230" class="t-id">segment_role[i]</text>
           <text x="620" y="248" class="t-r">依赖 / 同任务 / 指令 / Agent / 残片</text>
@@ -260,7 +260,7 @@
           <text x="1072" y="284" class="t-r">　 跨能力多段 → 指令段 NLU，其余慢思考</text>
           <text x="1072" y="306" class="t-r">R3 Agent 直达：双门槛 · 回退表</text>
           <text x="1072" y="328" class="t-r">R4 NLU 直达：入口白名单 · 结构 · 域一致</text>
-          <text x="1072" y="350" class="t-r">　 落非入口域 → 回流对应 Agent</text>
+          <text x="1072" y="350" class="t-r">　 落 B 类域 → 回流对应 Agent</text>
           <text x="1072" y="372" class="t-r">R5 闲聊 · R6 其余 → 慢思考</text>
           <text x="1072" y="392" class="t-s">R7 快思考落域失败 / 被拒 → 慢思考（一次）</text>
 
@@ -297,29 +297,28 @@
           <!-- NLU 直达 -->
           <rect x="176" y="504" width="260" height="156" rx="4" class="d-lane-k"/>
           <text x="192" y="530" class="t-hk">NLU 直达</text>
-          <text x="192" y="552" class="t-b">18 个入口域</text>
+          <text x="192" y="552" class="t-b">A 类 12 个入口域</text>
           <text x="192" y="574" class="t-s">交出：domain · intents · slots</text>
           <text x="192" y="596" class="t-s">多意图、同功能多参数整句交出</text>
-          <text x="192" y="618" class="t-s">车控 · 点播 · 通讯 · 导航</text>
-          <text x="192" y="636" class="t-s">车家 · 生成 · 计算</text>
+          <text x="192" y="618" class="t-s">车控 · 隐含车控 · 车况 · 点播</text>
+          <text x="192" y="636" class="t-s">电话 · 导航 · 车家 · 通用控制</text>
 
           <!-- Agent 直达 -->
           <rect x="452" y="504" width="480" height="156" rx="4" class="d-lane-k"/>
           <text x="468" y="530" class="t-hk">Agent 直达</text>
           <text x="916" y="530" text-anchor="end" class="t-s">交出：agent_label（经回退表）</text>
-          <rect x="468" y="544" width="70" height="30" rx="4" class="d-box"/><text x="503" y="564" text-anchor="middle" class="t-xs">新闻</text>
-          <rect x="544" y="544" width="70" height="30" rx="4" class="d-box"/><text x="579" y="564" text-anchor="middle" class="t-xs">天气</text>
-          <rect x="620" y="544" width="70" height="30" rx="4" class="d-box"/><text x="655" y="564" text-anchor="middle" class="t-xs">联网搜索</text>
-          <rect x="696" y="544" width="70" height="30" rx="4" class="d-box"/><text x="731" y="564" text-anchor="middle" class="t-xs">用车专家</text>
-          <rect x="772" y="544" width="70" height="30" rx="4" class="d-box"/><text x="807" y="564" text-anchor="middle" class="t-xs">任务大师</text>
-          <rect x="848" y="544" width="70" height="30" rx="4" class="d-box"/><text x="883" y="564" text-anchor="middle" class="t-xs">记忆</text>
-          <rect x="468" y="582" width="70" height="30" rx="4" class="d-box"/><text x="503" y="602" text-anchor="middle" class="t-xs">音乐</text>
-          <rect x="544" y="582" width="70" height="30" rx="4" class="d-box"/><text x="579" y="602" text-anchor="middle" class="t-xs">影视</text>
-          <rect x="620" y="582" width="70" height="30" rx="4" class="d-box"/><text x="655" y="602" text-anchor="middle" class="t-xs">出行导航</text>
-          <rect x="696" y="582" width="70" height="30" rx="4" class="d-box"/><text x="731" y="602" text-anchor="middle" class="t-xs">自适应车控</text>
-          <rect x="772" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="807" y="602" text-anchor="middle" class="t-xs">代办点单</text>
-          <rect x="848" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="883" y="602" text-anchor="middle" class="t-xs">400 客服</text>
-          <text x="468" y="636" class="t-s">新闻、天气未接入 → 联网搜索；代办点单 shadow 时落慢思考</text>
+          <rect x="468" y="544" width="70" height="30" rx="4" class="d-box"/><text x="503" y="564" text-anchor="middle" class="t-xs">联网搜索</text>
+          <rect x="544" y="544" width="70" height="30" rx="4" class="d-box"/><text x="579" y="564" text-anchor="middle" class="t-xs">美团</text>
+          <rect x="620" y="544" width="70" height="30" rx="4" class="d-box"/><text x="655" y="564" text-anchor="middle" class="t-xs">用车专家</text>
+          <rect x="696" y="544" width="70" height="30" rx="4" class="d-box"/><text x="731" y="564" text-anchor="middle" class="t-xs">任务大师</text>
+          <rect x="772" y="544" width="70" height="30" rx="4" class="d-plan"/><text x="807" y="564" text-anchor="middle" class="t-xs">出行规划</text>
+          <rect x="848" y="544" width="70" height="30" rx="4" class="d-plan"/><text x="883" y="564" text-anchor="middle" class="t-xs">记忆</text>
+          <rect x="468" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="503" y="602" text-anchor="middle" class="t-xs">车外视觉</text>
+          <rect x="544" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="579" y="602" text-anchor="middle" class="t-xs">AI 创作</text>
+          <rect x="620" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="655" y="602" text-anchor="middle" class="t-xs">内容娱乐</text>
+          <rect x="696" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="731" y="602" text-anchor="middle" class="t-xs">应用调用</text>
+          <rect x="772" y="582" width="70" height="30" rx="4" class="d-plan"/><text x="807" y="602" text-anchor="middle" class="t-xs">400 客服</text>
+          <text x="468" y="636" class="t-s">已上线联网搜索、美团、用车专家、任务大师；其余回退或落慢思考</text>
 
           <!-- 慢思考 -->
           <rect x="948" y="504" width="220" height="156" rx="4" class="d-lane"/>
@@ -377,12 +376,12 @@
       <thead><tr><th>项</th><th>V1.0（10-26 草案）</th><th>V2.0（本稿）</th></tr></thead>
       <tbody>
         <tr><td class="br">范围</td><td>接入、分发、Agent 大脑、仲裁、Command 五层，含业务执行</td><td><b>只含接入输入和分发落域</b>；大脑执行、仲裁、Command 下发归业务侧，分发只依赖业务侧回传的会话状态</td></tr>
-        <tr><td class="br">NLU</td><td>现有 NLU 本期在用，NLU3.0 接入后替换；在快思考层串行调用</td><td><b>本期接 NLU3.0</b>，在分发层与 Jev 整句并行起跑；NLU 直达只落 18 个入口域</td></tr>
-        <tr><td class="br">Agent 直达</td><td>用车、400 客服、联网查询、三方生态（示例）</td><td>10 个上线：新闻、天气、联网搜索、用车专家、任务大师、记忆、音乐、影视、出行导航、自适应车控；代办点单 shadow；新闻、天气未接入时回退联网搜索</td></tr>
+        <tr><td class="br">NLU</td><td>现有 NLU 本期在用，NLU3.0 接入后替换；在快思考层串行调用</td><td><b>本期接 NLU3.0</b>，在分发层与 Jev 整句并行起跑；NLU 直达只落 A 类 12 个入口域，B 类 32 个域由 Jev 判给 Agent</td></tr>
+        <tr><td class="br">Agent 直达</td><td>用车、400 客服、联网查询、三方生态（示例）</td><td>已上线：联网搜索、美团、用车专家、任务大师；规划中：出行规划、记忆、车外视觉、AI 创作、内容娱乐、应用调用、400 客服；出行规划未上线时回退联网搜索，其余落慢思考</td></tr>
         <tr><td class="br">慢思考范围</td><td>有依赖的多步任务、条件任务、任务大师、多日行程</td><td>只收跨能力且有依赖的多任务，以及 NLU3.0 接不住、又没有 Agent 能直达的句子。条件任务、行程、记忆调用都改为 Agent 直达</td></tr>
         <tr><td class="br">domain 一致性</td><td>在仲裁层，执行后裁决；“以置信更高的为准”</td><td>在分发层，<b>落域前</b>校验；NLU3.0 不输出置信度，用 Jev 给 NLU 所选域的概率判断</td></tr>
         <tr><td class="br">route 置信低</td><td>NLU 落域兜底</td><td>看 NLU3.0 能否接住：入口域、结构完整、域一致才落 NLU，否则慢思考</td></tr>
-        <tr><td class="br">Jev 问题</td><td>route、domain（45+none）、agent_label、segment_role（三类）、needs_rewrite、referent</td><td>is_unsafe、route、domain（18+非入口）、agent_label、segment_role（五类）、needs_context、has_nickname</td></tr>
+        <tr><td class="br">Jev 问题</td><td>route、domain（45+none）、agent_label、segment_role（三类）、needs_rewrite、referent</td><td>is_unsafe、route、domain（A 类 12+非入口）、agent_label、segment_role（五类）、needs_context、has_nickname</td></tr>
         <tr><td class="br">会话</td><td>只有“上轮闲聊且追问 → 跟随闲聊”</td><td>加上慢思考占用、Agent 进行中（continue）交回同一 Agent、Agent 已结束但本轮依赖上文也交回</td></tr>
         <tr><td class="br">安全</td><td>无</td><td>is_unsafe + 干预表敏感词 → 安全拒答，优先于所有去向</td></tr>
         <tr><td class="br">时延目标</td><td>快思考整体 ≤ 800ms（含执行）</td><td>只约束分流落域 ≤ 800ms；执行和回复时延归业务侧</td></tr>
@@ -397,14 +396,14 @@
       <tbody>
         <tr><td><code>is_unsafe</code></td><td class="nw">Noul</td><td class="q">是否在求助违法犯罪、暴力伤害、毒品、自残等有害内容</td><td>达到阈值直接安全拒答，优先于所有去向</td></tr>
         <tr><td><code>route</code></td><td class="nw">Choice · 4 选 1</td><td class="q">NLU 直达 / Agent 直达 / 慢思考 / 闲聊</td><td>读最高项和置信；N 个选项时 <code>conf = (p_max − 1/N) ÷ (1 − 1/N)</code></td></tr>
-        <tr><td><code>domain</code></td><td class="nw">Choice · 18 + 非入口</td><td class="q">属于 18 个 NLU 入口域中的哪个</td><td>与 NLU3.0 的 domain 做一致性校验；NLU 无置信度，这是校验 NLU 结果的唯一依据</td></tr>
-        <tr><td><code>agent_label</code></td><td class="nw">Choice · N + none</td><td class="q">该交给哪个 Agent（10 个 + 代办点单 + 400 客服）</td><td>Agent 直达时读；NLU 落非入口域需要回流时，读对应 Agent 的概率</td></tr>
+        <tr><td><code>domain</code></td><td class="nw">Choice · 12 + 非入口</td><td class="q">属于 A 类 12 个 NLU 入口域中的哪个</td><td>与 NLU3.0 的 domain 做一致性校验；NLU 无置信度，这是校验 NLU 结果的唯一依据</td></tr>
+        <tr><td><code>agent_label</code></td><td class="nw">Choice · 11 + none</td><td class="q">该交给哪个 Agent（已上线 4 个 + 规划 7 个）</td><td>Agent 直达时读，B 类域靠它判；NLU 落 B 类域需要回流时，读对应 Agent 的概率</td></tr>
         <tr><td><code>segment_role[i]</code></td><td class="nw">Choice × 片段数</td><td class="q">有依赖 / 同一任务 / 独立指令 / 独立 Agent 类 / 残片</td><td>只在按强分隔切出 ≥ 2 段时问</td></tr>
         <tr><td><code>needs_context</code></td><td class="nw">Noul</td><td class="q">是否要靠上一轮才能理解（追问、指代、省略）</td><td>触发会话跟随或拼回指代</td></tr>
         <tr><td><code>has_nickname</code></td><td class="nw">Noul</td><td class="q">是否有要还原的俗称、外号、简称</td><td>DeepSeek 还原后重判；不触发会话跟随</td></tr>
       </tbody>
     </table></div>
-    <p class="note">同一请求里的问题并行判定，多加问题对时延影响很小。domain 从 45+1 个选项减到 19 个，减轻“偏向前排选项”的影响。Choice 的调用方式和稳定性需先用冒烟集验证，不行时 route 改为 4 道 Noul。</p>
+    <p class="note">同一请求里的问题并行判定，多加问题对时延影响很小。domain 从 44+1 个选项减到 13 个，减轻“偏向前排选项”的影响。Choice 的调用方式和稳定性需先用冒烟集验证，不行时 route 改为 4 道 Noul。</p>
   </section>
 
   <section>
@@ -415,14 +414,14 @@
         <tr><td class="br">R0 安全</td><td>is_unsafe 达到阈值，或干预表敏感词命中</td><td><span class="pill rw">安全拒答</span></td></tr>
         <tr><td class="br">R1 会话</td><td>慢思考占用会话；上一轮 Agent 返回 continue；上一轮 Agent 已结束而本轮 needs_context 为真且不是新指令；上一轮闲聊且是追问</td><td><span class="pill slow">慢思考</span> / <span class="pill agent">同一 Agent</span> / <span class="pill chat">闲聊</span></td></tr>
         <tr><td class="br">R2 多段</td><td>整句是同一个 Agent 的请求（先去 A 再去 B）→ 整句直达；否则全是指令 → 整句交 NLU3.0；混有 Agent 类或依赖片段 → 指令段 NLU 直达，其余进慢思考</td><td><span class="pill agent">Agent</span> / <span class="pill nlu">NLU</span> / 拆分</td></tr>
-        <tr><td class="br">R3 Agent 直达</td><td>route = Agent 且 route、label 置信都过门槛；按回退表（新闻、天气 → 联网搜索）；shadow 的 label 进慢思考</td><td><span class="pill agent">Agent 直达</span>，不过门槛则 <span class="pill slow">慢思考</span> 带提示</td></tr>
-        <tr><td class="br">R4 NLU 直达</td><td>route = NLU，或在 NLU 与慢思考之间拿不准。每个 intent：在 18 个入口域内、不是 other / unknown、intent 和必填槽位齐全、与 Jev 的 domain 一致（或 Jev 给该域概率够高）。落非入口域 → 回流对应 Agent；other → 改写重判一次</td><td><span class="pill nlu">NLU 直达</span> / <span class="pill agent">回流 Agent</span> / <span class="pill slow">慢思考</span></td></tr>
+        <tr><td class="br">R3 Agent 直达</td><td>route = Agent 且 route、label 置信都过门槛；按回退表（出行规划 → 联网搜索）；其他未上线的 label 进慢思考</td><td><span class="pill agent">Agent 直达</span>，不过门槛则 <span class="pill slow">慢思考</span> 带提示</td></tr>
+        <tr><td class="br">R4 NLU 直达</td><td>route = NLU，或在 NLU 与慢思考之间拿不准。每个 intent：在 A 类 12 个入口域内、不是 other / unknown、intent 和必填槽位齐全、与 Jev 的 domain 一致（或 Jev 给该域概率够高）。落 B 类域 → 回流对应 Agent；other → 改写重判一次</td><td><span class="pill nlu">NLU 直达</span> / <span class="pill agent">回流 Agent</span> / <span class="pill slow">慢思考</span></td></tr>
         <tr><td class="br">R5 闲聊</td><td>route = 闲聊且置信过门槛</td><td><span class="pill chat">闲聊</span></td></tr>
         <tr><td class="br">R6 剩余</td><td>以上都不满足</td><td><span class="pill slow">慢思考</span>，带 Agent 标签和 NLU 结果作提示</td></tr>
         <tr><td class="br">R7 落域失败</td><td>快思考落域失败转慢思考，分两种：① <b>落域前</b>——R3 门槛不过、R4 的结构 / 域一致 / 回流检查不过、other 改写重判后仍接不住；② <b>落域后被拒</b>——业务侧回传“不支持 / 不归我”（NLU 执行层不支持该 intent，Agent 判定请求不属于自己）。被拒的同一句只改落慢思考一次，不再回分流，避免来回弹</td><td><span class="pill slow">慢思考</span>，带原落域结果和被拒原因作提示</td></tr>
       </tbody>
     </table></div>
-    <p class="note">阈值、入口白名单、域 → Agent 回流表、label 回退表、各 Agent 的 on / shadow / off 都放云端配置中心。止血：分钟级加干预表或把 label 切到 shadow；小时级改判据、回放、灰度。</p>
+    <p class="note">阈值、入口白名单、域 → Agent 回流表、label 回退表、各 Agent 的 on / off 都放云端配置中心。止血：分钟级加干预表或把 label 切到 off；小时级改判据、回放、灰度。</p>
   </section>
 
   <section>
@@ -430,16 +429,14 @@
     <div class="tscroll"><table>
       <thead><tr><th>去向</th><th>收什么</th><th>例</th></tr></thead>
       <tbody>
-        <tr><td class="br">NLU 直达<small>18 个入口域</small></td><td><div class="chips"><code>intelligent_car_control</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>audio_book</code><code>short_video</code><code>changba</code><code>KTV</code><code>phone_call</code><code>app_call</code><code>navigation</code><code>home_agent</code><code>wallpaper</code><code>theme_gen</code><code>painting</code><code>calculator</code></div><p class="note">说清楚的指令：车控、说出名字或风格的点播和播放控制、电话、导航去说得出名字的地点和导航控制、车家、生成、计算。多意图和同功能多参数整句落域。</p></td><td class="muted">关闭前挡风玻璃加热；放一首稻香；导航到天安门；打开座椅通风座椅按摩</td></tr>
-        <tr><td class="br">新闻</td><td>和新闻相关的都收：热点、领域新闻、事件进展、播放新闻。未接入时回退联网搜索</td><td class="muted">最新的科技新闻</td></tr>
-        <tr><td class="br">天气</td><td>天气、温度、下雨、空气质量、靠天气判断的生活指数。未接入时回退联网搜索</td><td class="muted">明天苏州下雨吗；这两天适合洗车吗</td></tr>
-        <tr><td class="br">联网搜索</td><td>与新闻无关的即时信息（日期、股票、航班火车、限行），与用车无关的知识问答</td><td class="muted">今天星期几；北汽蓝谷股价；四大名著有哪些</td></tr>
-        <tr><td class="br">用车专家</td><td>用车相关的都收：功能、配置、故障、标准值、状态询问、汽车常识</td><td class="muted">胎压报警灯亮了是怎么回事；后备箱关好了吗</td></tr>
-        <tr><td class="br">任务大师</td><td>条件任务（含只提醒用户的）、长期规则、多模态触发</td><td class="muted">后天两点导航到火车站；每周一八点提醒我交周报</td></tr>
-        <tr><td class="br">记忆</td><td>记住个人信息、查询记住的内容、按记忆执行</td><td class="muted">帮我记住我常听爵士；播放我常听的专辑</td></tr>
-        <tr><td class="br">音乐 / 影视</td><td>按描述找歌找片、相似推荐、歌词找歌、歌曲影视问答、演员作品</td><td class="muted">来点适合夜里开车的歌；成龙主演的电影有哪些</td></tr>
-        <tr><td class="br">出行导航</td><td>找店找景点、条件推荐、地点问答、描述找地点、多地点路线、行程规划、出发时间推算</td><td class="muted">附近人均 80 以下的自助餐；先去橘子洲头再去岳麓书院</td></tr>
-        <tr><td class="br">自适应车控</td><td>只说感受或环境、要推断怎么调车</td><td class="muted">好冷啊；车里像烤箱</td></tr>
+        <tr><td class="br">NLU 直达<small>A 类 12 个入口域</small></td><td><div class="chips"><code>intelligent_car_control</code><code>intelligent_car_scenario</code><code>intelligent_car_info</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>KTV</code><code>phone_call</code><code>navigation</code><code>home_agent</code></div><p class="note">车机能马上执行的指令：车控和隐含车控（只说冷热闷暗）、车况查询、音乐视频电台的点播和播放控制、KTV、通用控制、应用开关、电话、导航、车家。多意图和同功能多参数整句落域。</p></td><td class="muted">关闭前挡风玻璃加热；放一首稻香；导航到天安门；打开座椅通风座椅按摩</td></tr>
+        <tr><td class="br">联网搜索<small>已上线</small></td><td>信息查询都收：新闻、天气和生活指数、日期、股票、航班火车、限行、计算、歌曲影视问答、百科知识</td><td class="muted">最新的科技新闻；明天苏州下雨吗；北汽蓝谷股价</td></tr>
+        <tr><td class="br">美团<small>已上线</small></td><td>找餐厅酒店景点店铺、相似推荐；点外卖、点咖啡、订房下单</td><td class="muted">附近人均 80 以下的自助餐；帮我点两杯瑞幸美式</td></tr>
+        <tr><td class="br">出行规划<small>规划中</small></td><td>多地点路线、行程规划、路上要多久、沿途找地方、景点讲解。未上线时回退联网搜索</td><td class="muted">先去橘子洲头再去岳麓书院；帮我规划北京四天的行程</td></tr>
+        <tr><td class="br">用车专家<small>已上线</small></td><td>本车功能、配置、故障报警、汽车常识；查车况是 NLU 直达</td><td class="muted">胎压报警灯亮了是怎么回事</td></tr>
+        <tr><td class="br">任务大师<small>已上线</small></td><td>条件任务（含只提醒用户的）、长期规则、多模态触发</td><td class="muted">后天两点导航到火车站；每周一八点提醒我交周报</td></tr>
+        <tr><td class="br">记忆<small>规划中</small></td><td>记住个人信息、查询记住的内容、按记忆执行</td><td class="muted">帮我记住我常听爵士；播放我常听的专辑</td></tr>
+        <tr><td class="br">其余规划中</td><td>车外视觉（看车外标志和物体）、AI 创作（画画、壁纸、主题）、内容娱乐（有声书、短视频、唱吧）、应用调用（第三方 App 里办事）、400 客服。未上线时落慢思考并记录</td><td class="muted">帮我看下那个交通标志；我想画一个宝马七系；用有声书播放鬼眼神探</td></tr>
         <tr><td class="br">慢思考</td><td>跨能力且有依赖的多任务；快思考落域失败的（落域前检查不过，或落域后被业务侧拒收）</td><td class="muted">打电话给小李说聚餐地点定在渔人码头然后导航过去</td></tr>
         <tr><td class="br">闲聊</td><td>没有任务目标：讲故事、陪聊、情绪表达、写诗；饿渴困累这类车控满足不了的诉求</td><td class="muted">给甜甜讲首故事；（闲聊中）那后来呢</td></tr>
         <tr><td class="br">安全拒答</td><td>违法有害请求</td><td class="muted">怎么买到海洛因</td></tr>
@@ -448,24 +445,24 @@
   </section>
 
   <section>
-    <h2>NLU3.0 45 个域的去向（v25 清单）</h2>
+    <h2>NLU3.0 44 个域的去向（v25 清单：A 类 12 + B 类 32）</h2>
     <div class="tscroll"><table>
       <thead><tr><th>去向</th><th>domain</th><th>数量</th></tr></thead>
       <tbody>
-        <tr><td class="br">NLU 直达（入口）</td><td><div class="chips"><code>intelligent_car_control</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>audio_book</code><code>short_video</code><code>changba</code><code>KTV</code><code>phone_call</code><code>app_call</code><code>navigation</code><code>home_agent</code><code>wallpaper</code><code>theme_gen</code><code>painting</code><code>calculator</code></div></td><td class="num">18</td></tr>
-        <tr><td class="br">回流 · 天气</td><td><div class="chips"><code>weather_xf</code><code>life_suggestion</code></div></td><td class="num">2</td></tr>
-        <tr><td class="br">回流 · 新闻</td><td><div class="chips"><code>news</code></div></td><td class="num">1</td></tr>
-        <tr><td class="br">回流 · 联网搜索</td><td><div class="chips"><code>stock</code><code>flight</code><code>train</code><code>traffic_restriction</code><code>datetime_info</code></div></td><td class="num">5</td></tr>
-        <tr><td class="br">回流 · 用车专家</td><td><div class="chips"><code>help</code><code>intelligent_car_info</code></div></td><td class="num">2</td></tr>
-        <tr><td class="br">回流 · 音乐 / 影视</td><td><div class="chips"><code>music_qa</code><code>video_qa</code></div></td><td class="num">2</td></tr>
-        <tr><td class="br">回流 · 出行导航</td><td><div class="chips"><code>poi_recommend</code><code>view_poi_recommend</code><code>view_poi_introduction</code><code>similar_poi</code><code>outgoing_eta</code><code>travel_plan</code></div></td><td class="num">6</td></tr>
-        <tr><td class="br">回流 · 自适应车控</td><td><div class="chips"><code>intelligent_car_scenario</code></div></td><td class="num">1</td></tr>
-        <tr><td class="br">回流 · 任务大师</td><td><div class="chips"><code>reminder</code><code>task_setting</code></div></td><td class="num">2</td></tr>
-        <tr><td class="br">回流 · 代办点单</td><td><div class="chips"><code>agent_task</code></div><p class="note">shadow 期间等同进慢思考</p></td><td class="num">1</td></tr>
-        <tr><td class="br">其他</td><td><div class="chips"><code>chat</code><code>other</code><code>outside_qa</code><code>unknown</code><code>row_column_position</code></div><p class="note">chat → 闲聊；other → 改写重判一次，仍是 other 进慢思考；unknown（v25 拒识）→ 接不住；outside_qa（车外问答，要车外画面）本期进慢思考；row_column_position 含义待确认，暂按慢思考</p></td><td class="num">5</td></tr>
+        <tr><td class="br">NLU 直达（A 类）</td><td><div class="chips"><code>intelligent_car_control</code><code>intelligent_car_scenario</code><code>intelligent_car_info</code><code>global_control</code><code>app_control</code><code>music</code><code>video</code><code>fm</code><code>KTV</code><code>phone_call</code><code>navigation</code><code>home_agent</code></div></td><td class="num">12</td></tr>
+        <tr><td class="br">B 类 · 联网搜索</td><td><div class="chips"><code>news</code><code>weather_xf</code><code>life_suggestion</code><code>datetime_info</code><code>stock</code><code>flight</code><code>train</code><code>traffic_restriction</code><code>calculator</code><code>music_qa</code><code>video_qa</code></div></td><td class="num">11</td></tr>
+        <tr><td class="br">B 类 · 美团</td><td><div class="chips"><code>poi_recommend</code><code>similar_poi</code><code>agent_task</code></div></td><td class="num">3</td></tr>
+        <tr><td class="br">B 类 · 出行规划</td><td><div class="chips"><code>travel_plan</code><code>outgoing_eta</code><code>view_poi_recommend</code><code>view_poi_introduction</code></div><p class="note">未上线时回退联网搜索</p></td><td class="num">4</td></tr>
+        <tr><td class="br">B 类 · 用车专家</td><td><div class="chips"><code>help</code></div></td><td class="num">1</td></tr>
+        <tr><td class="br">B 类 · 任务大师</td><td><div class="chips"><code>reminder</code><code>task_setting</code></div></td><td class="num">2</td></tr>
+        <tr><td class="br">B 类 · 车外视觉</td><td><div class="chips"><code>outside_qa</code></div></td><td class="num">1</td></tr>
+        <tr><td class="br">B 类 · AI 创作</td><td><div class="chips"><code>painting</code><code>wallpaper</code><code>theme_gen</code></div></td><td class="num">3</td></tr>
+        <tr><td class="br">B 类 · 内容娱乐</td><td><div class="chips"><code>audio_book</code><code>short_video</code><code>changba</code></div></td><td class="num">3</td></tr>
+        <tr><td class="br">B 类 · 应用调用</td><td><div class="chips"><code>app_call</code></div></td><td class="num">1</td></tr>
+        <tr><td class="br">B 类 · 其他</td><td><div class="chips"><code>chat</code><code>other</code><code>unknown</code></div><p class="note">chat → 闲聊；other → 改写重判一次，仍是 other 进慢思考；unknown（v25 拒识）→ 接不住，进慢思考</p></td><td class="num">3</td></tr>
       </tbody>
     </table></div>
-    <p class="note">“回流”：NLU3.0 落到这些域时不落 NLU，改落对应 Agent；前提是 Jev 也给了该 Agent 一定概率，否则带提示进慢思考。这些域在 NLU3.0 里保留，只做兜底。</p>
+    <p class="note">B 类域只是落域，没有意图和槽位，由 Jev 的 agent_label 判给 Agent，不靠 NLU3.0。NLU3.0 落到这些域时不落 NLU，按上表回流对应 Agent；前提是 Jev 也给了该 Agent 一定概率，否则带提示进慢思考。规划中的 Agent 未上线时按回退表或落慢思考。</p>
   </section>
 
   <section>
@@ -488,16 +485,16 @@
       <tbody>
         <tr><td class="ctx">无</td><td>关闭前挡风玻璃加热</td><td><span class="pill nlu">NLU 直达</span> <code>intelligent_car_control</code></td><td>交出 domain + intent + slots</td></tr>
         <tr><td class="ctx">无</td><td>打开座椅通风座椅按摩</td><td><span class="pill nlu">NLU 直达</span> 两个 intent</td><td>整句交出两个 intent</td></tr>
-        <tr><td class="ctx">无</td><td>明天苏州天气怎么样</td><td><span class="pill agent">Agent 直达</span> 天气</td><td>落天气；未接入时回退联网搜索</td></tr>
+        <tr><td class="ctx">无</td><td>明天苏州天气怎么样</td><td><span class="pill agent">Agent 直达</span> 联网搜索</td><td>落联网搜索（信息查询都归它）</td></tr>
         <tr><td class="ctx">无</td><td>胎压报警灯亮了是怎么回事</td><td><span class="pill agent">Agent 直达</span> 用车专家</td><td>落用车专家</td></tr>
         <tr><td class="ctx">无</td><td>明天下午三点提醒我去取快递</td><td><span class="pill agent">Agent 直达</span> 任务大师</td><td>落任务大师（条件任务含纯提醒）</td></tr>
-        <tr><td class="ctx">无</td><td>先去长沙橘子洲头，再去岳麓书院</td><td><span class="pill agent">Agent 直达</span> 出行导航</td><td>R2：同一 Agent 的多段句整句直达</td></tr>
+        <tr><td class="ctx">无</td><td>先去长沙橘子洲头，再去岳麓书院</td><td><span class="pill agent">Agent 直达</span> 出行规划</td><td>R2：同一 Agent 的多段句整句直达；未上线时回退联网搜索</td></tr>
         <tr><td class="ctx">无</td><td>打开空调，导航到大裤衩，在附近找个人均 100 以下的川菜馆</td><td>指令 · 指令 · 有依赖</td><td>前两段落 NLU；第 3 段连同前段结果作提示落慢思考</td></tr>
-        <tr><td class="ctx">无</td><td>打开空调，今天天气怎么样</td><td>指令 · Agent 类</td><td>“打开空调”落 NLU；第 2 段落慢思考（提示：天气）</td></tr>
-        <tr><td class="ctx">Jev 误判为 NLU</td><td>明天限行尾号是多少</td><td>NLU3.0 落 <code>traffic_restriction</code></td><td>非入口域，回流落联网搜索</td></tr>
-        <tr><td class="ctx">出行导航（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context</td><td>R1 落回出行导航，不改写</td></tr>
+        <tr><td class="ctx">无</td><td>打开空调，今天天气怎么样</td><td>指令 · Agent 类</td><td>“打开空调”落 NLU；第 2 段落慢思考（提示：联网搜索）</td></tr>
+        <tr><td class="ctx">Jev 误判为 NLU</td><td>明天限行尾号是多少</td><td>NLU3.0 落 <code>traffic_restriction</code></td><td>B 类域，回流落联网搜索</td></tr>
+        <tr><td class="ctx">出行规划（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context</td><td>R1 落回出行规划，不改写</td></tr>
         <tr><td class="ctx">空调调到 24 度</td><td>再高一点</td><td>needs_context</td><td>拼回“空调温度再调高一点”，落 NLU</td></tr>
-        <tr><td class="ctx">新闻</td><td>打开空调</td><td>新指令</td><td>不跟随上一轮，落 NLU</td></tr>
+        <tr><td class="ctx">联网搜索</td><td>打开空调</td><td>新指令</td><td>不跟随上一轮，落 NLU</td></tr>
         <tr><td class="ctx">无</td><td>导航到大裤衩</td><td>has_nickname</td><td>还原为中央电视台总部大楼后重判，落 NLU</td></tr>
         <tr><td class="ctx">闲聊中</td><td>那后来呢</td><td><span class="pill chat">闲聊</span> 追问</td><td>跟随上一轮，开闸放行音频</td></tr>
         <tr><td class="ctx">无</td><td>帮我把副驾的香氛换成雪松味</td><td>落 NLU，执行层回传“不支持该 intent”</td><td>R7 落域被拒，改落慢思考一次</td></tr>
@@ -509,13 +506,13 @@
   <section>
     <h2>已定与待定</h2>
     <div class="open">
-      <div><h3>已定 · 归属规则</h3><p>大模型 agent 业务标签都走 Agent 直达；新闻相关 → 新闻；天气 → 天气；其余即时信息和非用车知识问答 → 联网搜索；用车相关 → 用车专家；条件任务 → 任务大师；记忆调用 → 记忆；有情知音按闲聊处理。</p></div>
-      <div><h3>已定 · NLU3.0</h3><p>本期接入；<b>18 个入口域</b>；不输出置信度，用结构信号和 Jev 的 domain 分布校验；能识别无标点多意图和同功能多参数。</p></div>
-      <div><h3>已定 · 架构补充</h3><p>安全拒答、Agent 会话跟随、非入口域回流、domain 校验前移到分发层、片段角色五类、改写拆成“依赖上文”和“俗称”两道。</p></div>
+      <div><h3>已定 · 归属规则</h3><p>NLU3.0 v25 的 A 类 12 个域是真正的快思考，NLU 直达；B 类 32 个域只是落域，由 Jev 判给 Agent。信息查询（新闻、天气、即时信息、知识问答）→ 联网搜索；找店下单 → 美团；本车功能和故障 → 用车专家；条件任务 → 任务大师；记忆调用 → 记忆；有情知音按闲聊处理。（2026-11-02）</p></div>
+      <div><h3>已定 · NLU3.0</h3><p>本期接入；<b>A 类 12 个入口域</b>，B 类不作入口；不输出置信度，用结构信号和 Jev 的 domain 分布校验；能识别无标点多意图和同功能多参数。</p></div>
+      <div><h3>已定 · 架构补充</h3><p>安全拒答、Agent 会话跟随、B 类域回流、domain 校验前移到分发层、片段角色五类、改写拆成“依赖上文”和“俗称”两道。</p></div>
       <div><h3>待定 · NLU3.0 接口</h3><p>批量调用或离线结果、<b>各 intent 必填槽位表</b>、v25 已有 unknown 作为拒识输出。</p></div>
       <div><h3>待定 · Choice 可用性</h3><p>Jev 的 Choice 调用方式、选项偏序、时延要先用冒烟集验证；不稳时 route 改为 4 道 Noul。</p></div>
-            <div><h3>待定 · 两处归属</h3><p>车况纯读数（还剩多少油）暂归用车专家；车外问答 <code>outside_qa</code> 本期进慢思考。</p></div>
-      <div><h3>待定 · 标签集变更</h3><p>代办点单 shadow 期间落慢思考；400 客服、三方生态 Agent 接入后加 agent_label 和判据。</p></div>
+            <div><h3>已定 · 两处归属</h3><p>车况查询（还剩多少油）和隐含车控（好冷啊）属 A 类，NLU 直达；车外问答 <code>outside_qa</code> 归车外视觉，未上线时进慢思考。</p></div>
+      <div><h3>待定 · 标签集变更</h3><p>已上线联网搜索、美团、用车专家、任务大师；其余 7 个规划中，逐个开发，上线时把 label 切到 on 并回放验证。新 Agent 接入后加 agent_label 和判据。</p></div>
       <div><h3>待定 · 部署与合规</h3><p>Jev 只提供云端 API，量产前要确认网络、时延和合规；配置中心承载判据、阈值、干预表和回流表。</p></div>
       <div><h3>待定 · 回传接口</h3><p>业务侧回传 continue / end 和“落域被拒”的格式和时机。已定：被拒的由分发改落慢思考一次；业务内部的执行故障（服务超时等）由业务侧自己处理，不算落域失败。</p></div>
     </div>

@@ -221,7 +221,7 @@ tr.clk{cursor:pointer} tr.clk:hover td{background:var(--surface-2)}
       <label class="sl-only"><input type="checkbox" id="cmpBatch"> Jev 和 StartLux 对比</label>
       <button id="runBatch">运行</button>
     </div>
-    <textarea id="batchText" rows="8" placeholder="每行一句：句子 [Tab] 期望（可选，多个用 | 分隔：nlu / agent:天气 / slow / split / chat / safe）"></textarea>
+    <textarea id="batchText" rows="8" placeholder="每行一句：句子 [Tab] 期望（可选，多个用 | 分隔：nlu / agent:联网搜索 / slow / split / chat / safe）"></textarea>
     <div class="hint">业务标签抽样会排除已写进提示词的例句（criteria_v3_pinned_dev.json）和多轮行；期望按业务标签粗映射，闲聊类允许闲聊或联网搜索。这是演示，不代替正式评测。</div>
     <div class="progress"><i id="prog"></i></div>
     <div id="batchSummary"></div>
@@ -445,6 +445,7 @@ function renderResult(r, { compact = false } = {}) {
   let extra = "";
   if (d.route === "split") extra = `<div class="hint">指令片段 → NLU：<b>${esc(d.nlu_text)}</b>　其余 → 慢思考：<b>${esc(d.slow_text)}</b></div>`;
   if (d.hint && d.hint !== "none" && d.route !== "agent") extra += `<div class="hint">带给慢思考的提示：${esc(d.hint)}</div>`;
+  if (d.intended && d.intended !== d.agent) extra += `<div class="hint">Jev 判给 <b>${esc(d.intended)}</b>（未上线），实际${d.route === "agent" ? "回退到 " + esc(d.agent) : "落慢思考"}；批量按 ${esc(d.intended)} 对期望</div>`;
   const ans = r.jev.answers;
   const order = ["is_unsafe", "route", "domain", "agent_label", "needs_context", "has_nickname", ...Object.keys(ans).filter(k => k.startsWith("segment_role_")).sort()];
   return `<div class="card">

@@ -166,14 +166,17 @@ class RealJev:
 
 MOCK_RULES = [   # (正则, route, domain, agent)
     (r"毒品|海洛因|炸弹|分尸|谋杀|自杀|毒死", "Agent直达", "非入口", "none"),
-    (r"新闻|热点|资讯", "Agent直达", "非入口", "新闻"),
-    (r"天气|下雨|下雪|气温|空气质量|洗车", "Agent直达", "非入口", "天气"),
-    (r"(\d+|[一二三四五六七八九十半两]+)(分钟|小时)(后|以后)|每天|每周|每当|当.{1,12}(时|的时候)|提醒我", "Agent直达", "非入口", "任务大师"),
+    (r"(\d+|[一二三四五六七八九十半两]+)(分钟|小时)(后|以后)|每天|每周|每当|当.{1,12}(时|的时候)|提醒我|闹钟", "Agent直达", "非入口", "任务大师"),
     (r"记住|记一下|存一下|我常听|我喜欢的", "Agent直达", "非入口", "记忆"),
-    (r"怎么|为什么|是什么|在哪|有没有|吗$", "Agent直达", "非入口", "用车专家"),
-    (r"推荐|找个|附近|先去|再去|行程", "Agent直达", "非入口", "出行导航"),
-    (r"好热|好冷|太闷|晕", "Agent直达", "非入口", "自适应车控"),
+    (r"怎么关|怎么开|怎么用|感叹号|报警|故障|有没有.{0,6}功能", "Agent直达", "非入口", "用车专家"),
+    (r"新闻|热点|资讯|天气|下雨|下雪|气温|空气质量|洗车|星期几|几号|股票|股价|航班|机票|火车|限行|多高|是什么意思|等于多少", "Agent直达", "非入口", "联网搜索"),
+    (r"外卖|点.{0,4}(杯|份)|订房|酒店|餐厅|面馆|好吃|人均", "Agent直达", "非入口", "美团"),
+    (r"先去|再去|行程|自驾游|一日游|多久", "Agent直达", "非入口", "出行规划"),
+    (r"画一|壁纸|主题", "Agent直达", "非入口", "AI创作"),
+    (r"有声书|评书|短视频|短片|唱吧|我唱", "Agent直达", "非入口", "内容娱乐"),
     (r"聊|笑话|故事|你觉得", "闲聊", "非入口", "none"),
+    (r"好热|好冷|太闷|太暗|闷得慌", "NLU直达", "intelligent_car_scenario", "none"),
+    (r"还剩多少|电量|油量|胎压|关好了吗", "NLU直达", "intelligent_car_info", "none"),
     (r"导航|回家|去公司", "NLU直达", "navigation", "none"),
     (r"播放|放一首|来一首|听", "NLU直达", "music", "none"),
     (r"打电话|拨打", "NLU直达", "phone_call", "none"),
@@ -227,12 +230,14 @@ class MockJev:
 
 # ------------------------------------------------------------------ NLU3.0
 NLU_MOCK = [
-    (r"天气|下雨|下雪|气温", "weather_xf", "query_weather"), (r"新闻|热点", "news", "play_news"),
-    (r"股票|股价", "stock", "query_stock"), (r"限行", "traffic_restriction", "query"),
-    (r"星期几|几号|几点", "datetime_info", "query"), (r"提醒|分钟后|小时后", "reminder", "create"),
-    (r"推荐|附近|找个|好吃", "poi_recommend", "search"), (r"好热|好冷|太闷", "intelligent_car_scenario", "adjust"),
+    (r"天气|下雨|下雪|气温", "weather_xf", "weather_xf"), (r"新闻|热点", "news", "news"),   # B 类：intent 与 domain 相同
+    (r"股票|股价", "stock", "stock"), (r"限行", "traffic_restriction", "traffic_restriction"),
+    (r"星期几|几号|几点", "datetime_info", "datetime_info"), (r"提醒|分钟后|小时后", "reminder", "reminder"),
+    (r"推荐|附近|找个|好吃", "poi_recommend", "poi_recommend"), (r"好热|好冷|闷|太暗", "intelligent_car_scenario", "too_hot_scene"),
+    (r"还剩多少|电量|油量|胎压|关好了吗", "intelligent_car_info", "device_status_query"),
+    (r"画一|壁纸", "painting", "painting"), (r"有声书|评书", "audio_book", "audio_book"),
     (r"导航|回家|去公司|走高速", "navigation", "navigate"), (r"打电话|拨打", "phone_call", "dial"),
-    (r"微信", "unknown", ""), (r"播放|放一首|来一首", "music", "play"),
+    (r"微信", "unknown", "unknown"), (r"播放|放一首|来一首", "music", "play"),
     (r"空调|车窗|座椅|天窗|灯|雨刮|后视镜|音量|屏幕|通风|加热|按摩", "intelligent_car_control", "control"),
     (r"聊|笑话|故事", "chat", "chat"),
 ]
@@ -290,10 +295,10 @@ def dispatch(j: dict, nlu: dict, sess: dict, segs: list[str], th: dict, cfg: dic
         st = status.get(lbl, "off")
         fb = cfg["label_fallback"].get(lbl)
         if st != "on" and fb and status.get(fb) == "on":
-            return {"route": "agent", "agent": fb, "why": f"{why}；{lbl} 未接入，按回退表交给 {fb}"}
+            return {"route": "agent", "agent": fb, "intended": lbl, "why": f"{why}；{lbl} 未上线，按回退表交给 {fb}"}
         if st != "on":
-            return {"route": "slow", "hint": lbl, "why": f"{why}；{lbl} 为 {st}，落慢思考并记录"}
-        return {"route": "agent", "agent": lbl, "why": why}
+            return {"route": "slow", "hint": lbl, "intended": lbl, "why": f"{why}；{lbl} 为 {st}，落慢思考并记录"}
+        return {"route": "agent", "agent": lbl, "intended": lbl, "why": why}
 
     def nlu_path(n):
         if dom["top"] == "非入口":
@@ -482,16 +487,19 @@ async def run_once(query: str, sid: str, opts: dict) -> dict:
 
 
 # ------------------------------------------------------------------ 批量的期望
-BIZ_EXPECT = {   # 业务标签 → 可接受的落域（route 或 route:agent）
-    "01_记忆agent": ["agent:记忆"], "02_出行导航agent": ["agent:出行导航"], "03_音乐agent": ["agent:音乐"],
-    "05_用车agent": ["agent:用车专家"], "06_闲聊": ["chat", "agent:联网搜索", "agent:用车专家"], "07_有情知音": ["chat", "agent:联网搜索", "agent:天气"],
-    "08_影视agent": ["agent:影视"], "09_新闻agent": ["agent:新闻", "agent:联网搜索"], "10_任务大师": ["agent:任务大师"],
+BIZ_EXPECT = {   # 业务标签 → 可接受的落域（route 或 route:agent）；按 v25 A/B 分类：A 类走 nlu，信息查询归联网搜索
+    "01_记忆agent": ["agent:记忆"], "02_出行导航agent": ["agent:出行规划", "agent:美团", "nlu"], "03_音乐agent": ["nlu", "agent:联网搜索"],
+    "05_用车agent": ["agent:用车专家", "nlu"], "06_闲聊": ["chat", "agent:联网搜索", "agent:用车专家"], "07_有情知音": ["chat", "agent:联网搜索"],
+    "08_影视agent": ["agent:联网搜索", "nlu"], "09_新闻agent": ["agent:联网搜索"], "10_任务大师": ["agent:任务大师"],
     "11_条件任务": ["agent:任务大师"], "12_中枢复杂多任务": ["slow", "split"], "13_中枢简单任务": ["nlu"],
-    "14_车控模糊意图": ["agent:自适应车控"], "16_基础语控": ["nlu"], "17_一语多意图": ["nlu"], "18_同功能多参数": ["nlu", "split"],
+    "14_车控模糊意图": ["nlu"], "16_基础语控": ["nlu"], "17_一语多意图": ["nlu"], "18_同功能多参数": ["nlu", "split"],
 }
 
 
 def outcome(d: dict) -> str:
+    # 按分流判给的 Agent 计，不管它是否上线（未上线时实际去了回退 Agent 或慢思考）
+    if d.get("intended"):
+        return f"agent:{d['intended']}"
     return f"agent:{d['agent']}" if d["route"] == "agent" else d["route"]
 
 
@@ -520,15 +528,16 @@ def biz_samples(n: int, seed: int) -> list[dict]:
 
 BUILTIN = [
     ("把副驾车窗关上一半", ["nlu"]), ("打开座椅通风座椅按摩", ["nlu"]), ("空调温度调到25度风量调到2挡", ["nlu"]),
-    ("后天上海会不会下雪", ["agent:天气", "agent:联网搜索"]), ("最近有什么关于新能源车的新闻", ["agent:新闻", "agent:联网搜索"]),
+    ("车里闷得慌", ["nlu"]), ("还剩多少电", ["nlu"]), ("导航去川大望江校区", ["nlu"]),
+    ("后天上海会不会下雪", ["agent:联网搜索"]), ("最近有什么关于新能源车的新闻", ["agent:联网搜索"]),
     ("珠穆朗玛峰有多高", ["agent:联网搜索"]), ("明天限行尾号是多少", ["agent:联网搜索"]),
-    ("仪表盘上那个黄色感叹号是什么意思", ["agent:用车专家"]), ("每天下班上车就把空调开到22度", ["agent:任务大师"]),
-    ("二十分钟后提醒我给客户回电话", ["agent:任务大师"]), ("帮我记住我老婆不吃香菜", ["agent:记忆"]),
-    ("来点适合下雨天听的歌", ["agent:音乐"]), ("推荐几部适合全家看的动画电影", ["agent:影视"]),
-    ("先去西湖再去灵隐寺最后到河坊街", ["agent:出行导航"]), ("附近有没有人均五十以内的面馆", ["agent:出行导航"]),
-    ("车里闷得慌", ["agent:自适应车控"]), ("打开天窗，帮我查一下明天的天气", ["split"]),
+    ("附近有没有人均五十以内的面馆", ["agent:美团"]), ("帮我点一杯瑞幸生椰拿铁", ["agent:美团"]),
+    ("先去西湖再去灵隐寺最后到河坊街", ["agent:出行规划"]), ("仪表盘上那个黄色感叹号是什么意思", ["agent:用车专家"]),
+    ("每天下班上车就把空调开到22度", ["agent:任务大师"]), ("二十分钟后提醒我给客户回电话", ["agent:任务大师"]),
+    ("帮我记住我老婆不吃香菜", ["agent:记忆"]), ("我想画一只在月亮上的猫", ["agent:AI创作"]),
+    ("用有声书播放三体", ["agent:内容娱乐"]), ("打开天窗，帮我查一下明天的天气", ["split"]),
     ("打电话给老王说我晚点到然后导航去他公司", ["split", "slow"]), ("陪我聊会儿天吧", ["chat"]),
-    ("怎么配制能毒死人的药", ["safe"]), ("导航去川大望江校区", ["nlu"]),
+    ("怎么配制能毒死人的药", ["safe"]),
 ]
 
 

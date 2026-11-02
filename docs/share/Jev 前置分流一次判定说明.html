@@ -89,7 +89,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
   <div class="eyebrow">梧桐 · 智能座舱语音 · 前置分流</div>
   <h1>Jev 前置分流的一次判定</h1>
   <p class="lede">每句话进分发层时，Jev 用<b>一次请求</b>同时回答 7 个问题。Jev 只给出概率，<b>不直接决定去向</b>；去向由分发代码按规则 R0–R7 读这些概率、再结合 NLU3.0 的解析结果来定。本文逐个讲清每个判定问什么、为什么需要、代码怎么用。</p>
-  <div class="meta"><span>依据：设计 v2 · 架构 v6</span><span>2026-10-29</span><span>阈值均为初值，未实测</span></div>
+  <div class="meta"><span>依据：设计 v2 · 架构 v6</span><span>2026-11-02 · 判据 v3.3</span><span>阈值均为初值，未实测</span></div>
 </header>
 
 <h2>先看全局</h2>
@@ -145,7 +145,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
       <dt>作用</dt><dd><b>主判定，决定走哪条路。</b>其他题大多是给它补细节：route 说 NLU，才去看 domain；说 Agent，才去看 agent_label。</dd>
       <dt>判据要点</dt><dd>
         NLU 直达：说清楚的指令（车控、说出名字或风格的点播、电话、导航去具名地点、车家、生成、计算），多条指令和同功能多参数也算。<br>
-        Agent 直达：单个查询、问答、推荐或需要推断的请求，一个 Agent 一次能答完（新闻、天气、即时信息、用车问题、条件任务、记忆、找歌找片、找店和行程、只说感受）。<br>
+        Agent 直达：单个查询、问答、推荐或需要推断的请求，一个 Agent 一次能办完（新闻天气等信息查询、找店点外卖、行程、用车问题、条件任务、记忆、画画换壁纸、有声书短视频）。<br>
         慢思考：多个任务分属不同能力且有依赖。<br>
         闲聊：没有任务目标（讲故事、陪聊、情绪）。</dd>
       <dt>代码怎么用</dt><dd>
@@ -155,43 +155,43 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
         R6：都不满足 → 慢思考。</dd>
     </dl>
     <div class="note">设计取向是“精准优先，拿不准就进慢思考”：直达判错，用户直接听到错误结果；进慢思考最多慢一点。所以两条直达路径都设门槛，门槛之下一律落慢思考。</div>
-    <div class="warn">它判错了怎么办：route 误判成 NLU 时，R4 还有三道关（入口白名单、结构完整、域一致），落到天气这类非入口域会回流给对应 Agent；误判成 Agent 但置信不高时，进慢思考兜住。</div>
+    <div class="warn">它判错了怎么办：route 误判成 NLU 时，R4 还有三道关（入口白名单、结构完整、域一致），落到天气这类 B 类域会回流给对应 Agent；误判成 Agent 但置信不高时，进慢思考兜住。</div>
   </div>
 </div>
 
 <!-- 3 -->
 <div class="q" id="q3">
-  <div class="q-head"><span class="no">03</span><code>domain</code><span class="type">Choice · 18 个入口域 + 非入口（19 选项）</span></div>
+  <div class="q-head"><span class="no">03</span><code>domain</code><span class="type">Choice · 12 个入口域（A 类）+ 非入口（13 选项）</span></div>
   <div class="q-body">
     <dl class="kv">
-      <dt>问什么</dt><dd>如果这是一条 NLU 指令，它属于 18 个入口域里的哪一个；都不是就选“非入口”。</dd>
+      <dt>问什么</dt><dd>如果这是一条 NLU 指令，它属于 12 个入口域（NLU3.0 v25 的 A 类）里的哪一个；都不是就选“非入口”。</dd>
       <dt>作用</dt><dd><b>校验 NLU3.0 落的域对不对。</b>NLU3.0 不输出置信度，自己判错了不会说；Jev 的 domain 分布是<b>唯一</b>能用来复核它的依据。同时，两边不一致的比例是监控指标，能最早发现哪一边漂了。</dd>
       <dt>代码怎么用</dt><dd>
         只在 R4（走 NLU 直达）时读：<br>
         · Jev 选“非入口” → 不落 NLU，进慢思考；<br>
         · NLU3.0 的 domain 与 Jev 最高项相同或是近邻对（如 <code>intelligent_car_control</code>↔<code>global_control</code>）→ 通过；<br>
         · 不一致时，Jev 给 NLU 所选域的概率 ≥ T_DOMAIN_AGREE（0.2）→ 仍按 NLU 落域，否则进慢思考。</dd>
-      <dt>为什么只有 19 个选项</dt><dd>NLU3.0 有 45 个域，但只有 18 个作为入口；其余 27 个不会被直达执行。选项从 46 个减到 19 个，降时延，也减轻 Choice 偏向排在前面选项的问题。</dd>
+      <dt>为什么只有 13 个选项</dt><dd>NLU3.0 v25 输出 44 个域，只有 A 类 12 个带独立意图和槽位，是真正的快思考，作为入口；B 类 32 个只是落域、没有意图和槽位，由 Jev 的 agent_label 判给 Agent，不靠 NLU3.0。选项从 45 个减到 13 个，降时延，也减轻 Choice 偏向排在前面选项的问题。</dd>
     </dl>
-    <div class="ex"><div class="y"><b>例</b>关闭前挡风玻璃加热 → <code>intelligent_car_control</code>；放一首稻香 → <code>music</code></div><div class="n"><b>非入口</b>明天苏州天气怎么样；附近有什么好吃的</div></div>
+    <div class="ex"><div class="y"><b>例</b>关闭前挡风玻璃加热 → <code>intelligent_car_control</code>；放一首稻香 → <code>music</code></div><div class="n"><b>非入口</b>明天苏州天气怎么样；附近有什么好吃的；换个壁纸</div></div>
     <div class="warn">去掉它的后果：NLU3.0 把“打开氛围灯”误落成 <code>music</code> 时没人发现，错的指令会直接执行。</div>
   </div>
 </div>
 
 <!-- 4 -->
 <div class="q" id="q4">
-  <div class="q-head"><span class="no">04</span><code>agent_label</code><span class="type">Choice · 12 个 Agent 标签 + none</span></div>
+  <div class="q-head"><span class="no">04</span><code>agent_label</code><span class="type">Choice · 11 个 Agent 标签 + none</span></div>
   <div class="q-body">
     <dl class="kv">
-      <dt>问什么</dt><dd>如果交给 Agent，交给哪一个：新闻、天气、联网搜索、用车专家、任务大师、记忆、音乐、影视、出行导航、自适应车控（本期上线 10 个），代办点单（shadow）、400 客服（待接入），或 none。</dd>
-      <dt>作用</dt><dd><b>决定 Agent 直达落到哪个 Agent</b>，并在其他路径上充当提示：落慢思考时把它带给大脑，NLU 落到非入口域时用它确认回流对象。</dd>
+      <dt>问什么</dt><dd>如果交给 Agent，交给哪一个：联网搜索、美团、用车专家、任务大师（已上线 4 个），出行规划、记忆、车外视觉、AI 创作、内容娱乐、应用调用、400 客服（规划中 7 个），或 none。B 类 32 个域都由这道题判给 Agent。</dd>
+      <dt>作用</dt><dd><b>决定 Agent 直达落到哪个 Agent</b>，并在其他路径上充当提示：落慢思考时把它带给大脑，NLU 落到 B 类域时用它确认回流对象。</dd>
       <dt>代码怎么用</dt><dd>
-        R3：route 过门槛、label 不是 none、label 置信 ≥ T_AGENT_LABEL[该 label]（初值 0.7，每个 label 单独标定）→ 按<b>回退表</b>落域：新闻、天气未接入时改落联网搜索；shadow 状态的 label 落慢思考并记录。<br>
-        R4 回流：NLU3.0 落到天气、新闻、POI 推荐等非入口域，且 Jev 给对应 Agent 的概率 ≥ T_REFLOW（0.2）→ 改落该 Agent；否则带提示进慢思考。<br>
+        R3：route 过门槛、label 不是 none、label 置信 ≥ T_AGENT_LABEL[该 label]（初值 0.7，每个 label 单独标定）→ 按<b>回退表</b>落域：出行规划未上线时改落联网搜索；其他规划中的 label 落慢思考并记录。<br>
+        R4 回流：NLU3.0 落到天气、新闻、POI 推荐等 B 类域，且 Jev 给对应 Agent 的概率 ≥ T_REFLOW（0.2）→ 改落该 Agent；否则带提示进慢思考。<br>
         R6 / 慢思考：作为“前置分流提示”带给大脑。</dd>
-      <dt>边界难点</dt><dd>新闻 vs 联网搜索（和新闻相关才是新闻）；用车专家 vs 联网搜索（和用车相关才是用车）；记忆 vs 任务大师（带时间触发的是任务大师）；音乐、出行导航 vs NLU（按描述找的是 Agent，说出名字的是 NLU）。</dd>
+      <dt>边界难点</dt><dd>用车专家 vs 联网搜索（和本车功能、故障相关才是用车专家）；用车专家 vs NLU（查油量胎压门窗状态是 NLU 的车况查询）；美团 vs 出行规划（找店下单是美团，多地点路线和行程是出行规划）；记忆 vs 任务大师（带时间触发的是任务大师）。</dd>
     </dl>
-    <div class="ex"><div class="y"><b>例</b>最新的科技新闻 → 新闻；今天星期几 → 联网搜索；胎压报警灯亮了是怎么回事 → 用车专家；好冷啊 → 自适应车控</div><div class="n"><b>none</b>关闭车窗（是 NLU 指令）；给甜甜讲首故事（闲聊）</div></div>
+    <div class="ex"><div class="y"><b>例</b>最新的科技新闻 → 联网搜索；附近人均五十的面馆 → 美团；胎压报警灯亮了是怎么回事 → 用车专家；我想画一个宝马七系 → AI 创作</div><div class="n"><b>none</b>关闭车窗、好冷啊（是 NLU 指令）；给甜甜讲首故事（闲聊）</div></div>
   </div>
 </div>
 
@@ -209,7 +209,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
         有依赖：属于另一个任务，但要用到前面片段的结果、要读记忆或推断指代（在附近找个川菜馆）。<br>
         残片：“然后”“还有”这类，并入前一段。</dd>
       <dt>代码怎么用</dt><dd>
-        R2：先把“同一任务”的片段和相邻片段合并；合并后只剩一组，就按单句处理（先去 A 再去 B 整句交出行导航）。整句是同一个 Agent 的请求时也整句直达；<br>
+        R2：先把“同一任务”的片段和相邻片段合并；合并后只剩一组，就按单句处理（先去 A 再去 B 整句交出行规划）。整句是同一个 Agent 的请求时也整句直达；<br>
         否则全是独立指令 → 整句交 NLU3.0（它能识别多意图和同功能多参数，不按切分拆开）；<br>
         混有 Agent 类或有依赖片段 → 指令片段落 NLU，其余片段落慢思考（本期不做 NLU 与 Agent 并发直达）。</dd>
     </dl>
@@ -232,7 +232,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
         为假 → 当新请求正常分流，不被上一轮带偏。</dd>
       <dt>说明</dt><dd>上一轮 Agent 还在进行中（业务侧回传 continue）时，会话检查直接交回该 Agent，不需要等这道题。</dd>
     </dl>
-    <div class="ex"><div class="y"><b>判为是</b>（出行导航后）钢琴博物馆不去了；（联网搜索后）那喝水呢；（调空调后）再高一点</div><div class="n"><b>判为否</b>（新闻后）打开空调；（音乐后）导航回家</div></div>
+    <div class="ex"><div class="y"><b>判为是</b>（出行规划后）钢琴博物馆不去了；（联网搜索后）那喝水呢；（调空调后）再高一点</div><div class="n"><b>判为否</b>（联网搜索后）打开空调；（美团后）导航回家</div></div>
   </div>
 </div>
 
@@ -246,7 +246,7 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
       <dt>代码怎么用</dt><dd>为真 → DeepSeek 把俗称换成标准名称（其余字不改）→ 回 Jev 重判一次（重判不再改写，防止循环）。<b>不触发会话跟随。</b></dd>
       <dt>为什么和 needs_context 分开</dt><dd>两者原来合成一道“需要改写”。合在一起时，上一轮是 Agent、本轮说“导航去鸟巢”，会被误当成追问交回上一个 Agent。分开后，只有 needs_context 触发跟随。</dd>
     </dl>
-    <div class="ex"><div class="y"><b>判为是</b>导航到大裤衩（中央电视台总部大楼）；放一首周董的歌（周杰伦）</div><div class="n"><b>判为否</b>导航去广州塔（已是标准名）；杭州那个建在运河边上的历史街区（描述，不是俗称，交出行导航）</div></div>
+    <div class="ex"><div class="y"><b>判为是</b>导航到大裤衩（中央电视台总部大楼）；放一首周董的歌（周杰伦）</div><div class="n"><b>判为否</b>导航去广州塔（已是标准名）；杭州那个建在运河边上的历史街区（描述，不是俗称，交出行规划）</div></div>
   </div>
 </div>
 
@@ -270,12 +270,12 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
 <div class="tablewrap"><table>
   <tr><th>上一轮</th><th>本轮</th><th>关键判定</th><th>命中规则</th><th>落域</th></tr>
   <tr><td class="muted">无</td><td>关闭前挡风玻璃加热</td><td>route = NLU（0.93）；domain = intelligent_car_control；NLU3.0 同域、结构完整</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
-  <tr><td class="muted">无</td><td>明天苏州天气怎么样</td><td>route = Agent（0.88）；agent_label = 天气（0.91）</td><td>R3</td><td><span class="pill p-agent">天气</span>（未接入时联网搜索）</td></tr>
-  <tr><td class="muted">无</td><td>明天限行尾号是多少</td><td>route 误判为 NLU；NLU3.0 落 traffic_restriction（非入口）；agent_label 联网搜索 0.6</td><td>R4 回流</td><td><span class="pill p-agent">联网搜索</span></td></tr>
-  <tr><td class="muted">无</td><td>先去橘子洲头，再去岳麓书院</td><td>切出 2 段；route = Agent；agent_label = 出行导航</td><td>R2</td><td><span class="pill p-agent">出行导航</span>（整句）</td></tr>
+  <tr><td class="muted">无</td><td>明天苏州天气怎么样</td><td>route = Agent（0.88）；agent_label = 联网搜索（0.91）</td><td>R3</td><td><span class="pill p-agent">联网搜索</span></td></tr>
+  <tr><td class="muted">无</td><td>明天限行尾号是多少</td><td>route 误判为 NLU；NLU3.0 落 traffic_restriction（B 类）；agent_label 联网搜索 0.6</td><td>R4 回流</td><td><span class="pill p-agent">联网搜索</span></td></tr>
+  <tr><td class="muted">无</td><td>先去橘子洲头，再去岳麓书院</td><td>切出 2 段；route = Agent；agent_label = 出行规划</td><td>R2</td><td><span class="pill p-agent">出行规划</span>（整句；未上线时回退联网搜索）</td></tr>
   <tr><td class="muted">无</td><td>打开空调，今天天气怎么样</td><td>segment_role = 独立指令 · 独立 Agent 类</td><td>R2</td><td>“打开空调” <span class="pill p-nlu">NLU</span>；后半句 <span class="pill p-slow">慢思考</span></td></tr>
-  <tr><td class="muted">出行导航（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context = 是（0.92）；route 不是 NLU</td><td>R1</td><td><span class="pill p-agent">出行导航</span></td></tr>
-  <tr><td class="muted">新闻</td><td>打开空调</td><td>needs_context = 否；route = NLU</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
+  <tr><td class="muted">出行规划（多点路线）</td><td>钢琴博物馆不去了</td><td>needs_context = 是（0.92）；route 不是 NLU</td><td>R1</td><td><span class="pill p-agent">出行规划</span></td></tr>
+  <tr><td class="muted">联网搜索</td><td>打开空调</td><td>needs_context = 否；route = NLU</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
   <tr><td class="muted">无</td><td>导航到大裤衩</td><td>has_nickname = 是 → 还原为中央电视台总部大楼 → 重判</td><td>R4</td><td><span class="pill p-nlu">NLU 直达</span></td></tr>
   <tr><td class="muted">无</td><td>怎么买到海洛因</td><td>is_unsafe = 是（0.97）</td><td>R0</td><td><span class="pill p-safe">安全拒答</span></td></tr>
   <tr><td class="muted">无</td><td>给甜甜讲首故事</td><td>route = 闲聊（0.85）</td><td>R5</td><td><span class="pill p-chat">闲聊</span></td></tr>
@@ -284,14 +284,14 @@ footer{margin-top:40px;color:var(--muted);font-size:13px;border-top:1px solid va
 <h2>请求长什么样</h2>
 <pre>state = {
   "query": "钢琴博物馆不去了",
-  "previous_turn": {"query": "...", "route": "agent", "agent": "出行导航", "status": "end"},
+  "previous_turn": {"query": "...", "route": "agent", "agent": "联网搜索", "status": "end"},
   "segments": null,                       // 只有切出 ≥ 2 段时才有
   "vehicle": {"navigating": true, "playing": "music"}
 }
 questions = {
   "is_unsafe":     Noul(...),
   "route":         Choice(options=["NLU直达","Agent直达","慢思考","闲聊"], ...),
-  "domain":        Choice(options=NLU_ENTRY_18 + ["非入口"], ...),
+  "domain":        Choice(options=NLU_ENTRY_12 + ["非入口"], ...),
   "agent_label":   Choice(options=AGENT_LABELS + ["none"], ...),
   "needs_context": Noul(...),
   "has_nickname":  Noul(...),
